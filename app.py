@@ -1,7 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, desc
 import os
+import uuid
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'uma-ladder-config'
@@ -83,6 +85,23 @@ def parse_int(val):
     except (TypeError, ValueError):
         return None
 
+@app.route("/upload_image", methods=["POST"])
+def upload_image():
+    image = request.files.get("image")
+    if not image:
+        return {"error": "No image found"}, 400
+
+    ext = image.filename.rsplit(".", 1)[-1].lower()
+    if ext not in {"png", "jpg", "jpeg", "webp"}:
+        return {"error": "Invalid file type"}, 400
+
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    upload_path = os.path.join("static", "uploads", filename)
+    os.makedirs("static/uploads", exist_ok=True)
+    image.save(upload_path)
+
+    return {"url": f"/static/uploads/{filename}"}
+
 @app.route('/results', methods=['GET', 'POST'])
 def results():
     races = Race.query.order_by(Race.week, Race.race_number).all()
@@ -92,6 +111,7 @@ def results():
         player_name = request.form.get('player_name')
         uma_name = request.form.get('uma_name')
         placement = request.form.get('placement')
+        image_url = request.form.get("pasted_image_url") or None
 
         # Validate inputs (basic check)
         if not (race_id and player_name and uma_name and placement):
@@ -153,7 +173,7 @@ def results():
             uma_power=parse_int(request.form.get("uma_power")),
             uma_guts=parse_int(request.form.get("uma_guts")),
             uma_wisdom=parse_int(request.form.get("uma_wisdom")),
-            uma_image_url=request.form.get("uma_image_url")
+            uma_image_url=image_url
         )
         # Optional uma fields
 

@@ -12,7 +12,7 @@
   {% endif %}
 {% endwith %}
 
-<form method="POST" class="mt-4">
+<form method="POST" enctype="multipart/form-data" class="mt-4">
     <div class="mb-3">
         <label for="race_id" class="form-label">Select Race</label>
         <select class="form-select" name="race_id" required>
@@ -54,19 +54,84 @@
   </div>
 </div>
 
-<div class="row mt-3">
-  <div class="col"><label>Speed</label><input type="number" name="uma_speed" class="form-control"></div>
-  <div class="col"><label>Stamina</label><input type="number" name="uma_stamina" class="form-control"></div>
-  <div class="col"><label>Power</label><input type="number" name="uma_power" class="form-control"></div>
-  <div class="col"><label>Guts</label><input type="number" name="uma_guts" class="form-control"></div>
-  <div class="col"><label>Wisdom</label><input type="number" name="uma_wisdom" class="form-control"></div>
+<div class="row mt-4">
+  <!-- 📸 Screenshot Paste Box -->
+  <div class="col-md-4 d-flex align-items-center justify-content-center flex-column">
+    <label class="w-100 text-center mb-2">Paste Screenshot (Ctrl+V)</label>
+    <div id="paste-box" contenteditable="true" tabindex="0"
+         class="border"
+         style="min-height: 220px; width: 200px; background: #f9f9f9; display: flex; align-items: center; justify-content: center;">
+      <span id="paste-instructions" class="text-muted text-center">Click here and paste<br>(Ctrl+V)</span>
+      <img id="paste-preview" src="" alt="Preview"
+           style="display:none; max-width: 100%; max-height: 100%; position: absolute;" />
+    </div>
+  </div>
+
+  <!-- 🧠 Stat Inputs -->
+  <div class="col-md-8 ps-md-4">
+    <div class="row g-2">
+      <div class="col-md-4">
+        <label>Speed</label>
+        <input type="number" name="uma_speed" class="form-control" placeholder="e.g. 1200">
+      </div>
+      <div class="col-md-4">
+        <label>Stamina</label>
+        <input type="number" name="uma_stamina" class="form-control" placeholder="e.g. 1200">
+      </div>
+      <div class="col-md-4">
+        <label>Power</label>
+        <input type="number" name="uma_power" class="form-control" placeholder="e.g. 1200">
+      </div>
+      <div class="col-md-4">
+        <label>Guts</label>
+        <input type="number" name="uma_guts" class="form-control" placeholder="e.g. 1200">
+      </div>
+      <div class="col-md-4">
+        <label>Wisdom</label>
+        <input type="number" name="uma_wisdom" class="form-control" placeholder="e.g. 1200">
+      </div>
+    </div>
+  </div>
 </div>
 
-<div class="mb-3 mt-3">
-  <label>Uma Screenshot URL (optional)</label>
-  <input type="url" name="uma_image_url" class="form-control">
-</div>
 
+<div class="mt-4">
   <button type="submit" class="btn btn-primary">Submit Result</button>
-</form>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const pasteBox = document.getElementById("paste-box");
+    const previewImg = document.getElementById("paste-preview");
+    const instructions = document.getElementById("paste-instructions");
+    const hiddenInput = document.getElementById("pasted_image_url");
+
+    pasteBox.addEventListener("paste", async (event) => {
+      event.preventDefault();
+
+      const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+      for (const item of items) {
+        if (item.type.indexOf("image") === 0) {
+          const file = item.getAsFile();
+          const formData = new FormData();
+          formData.append("image", file);
+
+          const res = await fetch("/upload_image", {
+            method: "POST",
+            body: formData
+          });
+
+          const data = await res.json();
+          if (data.url) {
+            previewImg.src = data.url;
+            previewImg.style.display = "block";
+            hiddenInput.value = data.url;
+            instructions.style.display = "none";
+          }
+        }
+      }
+    });
+  });
+</script>
+
 {% endblock %}
