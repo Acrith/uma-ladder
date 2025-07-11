@@ -10,6 +10,12 @@
         <th>Placement</th>
         <th>Player</th>
         <th>Uma</th>
+        <th>SPD</th>
+        <th>STA</th>
+        <th>PWR</th>
+        <th>GUT</th>
+        <th>WIS</th>
+        <th>Image</th>
         <th>Points</th>
       </tr>
     </thead>
@@ -18,7 +24,21 @@
       <tr>
         <td>{{ result.placement }}</td>
         <td>{{ result.player_name }}</td>
-        <td>{{ result.uma_name }}</td>
+        <td>  <strong>{{ result.uma_name }}</strong><br>
+            Strategy: {{ result.uma_strategy }}<br>
+        </td>
+        <td>{{ result.uma_speed or '-' }}</td>
+        <td>{{ result.uma_stamina or '-' }}</td>
+        <td>{{ result.uma_power or '-' }}</td>
+        <td>{{ result.uma_guts or '-' }}</td>
+        <td>{{ result.uma_wisdom or '-' }}</td>
+        <td>
+            {% if result.uma_image_url %}
+            <img src="{{ result.uma_image_url }}" alt="Uma Image" style="max-width: 60px;" title="Click to expand" onclick="window.open('{{ result.uma_image_url }}', '_blank')">
+            {% else %}
+            —
+            {% endif %}
+        </td>
         <td>{{ result.points }}</td>
       </tr>
       {% endfor %}

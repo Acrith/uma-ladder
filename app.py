@@ -38,6 +38,17 @@ class Result(db.Model):
     uma_name = db.Column(db.String(50), nullable=False)
     placement = db.Column(db.Integer, nullable=False)
     points = db.Column(db.Integer, nullable=False)
+    
+    # Basic Uma stats
+    uma_strategy = db.Column(db.String(50))
+    uma_speed = db.Column(db.Integer)
+    uma_stamina = db.Column(db.Integer)
+    uma_power = db.Column(db.Integer)
+    uma_guts = db.Column(db.Integer)
+    uma_wisdom = db.Column(db.Integer)
+
+    # Optional screenshot (hosted image URL for now)
+    uma_image_url = db.Column(db.String(500))
 
     # Optional: Relationship for convenience
     race = db.relationship('Race', backref='results')
@@ -65,6 +76,12 @@ def ladder():
     )
 
     return render_template("ladder.html", leaderboard=leaderboard)
+
+def parse_int(val):
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
 
 @app.route('/results', methods=['GET', 'POST'])
 def results():
@@ -129,8 +146,16 @@ def results():
             player_name=player_name.strip(),
             uma_name=uma_name.strip(),
             placement=placement_int,
-            points=calculated_points
+            points=calculated_points,
+            uma_strategy=request.form.get("uma_strategy"),
+            uma_speed=parse_int(request.form.get("uma_speed")),
+            uma_stamina=parse_int(request.form.get("uma_stamina")),
+            uma_power=parse_int(request.form.get("uma_power")),
+            uma_guts=parse_int(request.form.get("uma_guts")),
+            uma_wisdom=parse_int(request.form.get("uma_wisdom")),
+            uma_image_url=request.form.get("uma_image_url")
         )
+        # Optional uma fields
 
         db.session.add(result)
         db.session.commit()
