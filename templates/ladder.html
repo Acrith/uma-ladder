@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Ladder Standings | Uma Ladder{% endblock %}
+
+{% block content %}
+<h2>🏆 Leaderboard</h2>
+
+{% if leaderboard %}
+<table class="table table-bordered table-hover mt-3 text-center align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th>Rank</th>
+            <th>Player</th>
+            <th>Total Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in leaderboard %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ row.player_name }}</td>
+            <td>{{ row.total_points }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">No race results have been entered yet.</p>
+{% endif %}
+{% endblock %}
