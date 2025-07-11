@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Enter Results | Uma Ladder{% endblock %}
+
+{% block content %}
+<h2>📥 Submit Race Result</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} mt-3">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form method="POST" class="mt-4">
+    <div class="mb-3">
+        <label for="race_id" class="form-label">Select Race</label>
+        <select class="form-select" name="race_id" required>
+            <option value="">-- Choose a race --</option>
+            {% for race in races %}
+            <option value="{{ race.id }}">
+                [Week {{ race.week }}] {{ race.race_name }} ({{ race.grade }}, {{ race.distance }})
+            </option>
+        {% endfor %}
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Player Name</label>
+        <input type="text" name="player_name" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Uma Name</label>
+        <input type="text" name="uma_name" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Placement</label>
+        <input type="number" name="placement" class="form-control" min="1" max="18" required>
+    </div>
+
+  <button type="submit" class="btn btn-primary">Submit Result</button>
+</form>
+{% endblock %}

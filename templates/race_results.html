@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>📋 Results – {{ race.race_name }}</h2>
+  <p><strong>Season:</strong> {{ race.season }} | <strong>Week:</strong> {{ race.week }} | <strong>Grade:</strong> {{ race.grade }}</p>
+
+  {% if results %}
+  <table class="table table-bordered">
+    <thead class="table-light">
+      <tr>
+        <th>Placement</th>
+        <th>Player</th>
+        <th>Uma</th>
+        <th>Points</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for result in results %}
+      <tr>
+        <td>{{ result.placement }}</td>
+        <td>{{ result.player_name }}</td>
+        <td>{{ result.uma_name }}</td>
+        <td>{{ result.points }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p>No results submitted yet for this race.</p>
+  {% endif %}
+
+  <a href="{{ url_for('schedule') }}" class="btn btn-secondary">← Back to Schedule</a>
+{% endblock %}

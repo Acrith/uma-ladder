@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>✏️ Edit Race</h2>
+  <form method="POST">
+    <div class="mb-3">
+      <label class="form-label">Race Name</label>
+      <input type="text" class="form-control" value="{{ race.name }}" disabled>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Participant Count</label>
+      <input type="number" class="form-control" name="participant_count" value="{{ race.participant_count or '' }}" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary">💾 Save</button>
+    <a href="{{ url_for('schedule') }}" class="btn btn-secondary">← Cancel</a>
+  </form>
+{% endblock %}

@@ -1,9 +1,10 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func
+from sqlalchemy import func, desc
 import os
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'uma-ladder-config'
 
 # Setup database
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -12,7 +13,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Define Race model
 class Race(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     season = db.Column(db.String(50), nullable=False)
@@ -28,6 +28,7 @@ class Race(db.Model):
     direction = db.Column(db.String(10), nullable=False)
     mood = db.Column(db.String(20), nullable=False)
     weather = db.Column(db.String(20), nullable=False)
+    participant_count = db.Column(db.Integer, nullable=True)
 
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -50,19 +51,159 @@ def schedule():
     races = Race.query.order_by(Race.week, Race.id).all()
     return render_template("schedule.html", races=races)
 
-@app.route('/ladder')
+@app.route("/ladder")
 def ladder():
+    # Aggregate total points per player
     leaderboard = (
         db.session.query(
             Result.player_name,
-            func.sum(Result.points).label('total_points')
+            func.sum(Result.points).label("total_points")
         )
         .group_by(Result.player_name)
-        .order_by(func.sum(Result.points).desc())
+        .order_by(desc("total_points"))
         .all()
     )
 
     return render_template("ladder.html", leaderboard=leaderboard)
+
+@app.route('/results', methods=['GET', 'POST'])
+def results():
+    races = Race.query.order_by(Race.week, Race.race_number).all()
+
+    if request.method == 'POST':
+        race_id = request.form.get('race_id')
+        player_name = request.form.get('player_name')
+        uma_name = request.form.get('uma_name')
+        placement = request.form.get('placement')
+
+        # Validate inputs (basic check)
+        if not (race_id and player_name and uma_name and placement):
+            flash("Please fill in all fields.", "danger")
+            return redirect(url_for('results'))
+
+        # Convert placement to int
+        placement_int = int(placement)
+
+        # Get the race
+        race = Race.query.get(int(race_id))
+        grade = race.grade.upper()
+
+        # Use the value from Race, or fallback to 18 if not yet set
+        participant_count = race.participant_count or 18
+
+        # --- Define Scoring Rules ---
+        SCORING_RULES = {
+            (9, 11): [10, 8, 6, 5, 4],
+            (12, 13): [10, 8, 6, 5, 4, 3],
+            (14, 15): [10, 8, 6, 5, 4, 3, 2],
+            (16, 18): [10, 8, 6, 5, 4, 3, 2, 1],
+        }
+        GRADE_MULTIPLIERS = {
+            "G1": 1.1,
+            "G2": 1.0,
+            "G3": 1.0,
+            "OP": 0.9,
+            "PRE-OP": 0.9
+        }
+
+        # Get base point list for that participant range
+        base_points = []
+        for (low, high), points in SCORING_RULES.items():
+            if low <= participant_count <= high:
+                base_points = points
+                break
+        if not base_points:
+            base_points = [10, 8, 6, 5, 4, 3, 2, 1]  # fallback
+
+        # Determine points
+        if placement_int > len(base_points):
+            calculated_points = 0
+        else:
+            base = base_points[placement_int - 1]
+            multiplier = GRADE_MULTIPLIERS.get(grade, 1.0)
+            calculated_points = round(base * multiplier)
+
+        # Save result
+        result = Result(
+            race_id=int(race_id),
+            player_name=player_name.strip(),
+            uma_name=uma_name.strip(),
+            placement=placement_int,
+            points=calculated_points
+        )
+
+        db.session.add(result)
+        db.session.commit()
+        flash(f"✅ Result added: {calculated_points} points", "success")
+        return redirect(url_for('results'))
+
+    return render_template("results.html", races=races)
+
+@app.route("/results/<int:race_id>")
+def race_results(race_id):
+    race = Race.query.get_or_404(race_id)
+    results = (
+        Result.query
+        .filter_by(race_id=race.id)
+        .order_by(Result.placement.asc())
+        .all()
+    )
+    return render_template("race_results.html", race=race, results=results)
+
+def recalculate_results_for_race(race):
+    SCORING_RULES = {
+        (9, 11): [10, 8, 6, 5, 4],
+        (12, 13): [10, 8, 6, 5, 4, 3],
+        (14, 15): [10, 8, 6, 5, 4, 3, 2],
+        (16, 18): [10, 8, 6, 5, 4, 3, 2, 1],
+    }
+    GRADE_MULTIPLIERS = {
+        "G1": 1.1,
+        "G2": 1.0,
+        "G3": 1.0,
+        "OP": 0.9,
+        "PRE-OP": 0.9
+    }
+
+    participant_count = race.participant_count or 18
+    grade = race.grade.upper()
+    multiplier = GRADE_MULTIPLIERS.get(grade, 1.0)
+
+    # Get correct scoring tier
+    base_points = []
+    for (low, high), points in SCORING_RULES.items():
+        if low <= participant_count <= high:
+            base_points = points
+            break
+    if not base_points:
+        base_points = [10, 8, 6, 5, 4, 3, 2, 1]
+
+    # Update all results
+    for result in Result.query.filter_by(race_id=race.id).all():
+        if result.placement > len(base_points):
+            result.points = 0
+        else:
+            result.points = round(base_points[result.placement - 1] * multiplier)
+
+    db.session.commit()
+
+@app.route("/edit_race/<int:race_id>", methods=["GET", "POST"])
+def edit_race(race_id):
+    race = Race.query.get_or_404(race_id)
+
+    if request.method == "POST":
+        try:
+            participant_count = int(request.form.get("participant_count"))
+            race.participant_count = participant_count
+            db.session.commit()
+            recalculate_results_for_race(race)
+            flash("✅ Race updated successfully!", "success")
+            return redirect(url_for("schedule"))
+        except ValueError:
+            flash("⚠ Please enter a valid number.", "danger")
+
+    return render_template("edit_race.html", race=race)
+
 
 @app.route('/')
 def home():
