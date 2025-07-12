@@ -1,7 +1,6 @@
 Flask
-Flask_SQLAlchemy
-gunicorn
-flask_login
+Flask-SQLAlchemy
+Flask-Login
 itsdangerous
-werkzeug
-functools
+Werkzeug
+gunicorn
