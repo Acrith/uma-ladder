@@ -48,6 +48,7 @@ class Race(db.Model):
     mood = db.Column(db.String(20), nullable=False)
     weather = db.Column(db.String(20), nullable=False)
     participant_count = db.Column(db.Integer, nullable=True)
+    completed = db.Column(db.Boolean, default=False)
 
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -186,10 +187,22 @@ def load_schedule():
     with open("data/schedule.json", "r", encoding="utf-8") as f:
         return json.load(f)
 
-@app.route('/schedule')
+@app.route("/schedule")
 def schedule():
-    races = Race.query.order_by(Race.week, Race.id).all()
-    return render_template("schedule.html", races=races)
+    upcoming_races = Race.query.filter_by(completed=False).order_by(Race.week, Race.race_number).all()
+    completed_races = Race.query.filter_by(completed=True).order_by(Race.week.desc(), Race.race_number.desc()).all()
+    return render_template("schedule.html", upcoming_races=upcoming_races, completed_races=completed_races)
+
+@app.route("/race/<int:race_id>/complete", methods=["POST"])
+@login_required
+def mark_race_completed(race_id):
+    if not current_user.is_admin:
+        abort(403)
+    race = Race.query.get_or_404(race_id)
+    race.completed = True
+    db.session.commit()
+    flash(f"Marked race '{race.race_name}' as completed.", "success")
+    return redirect(url_for("schedule"))
 
 @app.route("/ladder")
 def ladder():
@@ -480,7 +493,7 @@ def player_profile(player_name):
         avg_placement=avg_placement,
         unclaimed_results=unclaimed_results,
         is_owner=is_owner,
-        active_tab="player_profile"
+        active_tab="profile"
     )
 
 @app.route("/claim/<int:result_id>", methods=["POST"])
