@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, redirect
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, redirect, abort
 from flask_login import UserMixin, LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -25,6 +25,9 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+
+    results = db.relationship("Result", backref="user", lazy=True)  # 🔗 linked
 
     def __repr__(self):
         return f"<User {self.username}>"
@@ -48,10 +51,10 @@ class Race(db.Model):
 
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    
     race_id = db.Column(db.Integer, db.ForeignKey('race.id'), nullable=False)
-    player_name = db.Column(db.String(50), nullable=False)
-    uma_name = db.Column(db.String(50), nullable=False)
+    player_name = db.Column(db.String(100), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    uma_name = db.Column(db.String(100), nullable=False)
     placement = db.Column(db.Integer, nullable=False)
     points = db.Column(db.Integer, nullable=False)
     
@@ -65,9 +68,73 @@ class Result(db.Model):
 
     # Optional screenshot (hosted image URL for now)
     uma_image_url = db.Column(db.String(500))
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
 
     # Optional: Relationship for convenience
     race = db.relationship('Race', backref='results')
+
+@app.route("/admin/users")
+@login_required
+def admin_users():
+    if not current_user.is_admin:
+        flash("Access denied: Admins only.", "danger")
+        return redirect(url_for("home"))
+
+    users = User.query.all()
+    return render_template("admin_users.html", users=users)
+
+@app.route("/admin/users/promote/<int:user_id>")
+@login_required
+def promote_user(user_id):
+    if not current_user.is_admin:
+        flash("Access denied.", "danger")
+        return redirect(url_for("home"))
+
+    user = User.query.get_or_404(user_id)
+    user.is_admin = True
+    db.session.commit()
+    flash(f"{user.username} promoted to admin.", "success")
+    return redirect(url_for("admin_users"))
+
+@app.route("/admin/users/demote/<int:user_id>")
+@login_required
+def demote_user(user_id):
+    if not current_user.is_admin:
+        flash("Access denied.", "danger")
+        return redirect(url_for("home"))
+
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash("You cannot demote yourself.", "warning")
+        return redirect(url_for("admin_users"))
+
+    user.is_admin = False
+    db.session.commit()
+    flash(f"{user.username} demoted.", "success")
+    return redirect(url_for("admin_users"))
+
+@app.route("/admin/users/delete/<int:user_id>")
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin:
+        flash("Access denied.", "danger")
+        return redirect(url_for("home"))
+
+    user = User.query.get_or_404(user_id)
+
+    if user.id == current_user.id:
+        flash("You cannot delete yourself.", "warning")
+        return redirect(url_for("admin_users"))
+
+    # Optional: prevent deleting other admins
+    if user.is_admin:
+        flash("You cannot delete another admin.", "warning")
+        return redirect(url_for("admin_users"))
+
+    db.session.delete(user)
+    db.session.commit()
+    flash(f"User '{user.username}' has been deleted.", "success")
+    return redirect(url_for("admin_users"))
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -239,7 +306,9 @@ def results():
             uma_wisdom=parse_int(request.form.get("uma_wisdom")),
             uma_image_url=image_url
         )
-        # Optional uma fields
+        # Assign user if logged in
+        if current_user.is_authenticated and player_name.strip().lower() == current_user.username.lower():
+            result.user_id = current_user.id
 
         db.session.add(result)
         db.session.commit()
@@ -362,21 +431,83 @@ def add_race():
 
     return render_template("add_race.html")
 
-@app.route("/player/<player_name>")
+
+
+@app.route("/profile")
+@login_required
+def profile_redirect():
+    return redirect(url_for("player_profile", player_name=current_user.username))
+
+@app.route("/profile/<player_name>")
 def player_profile(player_name):
-    results = (
+    is_owner = current_user.is_authenticated and current_user.username.lower() == player_name.lower()
+
+    # Results belonging to this name
+    claimed_results = (
         Result.query
-        .filter_by(player_name=player_name)
+        .filter(Result.player_name.ilike(player_name))
+        .filter(Result.user_id == current_user.id if is_owner else True)
         .join(Race)
         .order_by(Race.week, Race.race_number)
         .all()
     )
 
-    total_points = sum(r.points for r in results)
-    race_count = len(results)
-    avg_points = round(total_points / race_count, 2) if race_count else 0
+    unclaimed_results = []
+    if is_owner:
+        unclaimed_results = (
+            Result.query
+            .filter(Result.player_name.ilike(player_name), Result.user_id.is_(None))
+            .join(Race)
+            .order_by(Race.week, Race.race_number)
+            .all()
+        )
 
-    return render_template("player_profile.html", player_name=player_name, results=results, total_points=total_points, avg_points=avg_points, race_count=race_count)
+    # Stats
+    total_points = sum(r.points for r in claimed_results)
+    race_count = len(claimed_results)
+    avg_points = round(total_points / race_count, 2) if race_count else 0
+    win_count = sum(1 for r in claimed_results if r.placement == 1)
+    avg_placement = round(sum(r.placement for r in claimed_results) / race_count, 2) if race_count else 0
+
+    return render_template(
+        "player_profile.html",
+        player_name=player_name,
+        results=claimed_results,
+        total_points=total_points,
+        avg_points=avg_points,
+        race_count=race_count,
+        win_count=win_count,
+        avg_placement=avg_placement,
+        unclaimed_results=unclaimed_results,
+        is_owner=is_owner,
+        active_tab="player_profile"
+    )
+
+@app.route("/claim/<int:result_id>", methods=["POST"])
+@login_required
+def claim_result(result_id):
+    result = Result.query.get_or_404(result_id)
+
+    if result.user_id is None and result.player_name.lower() == current_user.username.lower():
+        result.user_id = current_user.id
+        db.session.commit()
+        flash("Result successfully claimed!", "success")
+    else:
+        flash("You can't claim this result.", "danger")
+
+    return redirect(url_for("player_profile", player_name=current_user.username))
+
+@app.route("/delete_result/<int:result_id>", methods=["POST", "GET"])
+@login_required
+def delete_result(result_id):
+    if not current_user.is_admin:
+        abort(403)  # Forbidden
+
+    result = Result.query.get_or_404(result_id)
+    db.session.delete(result)
+    db.session.commit()
+    flash("Result deleted successfully.", "success")
+    return redirect(url_for("results"))
 
 @app.route('/')
 def home():

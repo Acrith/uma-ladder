@@ -55,28 +55,46 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav ms-auto">
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'schedule' %}active{% endif %}" href="{{ url_for('schedule') }}">📅 Schedule</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'ladder' %}active{% endif %}" href="{{ url_for('ladder') }}">Ladder</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'results' %}active{% endif %}" href="{{ url_for('results') }}">Enter Result</a>
-        </li>
-        {% if current_user.is_authenticated %}
-  <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}">Logout</a></li>
-  <li class="nav-item"><a class="nav-link disabled" href="#">👤 {{ current_user.username }}</a></li>
-{% else %}
-  <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Login</a></li>
-  <li class="nav-item"><a class="nav-link" href="{{ url_for('register') }}">Register</a></li>
-{% endif %}
+ <div class="collapse navbar-collapse justify-content-between" id="navbarNav">
+  <!-- Left Nav -->
+  <ul class="navbar-nav">
+    <li class="nav-item">
+      <a class="nav-link {% if request.endpoint == 'schedule' %}active{% endif %}" href="{{ url_for('schedule') }}">📅 Schedule</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if request.endpoint == 'ladder' %}active{% endif %}" href="{{ url_for('ladder') }}">Ladder</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if request.endpoint == 'results' %}active{% endif %}" href="{{ url_for('results') }}">Enter Result</a>
+    </li>
+  </ul>
 
-      </ul>
-    </div>
-  </div>
+  <!-- Right Nav -->
+  <ul class="navbar-nav">
+    {% if current_user.is_authenticated %}
+      {% if current_user.is_admin %}
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'admin_users' %}active{% endif %}" href="{{ url_for('admin_users') }}">Admin Panel</a>
+      </li>
+      {% endif %}
+      <li class="nav-item">
+        <a class="nav-link 
+           {% if request.endpoint == 'player_profile' 
+                 and request.view_args 
+                 and request.view_args.player_name == current_user.username %}active{% endif %}" 
+           href="{{ url_for('player_profile', player_name=current_user.username) }}">
+          👤 {{ current_user.username }}
+        </a>
+      </li>
+<li class="nav-item ms-2">
+  <a class="btn btn-outline-light btn-sm mt-1" href="{{ url_for('logout') }}">Logout</a>
+</li>
+    {% else %}
+      <li class="nav-item"><a class="nav-link {% if request.endpoint == 'login' %}active{% endif %}" href="{{ url_for('login') }}">Login</a></li>
+      <li class="nav-item"><a class="nav-link {% if request.endpoint == 'register' %}active{% endif %}" href="{{ url_for('register') }}">Register</a></li>
+    {% endif %}
+  </ul>
+</div>
 </nav>
 
     <div class="container">

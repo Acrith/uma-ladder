@@ -2,8 +2,15 @@
 {% block title %}{{ player_name }} – Profile | Uma Ladder{% endblock %}
 
 {% block content %}
+
 <h2>👤 {{ player_name }} – Race History</h2>
-<p><strong>Total Races:</strong> {{ race_count }} | <strong>Total Points:</strong> {{ total_points }} | <strong>Avg Points:</strong> {{ avg_points }}</p>
+<p class="mt-2">
+  <strong>🏁 Races:</strong> {{ race_count }} |
+  <strong>🥇 Wins:</strong> {{ win_count }} |
+  <strong>📊 Avg Placement:</strong> {{ avg_placement }} |
+  <strong>⭐ Avg Points:</strong> {{ avg_points }} |
+  <strong>🏆 Total Points:</strong> {{ total_points }}
+</p>
 
 {% if results %}
 <table class="table table-sm table-bordered mt-3">
@@ -58,6 +65,20 @@
 </table>
 {% else %}
 <p>This player has no recorded races yet.</p>
+{% endif %}
+
+{% if is_owner and unclaimed_results %}
+  <h4 class="mt-5">🎯 Unclaimed Results Matching Your Name</h4>
+  <ul class="list-group mb-4">
+    {% for result in unclaimed_results %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        [Week {{ result.race.week }}] {{ result.race.race_name }} – Placed {{ result.placement }}
+        <form method="POST" action="{{ url_for('claim_result', result_id=result.id) }}">
+          <button type="submit" class="btn btn-sm btn-outline-primary">Claim</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
 {% endif %}
 
 <a href="{{ url_for('ladder') }}" class="btn btn-secondary mt-3">← Back to Ladder</a>

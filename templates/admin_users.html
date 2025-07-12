@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel – Users{% endblock %}
+{% block content %}
+<h2>🛡️ Admin Panel – Users</h2>
+
+<table class="table table-bordered mt-4">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Username</th>
+      <th>Admin?</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.id }}</td>
+      <td>{{ user.username }}</td>
+      <td>{% if user.is_admin %}✅{% else %}❌{% endif %}</td>
+<td>
+  {% if not user.is_admin %}
+    <a href="{{ url_for('promote_user', user_id=user.id) }}" class="btn btn-sm btn-success">Promote</a>
+  {% else %}
+    <a href="{{ url_for('demote_user', user_id=user.id) }}" class="btn btn-sm btn-warning">Demote</a>
+  {% endif %}
+
+  {% if user.id != current_user.id %}
+    <a href="{{ url_for('delete_user', user_id=user.id) }}" class="btn btn-sm btn-danger"
+       onclick="return confirm('Are you sure you want to delete this user?');">
+       Delete
+    </a>
+  {% endif %}
+</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
