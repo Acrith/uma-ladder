@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{{ player_name }} – Profile | Uma Ladder{% endblock %}
+
+{% block content %}
+<h2>👤 {{ player_name }} – Race History</h2>
+<p><strong>Total Races:</strong> {{ race_count }} | <strong>Total Points:</strong> {{ total_points }} | <strong>Avg Points:</strong> {{ avg_points }}</p>
+
+{% if results %}
+<table class="table table-sm table-bordered mt-3">
+  <thead class="table-light">
+    <tr>
+      <th>Week</th>
+      <th>Race</th>
+      <th>Uma</th>
+      <th>Placement</th>
+      <th>Points</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in results %}
+    <tr>
+      <td>{{ r.race.week }}</td>
+      <td>{{ r.race.race_name }} ({{ r.race.grade }})</td>
+      <<td style="position: relative;">
+  {% if r.uma_image_url %}
+    <span class="uma-hover" data-img="{{ r.uma_image_url }}" data-bs-toggle="modal" data-bs-target="#imageModal"
+          style="cursor: pointer; text-decoration: underline;">
+      <strong>{{ r.uma_name }}</strong>
+    </span>
+
+    <!-- Hover image preview -->
+    <div class="hover-preview">
+      <img src="{{ r.uma_image_url }}" alt="Uma Preview" class="preview-img">
+    </div>
+  {% else %}
+    {{ r.uma_name }}
+  {% endif %}
+
+  {% if r.uma_strategy %}
+    <br><small><i>{{ r.uma_strategy }}</i></small>
+  {% endif %}
+
+  {% if r.uma_speed %}
+    <br><small>
+      <strong>SPD:</strong> {{ r.uma_speed }},
+      <strong>STA:</strong> {{ r.uma_stamina }},
+      <strong>PWR:</strong> {{ r.uma_power }},
+      <strong>GUT:</strong> {{ r.uma_guts }},
+      <strong>WIS:</strong> {{ r.uma_wisdom }}
+    </small>
+  {% endif %}
+</td>
+      <td>{{ r.placement }}</td>
+      <td>{{ r.points }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>This player has no recorded races yet.</p>
+{% endif %}
+
+<a href="{{ url_for('ladder') }}" class="btn btn-secondary mt-3">← Back to Ladder</a>
+
+<!-- Image Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-body text-center">
+        <img id="fullUmaImage" src="" alt="Uma Screenshot" style="max-width: 100%; height: auto;" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Image Modal (Click-to-view) -->
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-body text-center">
+        <img id="fullUmaImage" src="" alt="Uma Screenshot" style="max-width: 100%; height: auto;" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JS for modal -->
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".uma-hover").forEach(elem => {
+      elem.addEventListener("click", () => {
+        const url = elem.getAttribute("data-img");
+        document.getElementById("fullUmaImage").src = url;
+      });
+    });
+  });
+</script>
+
+<!-- CSS for hover preview -->
+<style>
+  .hover-preview {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1000;
+    background: #fff;
+    padding: 4px;
+    border: 1px solid #ccc;
+    box-shadow: 0 0 6px rgba(0,0,0,0.1);
+  }
+
+  .preview-img {
+    max-width: 120px;
+    max-height: 120px;
+  }
+
+  .uma-hover:hover + .hover-preview {
+    display: block;
+  }
+</style>
+
+
+{% endblock %}

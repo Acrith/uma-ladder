@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
     <style>
   .hover-preview {
     position: absolute;
@@ -31,23 +32,74 @@
 </head>
 <body class="p-4">
 
-    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">Uma Ladder</a>
-            <div>
-                <a class="nav-link d-inline" href="/">Home</a>
-                <a class="nav-link d-inline" href="/schedule">Schedule</a>
-                <a class="nav-link d-inline" href="/ladder">Ladder</a>
-                <a class="nav-link d-inline" href="/results">Submit Result</a>
-                
-            </div>
-        </div>
-    </nav>
+  <!-- Flash Messages Overlay -->
+  <div id="flash-overlay" class="position-fixed top-0 start-50 translate-middle-x mt-3" style="z-index: 1055; width: auto; max-width: 90%;">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show auto-dismiss {% if category != 'danger' %}auto-hide{% endif %}" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </div>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+  <div class="container">
+    <a class="navbar-brand" href="{{ url_for('home') }}">Uma Ladder</a>
+    
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+            aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'schedule' %}active{% endif %}" href="{{ url_for('schedule') }}">📅 Schedule</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'ladder' %}active{% endif %}" href="{{ url_for('ladder') }}">Ladder</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'results' %}active{% endif %}" href="{{ url_for('results') }}">Enter Result</a>
+        </li>
+        {% if current_user.is_authenticated %}
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}">Logout</a></li>
+  <li class="nav-item"><a class="nav-link disabled" href="#">👤 {{ current_user.username }}</a></li>
+{% else %}
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Login</a></li>
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('register') }}">Register</a></li>
+{% endif %}
+
+      </ul>
+    </div>
+  </div>
+</nav>
 
     <div class="container">
         {% block content %}
         {% endblock %}
     </div>
+
+<script>
+  // Auto-hide alerts that are not danger
+  document.addEventListener("DOMContentLoaded", () => {
+    const autoAlerts = document.querySelectorAll(".alert.auto-hide");
+    autoAlerts.forEach(alert => {
+      setTimeout(() => {
+        // Fade out smoothly
+        alert.classList.remove("show");
+        alert.classList.add("fade");
+        // Fully remove after fade
+        setTimeout(() => alert.remove(), 500);
+      }, 1500); // 1.5 seconds
+    });
+  });
+</script>
+
 
 </body>
 </html>

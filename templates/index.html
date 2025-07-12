@@ -1,8 +1,13 @@
 {% extends "base.html" %}
-
 {% block title %}Home | Uma Ladder{% endblock %}
 
 {% block content %}
-    <h1>🏇 Welcome to the Uma Ladder!</h1>
-    <p>This will be your hub for races, schedule, and leaderboard.</p>
+<div class="p-4 mb-4 bg-light border rounded text-center">
+  <h1 class="display-5 fw-bold">🏇 Welcome to the Uma Ladder</h1>
+  <p class="lead">Track weekly race results, climb the leaderboard, and compete for the crown!</p>
+  <hr>
+  <p>Next official races take place every Sunday. Don’t forget to <a href="{{ url_for('results') }}">submit your results</a> after the race!</p>
+</div>
+
+<!-- You can later add upcoming races preview here -->
 {% endblock %}

@@ -1,5 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, redirect
+from flask_login import UserMixin, LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, desc
 import os
@@ -8,12 +10,24 @@ import uuid
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'uma-ladder-config'
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
 # Setup database
 basedir = os.path.abspath(os.path.dirname(__file__))
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'ladder.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+
+    def __repr__(self):
+        return f"<User {self.username}>"
 
 class Race(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -55,6 +69,52 @@ class Result(db.Model):
     # Optional: Relationship for convenience
     race = db.relationship('Race', backref='results')
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form["username"].strip()
+        password = request.form["password"]
+
+        if User.query.filter_by(username=username).first():
+            flash("Username already exists", "danger")
+            return redirect("/register")
+
+        hashed_pw = generate_password_hash(password)
+        user = User(username=username, password_hash=hashed_pw)
+        db.session.add(user)
+        db.session.commit()
+
+        flash("Account created! Please log in.", "success")
+        return redirect("/login")
+
+    return render_template("auth/register.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"].strip()
+        password = request.form["password"]
+        user = User.query.filter_by(username=username).first()
+
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)
+            flash(f"Welcome, {user.username}!", "success")
+            return redirect("/")
+        else:
+            flash("Invalid credentials", "danger")
+            return redirect("/login")
+
+    return render_template("auth/login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("You’ve been logged out.", "info")
+    return redirect("/")
+
 def load_schedule():
     with open("data/schedule.json", "r", encoding="utf-8") as f:
         return json.load(f)
@@ -66,14 +126,18 @@ def schedule():
 
 @app.route("/ladder")
 def ladder():
-    # Aggregate total points per player
+    from sqlalchemy import func
+
+    # Group results by player and aggregate stats
     leaderboard = (
         db.session.query(
             Result.player_name,
-            func.sum(Result.points).label("total_points")
+            func.count(Result.id).label("races"),
+            func.sum(Result.points).label("total_points"),
+            func.avg(Result.points).label("avg_points")
         )
         .group_by(Result.player_name)
-        .order_by(desc("total_points"))
+        .order_by(func.sum(Result.points).desc())
         .all()
     )
 
@@ -235,24 +299,92 @@ def recalculate_results_for_race(race):
 @app.route("/edit_race/<int:race_id>", methods=["GET", "POST"])
 def edit_race(race_id):
     race = Race.query.get_or_404(race_id)
-
+    
     if request.method == "POST":
-        try:
-            participant_count = int(request.form.get("participant_count"))
-            race.participant_count = participant_count
-            db.session.commit()
-            recalculate_results_for_race(race)
-            flash("✅ Race updated successfully!", "success")
-            return redirect(url_for("schedule"))
-        except ValueError:
-            flash("⚠ Please enter a valid number.", "danger")
+        race.season = request.form.get("season")
+        race.week = int(request.form.get("week"))
+        race.race_number = int(request.form.get("race_number"))
+        race.race_name = request.form.get("race_name")
+        race.grade = request.form.get("grade")
+        race.race_type = request.form.get("race_type")
+        race.event_type = request.form.get("event_type")
+        race.distance = request.form.get("distance")
+        race.location = request.form.get("location")
+        race.surface = request.form.get("surface")
+        race.direction = request.form.get("direction")
+        race.mood = request.form.get("mood")
+        race.weather = request.form.get("weather")
+        race.participant_count = int(request.form.get("participant_count") or 0)
+
+        db.session.commit()
+        flash("Race updated!", "success")
+        return redirect(url_for("schedule"))
 
     return render_template("edit_race.html", race=race)
 
+@app.route("/delete_race/<int:race_id>", methods=["POST"])
+def delete_race(race_id):
+    race = Race.query.get_or_404(race_id)
+
+    # Also delete associated results if needed
+    Result.query.filter_by(race_id=race.id).delete()
+
+    db.session.delete(race)
+    db.session.commit()
+    flash("Race deleted successfully.", "success")
+    return redirect(url_for("schedule"))
+
+
+@app.route("/add_race", methods=["GET", "POST"])
+def add_race():
+    if request.method == "POST":
+        new_race = Race(
+            season=request.form.get("season"),
+            week=int(request.form.get("week")),
+            race_number=int(request.form.get("race_number")),
+            race_type=request.form.get("race_type"),
+            race_name=request.form.get("race_name"),
+            grade=request.form.get("grade"),
+            event_type=request.form.get("event_type"),
+            distance=request.form.get("distance"),
+            location=request.form.get("location"),
+            surface=request.form.get("surface"),
+            direction=request.form.get("direction"),
+            mood=request.form.get("mood"),
+            weather=request.form.get("weather"),
+            participant_count=int(request.form.get("participant_count") or 0)
+        )
+
+        db.session.add(new_race)
+        db.session.commit()
+        flash("Race successfully added!", "success")
+        return redirect(url_for("schedule"))
+
+    return render_template("add_race.html")
+
+@app.route("/player/<player_name>")
+def player_profile(player_name):
+    results = (
+        Result.query
+        .filter_by(player_name=player_name)
+        .join(Race)
+        .order_by(Race.week, Race.race_number)
+        .all()
+    )
+
+    total_points = sum(r.points for r in results)
+    race_count = len(results)
+    avg_points = round(total_points / race_count, 2) if race_count else 0
+
+    return render_template("player_profile.html", player_name=player_name, results=results, total_points=total_points, avg_points=avg_points, race_count=race_count)
 
 @app.route('/')
 def home():
     return render_template("index.html")
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 def run():
     app.run(debug=True)

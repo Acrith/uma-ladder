@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Add Race | Uma Ladder{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">➕ Add New Race</h2>
+
+<form method="POST" class="row g-3">
+
+  <div class="col-md-4">
+    <label class="form-label">Season</label>
+    <input type="text" name="season" class="form-control" required>
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Week</label>
+    <input type="number" name="week" class="form-control" required>
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Race #</label>
+    <input type="number" name="race_number" class="form-control" required>
+  </div>
+
+  <div class="col-md-4">
+    <label class="form-label">Race Name</label>
+    <input type="text" name="race_name" class="form-control" required>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Grade</label>
+    <select name="grade" class="form-select">
+      <option value="G1">G1</option>
+      <option value="G2">G2</option>
+      <option value="G3">G3</option>
+      <option value="OP">OP</option>
+      <option value="PreOP">Pre-OP</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Type</label>
+    <select name="race_type" class="form-select">
+      <option value="Sprint">Sprint</option>
+      <option value="Mile">Mile</option>
+      <option value="Medium">Medium</option>
+      <option value="Long">Long</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Event Type</label>
+    <select name="event_type" class="form-select">
+      <option value="Normal">Normal</option>
+      <option value="Special">Special</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Distance</label>
+    <select name="distance" class="form-select">
+        <option value="1000">1000</option>
+        <option value="1200">1200</option>
+        <option value="1400">1400</option>
+        <option value="1500">1500</option>
+        <option value="1600">1600</option>
+        <option value="1800">1800</option>
+        <option value="2000">2000</option>
+        <option value="2200">2200</option>
+        <option value="2300">2300</option>
+        <option value="2400">2400</option>
+        <option value="2500">2500</option>
+        <option value="2600">2600</option>
+        <option value="3000">3000</option>
+        <option value="3200">3200</option>
+        <option value="3400">3400</option>
+        <option value="3600">3600</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Location</label>
+    <select name="location" class="form-select">
+        <option value="Chukyo">Chukyo</option>
+        <option value="Fukushima">Fukushima</option>
+        <option value="Hadokate">Hadokate</option>
+        <option value="Hanshin">Hanshin</option>
+        <option value="Kokura">Kokura</option>
+        <option value="Kyoto">Kyoto</option>
+        <option value="Nakayama">Nakayama</option>
+        <option value="Niigata">Niigata</option>
+        <option value="Sapporo">Sapporo</option>
+        <option value="Tokyo">Tokyo</option>
+        <option value="Oi">Oi</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Surface</label>
+    <select name="surface" class="form-select">
+      <option value="Turf">Turf</option>
+      <option value="Dirt">Dirt</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Direction</label>
+    <input type="text" name="direction" class="form-control" placeholder="e.g. Left, Right/Inner">
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Mood</label>
+    <select name="mood" class="form-select">
+        <option value="Great">Great</option>
+        <option value="Good">Good</option>
+        <option value="Normal">Normal</option>
+        <option value="Bad">Bad</option>
+        <option value="Awful">Awful</option>
+        <option value="Random">Random</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Weather</label>
+    <input type="text" name="weather" class="form-control" placeholder="e.g. Random">
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label">Participant Count</label>
+    <input type="number" name="participant_count" class="form-control" min="1" max="18">
+  </div>
+
+  <div class="col-12 mt-3">
+    <button type="submit" class="btn btn-success">Add Race</button>
+    <a href="{{ url_for('schedule') }}" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

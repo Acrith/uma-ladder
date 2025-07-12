@@ -1,30 +1,36 @@
 {% extends "base.html" %}
-
-{% block title %}Ladder Standings | Uma Ladder{% endblock %}
+{% block title %}Ladder | Uma Ladder{% endblock %}
 
 {% block content %}
-<h2>🏆 Leaderboard</h2>
+<h2>📊 Season Leaderboard</h2>
 
 {% if leaderboard %}
-<table class="table table-bordered table-hover mt-3 text-center align-middle">
-    <thead class="table-dark">
-        <tr>
-            <th>Rank</th>
-            <th>Player</th>
-            <th>Total Points</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for row in leaderboard %}
-        <tr>
-            <td>{{ loop.index }}</td>
-            <td>{{ row.player_name }}</td>
-            <td>{{ row.total_points }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
+<table class="table table-striped mt-4">
+  <thead class="table-light">
+    <tr>
+      <th>Rank</th>
+      <th>Player</th>
+      <th>Races</th>
+      <th>Total Points</th>
+      <th>Avg Points</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for player in leaderboard %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td><a href="{{ url_for('player_profile', player_name=player.player_name) }}">
+            {{ player.player_name }}
+      </a>
+    </td>
+      <td>{{ player.races }}</td>
+      <td>{{ player.total_points }}</td>
+      <td>{{ "%.2f"|format(player.avg_points) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 {% else %}
-<p class="text-muted">No race results have been entered yet.</p>
+<p>No results yet. Ladder will appear once races are submitted.</p>
 {% endif %}
 {% endblock %}
