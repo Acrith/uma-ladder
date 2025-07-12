@@ -10,18 +10,14 @@ import os
 import uuid
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/ladder.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'uma-ladder-config'
+db = SQLAlchemy(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
-
-# Setup database
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'ladder.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
 
 def generate_reset_token(username, expires_sec=3600):
     s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
@@ -183,7 +179,7 @@ def recalculate_results_for_race(race):
 @login_required
 @role_required('admin', 'superadmin')
 def admin_users():
-    users = User.query.all()
+    users = [u for u in User.query.all() if u is not None]
     return render_template("admin_users.html", users=users)
 
 @app.route("/admin/users/set_role/<int:user_id>", methods=["POST"])
@@ -276,7 +272,7 @@ def register():
             return redirect("/register")
 
         hashed_pw = generate_password_hash(password)
-        user = User(username=username, password_hash=hashed_pw)
+        user = User(username=username, password_hash=hashed_pw, role="user")
         db.session.add(user)
         db.session.commit()
 
