@@ -38,10 +38,10 @@
     <label>Strategy</label>
     <select name="uma_strategy" class="form-select">
       <option value="">— Select —</option>
-      <option value="Runner">Front Runner</option>
-      <option value="Leader">Pace Chaser</option>
-      <option value="Betweener">Late Surger</option>
-      <option value="Closer">End Closer</option>
+      <option value="Front Runner">Front Runner</option>
+      <option value="Pace Chaser">Pace Chaser</option>
+      <option value="Late Surger">Late Surger</option>
+      <option value="End Closer">End Closer</option>
     </select>
   </div>
 </div>
@@ -51,12 +51,19 @@
   <div class="col-md-4 d-flex align-items-center justify-content-center flex-column">
     <label class="w-100 text-center mb-2">Paste Screenshot (Ctrl+V)</label>
     <div id="paste-box" contenteditable="true" tabindex="0"
-         class="border"
-         style="min-height: 220px; width: 200px; background: #f9f9f9; display: flex; align-items: center; justify-content: center;">
-      <span id="paste-instructions" class="text-muted text-center">Click here and paste<br>(Ctrl+V)</span>
-      <img id="paste-preview" src="" alt="Preview"
-           style="display:none; max-width: 100%; max-height: 100%; position: absolute;" />
-    </div>
+     class="border"
+     style="min-height: 220px; width: 200px; background: #f9f9f9;
+            display: flex; align-items: center; justify-content: center; position: relative;">
+  <span id="paste-instructions"
+        class="text-muted text-center"
+        style="z-index: 1; text-align: center;">
+    Click here and paste<br>(Ctrl+V)
+  </span>
+  <img id="paste-preview" src="" alt="Preview"
+       style="display:none; max-width: 100%; max-height: 100%;" />
+       <input type="hidden" name="pasted_image_url" id="pasted_image_url">
+</div>
+
   </div>
 
   <!-- 🧠 Stat Inputs -->

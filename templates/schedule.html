@@ -39,7 +39,24 @@
         {{ race.race_type }}
       </td>
 
-      <td class="text-start">{{ race.race_name }}</td>
+<td class="text-start">
+  {{ race.race_name }}
+  {% if race.invite_codes %}
+    <div class="mt-1">
+      {% for code in race.invite_codes %}
+        <div>
+          <small class="text-muted mb-0">
+            Room Code:
+            <span class="copy-code text-decoration-underline" data-code="{{ code }}" style="cursor: pointer;" title="Click to copy">
+              {{ code }}
+            </span>
+          </small>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</td>
+
 
       <td class="{% if race.grade == 'G1' %}bg-grade-g1 fw-bold{% endif %}">{{ race.grade }}</td>
       <td>{{ race.event_type }}</td>
@@ -162,4 +179,25 @@
 {% endif %}
 
 <a href="{{ url_for('add_race') }}" class="btn btn-primary mt-4">➕ Add New Race</a>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.copy-code').forEach(span => {
+      span.addEventListener('click', () => {
+        const code = span.dataset.code;
+        navigator.clipboard.writeText(code).then(() => {
+          const original = span.textContent;
+          span.textContent = "Copied!";
+          span.classList.add('text-success');
+          setTimeout(() => {
+            span.textContent = original;
+            span.classList.remove('text-success');
+          }, 1000);
+        });
+      });
+    });
+  });
+</script>
+
 {% endblock %}
+

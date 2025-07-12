@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Reset Password Link{% endblock %}
+{% block content %}
+<h2>🔐 Reset Link for {{ user.username }}</h2>
+<p>Copy the reset link below and send it to the user. It expires in 1 hour.</p>
+<input class="form-control" readonly value="{{ reset_url }}" onclick="this.select()" />
+<a href="{{ url_for('admin_users') }}" class="btn btn-secondary mt-3">← Back</a>
+{% endblock %}

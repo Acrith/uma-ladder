@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Edit Result | Uma Ladder{% endblock %}
+
+{% block content %}
+<h2>✏️ Edit Submitted Result</h2>
+
+<form method="POST" enctype="multipart/form-data" class="mt-4">
+    <div class="mb-3">
+        <label for="race_id" class="form-label">Race</label>
+        <input type="text" class="form-control" value="[Week {{ result.race.week }}] {{ result.race.race_name }} ({{ result.race.grade }}, {{ result.race.distance }})" disabled>
+        <input type="hidden" name="race_id" value="{{ result.race.id }}">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Player Name</label>
+        <input type="text" name="player_name" class="form-control" required value="{{ result.player_name }}">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Uma Name</label>
+        <input type="text" name="uma_name" class="form-control" required value="{{ result.uma_name }}">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Placement</label>
+        <input type="number" name="placement" class="form-control" min="1" max="18" required value="{{ result.placement }}">
+    </div>
+
+    <h4>Optional Uma Details</h4>
+    <div class="row">
+        <div class="col">
+            <label>Strategy</label>
+            <select name="uma_strategy" class="form-select">
+                <option value="">— Select —</option>
+                {% set strategy = result.uma_strategy %}
+                <option value="Front Runner" {{ 'selected' if strategy == 'Front Runer' else '' }}>Front Runner</option>
+                <option value="Pace Chaser" {{ 'selected' if strategy == 'Pace Chaser' else '' }}>Pace Chaser</option>
+                <option value="Late Surger" {{ 'selected' if strategy == 'Late Surger' else '' }}>Late Surger</option>
+                <option value="End Closer" {{ 'selected' if strategy == 'End Closer' else '' }}>End Closer</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <!-- Screenshot -->
+        <div class="col-md-4 d-flex align-items-center justify-content-center flex-column">
+            <label class="w-100 text-center mb-2">Paste New Screenshot (optional)</label>
+            <div id="paste-box" contenteditable="true" tabindex="0"
+            class="border position-relative"
+            style="min-height: 220px; width: 200px; background: #f9f9f9; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                <span id="paste-instructions" class="text-muted text-center">Click here and paste<br>(Ctrl+V)</span>
+                <img id="paste-preview" src="{{ result.uma_image_url or '' }}" alt="Preview"
+                class="img-fluid {{ '' if result.uma_image_url else 'd-none' }}" />
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="col-md-8 ps-md-4">
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label>Speed</label>
+                    <input type="number" name="uma_speed" class="form-control" value="{{ result.uma_speed or '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label>Stamina</label>
+                    <input type="number" name="uma_stamina" class="form-control" value="{{ result.uma_stamina or '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label>Power</label>
+                    <input type="number" name="uma_power" class="form-control" value="{{ result.uma_power or '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label>Guts</label>
+                    <input type="number" name="uma_guts" class="form-control" value="{{ result.uma_guts or '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label>Wisdom</label>
+                    <input type="number" name="uma_wisdom" class="form-control" value="{{ result.uma_wisdom or '' }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <input type="hidden" name="pasted_image_url" id="pasted_image_url" value="{{ result.uma_image_url or '' }}">
+
+    <div class="mt-4">
+        <button type="submit" class="btn btn-success">Save Changes</button>
+        <a href="{{ url_for('race_results', race_id=result.race_id) }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const pasteBox = document.getElementById("paste-box");
+    const previewImg = document.getElementById("paste-preview");
+    const instructions = document.getElementById("paste-instructions");
+    const hiddenInput = document.getElementById("pasted_image_url");
+
+    // If an image is already present, hide instructions
+    if (previewImg.src && !previewImg.classList.contains("d-none")) {
+      instructions.style.display = "none";
+    }
+
+    // Ensure the paste box is focused when clicked
+    pasteBox.addEventListener("click", () => {
+      pasteBox.focus();
+    });
+
+    // Paste handler
+    pasteBox.addEventListener("paste", async (event) => {
+      // Confirm paste box is focused
+      if (document.activeElement !== pasteBox) return;
+
+      event.preventDefault();
+
+      const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+      for (const item of items) {
+        if (item.type.indexOf("image") === 0) {
+          const file = item.getAsFile();
+          const formData = new FormData();
+          formData.append("image", file);
+
+          const res = await fetch("/upload_image", {
+            method: "POST",
+            body: formData
+          });
+
+          const data = await res.json();
+          if (data.url) {
+            // Use cache-busting trick to force image reload
+            const uniqueURL = `${data.url}?v=${Date.now()}`;
+            previewImg.src = uniqueURL;
+            previewImg.classList.remove("d-none");
+            hiddenInput.value = data.url;
+            instructions.style.display = "none";
+          }
+        }
+      }
+    });
+
+    // Optional: focus paste box on load
+    pasteBox.focus();
+  });
+</script>
+
+{% endblock %}

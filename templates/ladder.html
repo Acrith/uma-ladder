@@ -19,7 +19,7 @@
     {% for player in leaderboard %}
     <tr>
       <td>{{ loop.index }}</td>
-      <td><a href="{{ url_for('player_profile', player_name=player.player_name) }}">
+      <td><a href="{{ url_for('player_profile', player_name=player.player_name) }}" class="text-dark text-decoration-underline">
             {{ player.player_name }}
       </a>
     </td>

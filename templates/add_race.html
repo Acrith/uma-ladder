@@ -129,6 +129,12 @@
     <input type="number" name="participant_count" class="form-control" min="1" max="18">
   </div>
 
+  <div class="mb-3">
+    <label class="form-label">Invite Code(s)</label>
+    <input type="text" name="invite_code" class="form-control">
+    <small class="text-muted">Separate multiple codes with commas</small>
+  </div>
+
   <div class="col-12 mt-3">
     <button type="submit" class="btn btn-success">Add Race</button>
     <a href="{{ url_for('schedule') }}" class="btn btn-secondary">Cancel</a>

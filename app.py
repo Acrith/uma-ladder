@@ -1,9 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, redirect, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, redirect, abort, current_app
 from flask_login import UserMixin, LoginManager, login_user, login_required, logout_user, current_user
+from itsdangerous import URLSafeTimedSerializer
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, desc
+from functools import wraps
 import os
 import uuid
 
@@ -21,16 +23,48 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+def generate_reset_token(username, expires_sec=3600):
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return s.dumps(username, salt='password-reset')
+
+def verify_reset_token(token, max_age=3600):
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    try:
+        username = s.loads(token, salt='password-reset', max_age=max_age)
+    except Exception:
+        return None
+    return username
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
-    is_admin = db.Column(db.Boolean, default=False)
+
+    role = db.Column(db.String(20), default='user')  
 
     results = db.relationship("Result", backref="user", lazy=True)  # 🔗 linked
 
+    def is_admin(self):
+        return self.role in ['admin', 'superadmin']
+
+    def is_superadmin(self):
+        return self.role == 'superadmin'
+
+    def is_editor(self):
+        return self.role in ['editor', 'admin', 'superadmin']
+
     def __repr__(self):
         return f"<User {self.username}>"
+
+def role_required(*roles):
+    def wrapper(fn):
+        @wraps(fn)
+        def decorated_view(*args, **kwargs):
+            if not current_user.is_authenticated or current_user.role not in roles:
+                abort(403)
+            return fn(*args, **kwargs)
+        return decorated_view
+    return wrapper
 
 class Race(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -49,6 +83,11 @@ class Race(db.Model):
     weather = db.Column(db.String(20), nullable=False)
     participant_count = db.Column(db.Integer, nullable=True)
     completed = db.Column(db.Boolean, default=False)
+    invite_code = db.Column(db.String(255))  # Increased size to allow multiple codes
+    
+    @property
+    def invite_codes(self):
+        return [code.strip() for code in self.invite_code.split(',')] if self.invite_code else []
 
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -74,68 +113,157 @@ class Result(db.Model):
     # Optional: Relationship for convenience
     race = db.relationship('Race', backref='results')
 
+def calculate_points(race: Race, placement: int) -> int:
+    SCORING_RULES = {
+        (9, 11): [10, 8, 6, 5, 4],
+        (12, 13): [10, 8, 6, 5, 4, 3],
+        (14, 15): [10, 8, 6, 5, 4, 3, 2],
+        (16, 18): [10, 8, 6, 5, 4, 3, 2, 1],
+    }
+
+    GRADE_MULTIPLIERS = {
+        "G1": 1.1,
+        "G2": 1.0,
+        "G3": 1.0,
+        "OP": 0.9,
+        "PRE-OP": 0.9
+    }
+
+    participant_count = race.participant_count or 18
+    grade = race.grade.upper()
+    multiplier = GRADE_MULTIPLIERS.get(grade, 1.0)
+
+    base_points = []
+    for (low, high), points in SCORING_RULES.items():
+        if low <= participant_count <= high:
+            base_points = points
+            break
+    if not base_points:
+        base_points = [10, 8, 6, 5, 4, 3, 2, 1]
+
+    if placement > len(base_points):
+        return 0
+    return round(base_points[placement - 1] * multiplier)
+
+def recalculate_results_for_race(race):
+    SCORING_RULES = {
+        (9, 11): [10, 8, 6, 5, 4],
+        (12, 13): [10, 8, 6, 5, 4, 3],
+        (14, 15): [10, 8, 6, 5, 4, 3, 2],
+        (16, 18): [10, 8, 6, 5, 4, 3, 2, 1],
+    }
+    GRADE_MULTIPLIERS = {
+        "G1": 1.1,
+        "G2": 1.0,
+        "G3": 1.0,
+        "OP": 0.9,
+        "PRE-OP": 0.9
+    }
+
+    participant_count = race.participant_count or 18
+    grade = race.grade.upper()
+    multiplier = GRADE_MULTIPLIERS.get(grade, 1.0)
+
+    # Get correct scoring tier
+    base_points = []
+    for (low, high), points in SCORING_RULES.items():
+        if low <= participant_count <= high:
+            base_points = points
+            break
+    if not base_points:
+        base_points = [10, 8, 6, 5, 4, 3, 2, 1]
+
+    # Update all results
+    for result in Result.query.filter_by(race_id=race.id).all():
+        result.points = calculate_points(race, result.placement)
+
+    db.session.commit()
+
 @app.route("/admin/users")
 @login_required
+@role_required('admin', 'superadmin')
 def admin_users():
-    if not current_user.is_admin:
-        flash("Access denied: Admins only.", "danger")
-        return redirect(url_for("home"))
-
     users = User.query.all()
     return render_template("admin_users.html", users=users)
 
-@app.route("/admin/users/promote/<int:user_id>")
+@app.route("/admin/users/set_role/<int:user_id>", methods=["POST"])
 @login_required
-def promote_user(user_id):
-    if not current_user.is_admin:
-        flash("Access denied.", "danger")
-        return redirect(url_for("home"))
-
+@role_required('admin', 'superadmin')
+def set_user_role(user_id):
     user = User.query.get_or_404(user_id)
-    user.is_admin = True
-    db.session.commit()
-    flash(f"{user.username} promoted to admin.", "success")
-    return redirect(url_for("admin_users"))
+    new_role = request.form.get("role")
 
-@app.route("/admin/users/demote/<int:user_id>")
-@login_required
-def demote_user(user_id):
-    if not current_user.is_admin:
-        flash("Access denied.", "danger")
-        return redirect(url_for("home"))
-
-    user = User.query.get_or_404(user_id)
-    if user.id == current_user.id:
-        flash("You cannot demote yourself.", "warning")
+    if new_role not in ['user', 'editor', 'admin', 'superadmin']:
+        flash("Invalid role selected.", "danger")
         return redirect(url_for("admin_users"))
 
-    user.is_admin = False
+    # Prevent unauthorized superadmin assignment
+    if new_role == 'superadmin' and not current_user.is_superadmin():
+        flash("Only superadmins can assign the superadmin role.", "danger")
+        return redirect(url_for("admin_users"))
+
+    # Prevent demoting yourself from superadmin
+    if user.id == current_user.id and current_user.role == 'superadmin' and new_role != 'superadmin':
+        flash("You cannot demote yourself from superadmin.", "warning")
+        return redirect(url_for("admin_users"))
+
+    user.role = new_role
     db.session.commit()
-    flash(f"{user.username} demoted.", "success")
+    flash(f"{user.username}'s role updated to {new_role}.", "success")
     return redirect(url_for("admin_users"))
 
 @app.route("/admin/users/delete/<int:user_id>")
 @login_required
+@role_required('admin', 'superadmin')
 def delete_user(user_id):
-    if not current_user.is_admin:
-        flash("Access denied.", "danger")
-        return redirect(url_for("home"))
-
     user = User.query.get_or_404(user_id)
 
     if user.id == current_user.id:
         flash("You cannot delete yourself.", "warning")
         return redirect(url_for("admin_users"))
 
-    # Optional: prevent deleting other admins
-    if user.is_admin:
-        flash("You cannot delete another admin.", "warning")
+    # Prevent deleting superadmins unless you're one
+    if user.role == 'superadmin' and not current_user.is_superadmin():
+        flash("Only superadmins can delete another superadmin.", "danger")
+        return redirect(url_for("admin_users"))
+
+    # Optional: prevent admins from deleting other admins/editors
+    if current_user.role == 'admin' and user.role in ['admin', 'editor', 'superadmin']:
+        flash("Admins cannot delete other admins, editors, or superadmins.", "danger")
         return redirect(url_for("admin_users"))
 
     db.session.delete(user)
     db.session.commit()
     flash(f"User '{user.username}' has been deleted.", "success")
     return redirect(url_for("admin_users"))
+
+@app.route('/reset_password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    username = verify_reset_token(token)
+    if not username:
+        flash("Invalid or expired token.", "danger")
+        return redirect(url_for('login'))
+
+    user = User.query.filter_by(username=username).first_or_404()
+
+    if request.method == 'POST':
+        new_password = request.form['password']
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        flash("✅ Password updated.", "success")
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html')
+
+@app.route('/admin/reset_link/<int:user_id>')
+@login_required
+@role_required('admin', 'superadmin')
+def admin_generate_reset_link(user_id):
+    user = User.query.get_or_404(user_id)
+    token = generate_reset_token(user.username)
+    reset_url = url_for('reset_password', token=token, _external=True)
+
+    return render_template('admin_show_reset_link.html', user=user, reset_url=reset_url)
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -195,9 +323,8 @@ def schedule():
 
 @app.route("/race/<int:race_id>/complete", methods=["POST"])
 @login_required
+@role_required('editor', 'admin', 'superadmin')
 def mark_race_completed(race_id):
-    if not current_user.is_admin:
-        abort(403)
     race = Race.query.get_or_404(race_id)
     race.completed = True
     db.session.commit()
@@ -247,6 +374,8 @@ def upload_image():
     return {"url": f"/static/uploads/{filename}"}
 
 @app.route('/results', methods=['GET', 'POST'])
+@login_required
+@role_required('editor', 'admin', 'superadmin')
 def results():
     races = Race.query.order_by(Race.week, Race.race_number).all()
 
@@ -257,54 +386,15 @@ def results():
         placement = request.form.get('placement')
         image_url = request.form.get("pasted_image_url") or None
 
-        # Validate inputs (basic check)
         if not (race_id and player_name and uma_name and placement):
             flash("Please fill in all fields.", "danger")
             return redirect(url_for('results'))
 
-        # Convert placement to int
         placement_int = int(placement)
-
-        # Get the race
         race = Race.query.get(int(race_id))
-        grade = race.grade.upper()
-
-        # Use the value from Race, or fallback to 18 if not yet set
         participant_count = race.participant_count or 18
+        calculated_points = calculate_points(race, placement_int)
 
-        # --- Define Scoring Rules ---
-        SCORING_RULES = {
-            (9, 11): [10, 8, 6, 5, 4],
-            (12, 13): [10, 8, 6, 5, 4, 3],
-            (14, 15): [10, 8, 6, 5, 4, 3, 2],
-            (16, 18): [10, 8, 6, 5, 4, 3, 2, 1],
-        }
-        GRADE_MULTIPLIERS = {
-            "G1": 1.1,
-            "G2": 1.0,
-            "G3": 1.0,
-            "OP": 0.9,
-            "PRE-OP": 0.9
-        }
-
-        # Get base point list for that participant range
-        base_points = []
-        for (low, high), points in SCORING_RULES.items():
-            if low <= participant_count <= high:
-                base_points = points
-                break
-        if not base_points:
-            base_points = [10, 8, 6, 5, 4, 3, 2, 1]  # fallback
-
-        # Determine points
-        if placement_int > len(base_points):
-            calculated_points = 0
-        else:
-            base = base_points[placement_int - 1]
-            multiplier = GRADE_MULTIPLIERS.get(grade, 1.0)
-            calculated_points = round(base * multiplier)
-
-        # Save result
         result = Result(
             race_id=int(race_id),
             player_name=player_name.strip(),
@@ -319,7 +409,7 @@ def results():
             uma_wisdom=parse_int(request.form.get("uma_wisdom")),
             uma_image_url=image_url
         )
-        # Assign user if logged in
+
         if current_user.is_authenticated and player_name.strip().lower() == current_user.username.lower():
             result.user_id = current_user.id
 
@@ -341,47 +431,12 @@ def race_results(race_id):
     )
     return render_template("race_results.html", race=race, results=results)
 
-def recalculate_results_for_race(race):
-    SCORING_RULES = {
-        (9, 11): [10, 8, 6, 5, 4],
-        (12, 13): [10, 8, 6, 5, 4, 3],
-        (14, 15): [10, 8, 6, 5, 4, 3, 2],
-        (16, 18): [10, 8, 6, 5, 4, 3, 2, 1],
-    }
-    GRADE_MULTIPLIERS = {
-        "G1": 1.1,
-        "G2": 1.0,
-        "G3": 1.0,
-        "OP": 0.9,
-        "PRE-OP": 0.9
-    }
-
-    participant_count = race.participant_count or 18
-    grade = race.grade.upper()
-    multiplier = GRADE_MULTIPLIERS.get(grade, 1.0)
-
-    # Get correct scoring tier
-    base_points = []
-    for (low, high), points in SCORING_RULES.items():
-        if low <= participant_count <= high:
-            base_points = points
-            break
-    if not base_points:
-        base_points = [10, 8, 6, 5, 4, 3, 2, 1]
-
-    # Update all results
-    for result in Result.query.filter_by(race_id=race.id).all():
-        if result.placement > len(base_points):
-            result.points = 0
-        else:
-            result.points = round(base_points[result.placement - 1] * multiplier)
-
-    db.session.commit()
-
 @app.route("/edit_race/<int:race_id>", methods=["GET", "POST"])
+@login_required
+@role_required("editor", "admin", "superadmin")
 def edit_race(race_id):
     race = Race.query.get_or_404(race_id)
-    
+
     if request.method == "POST":
         race.season = request.form.get("season")
         race.week = int(request.form.get("week"))
@@ -397,6 +452,7 @@ def edit_race(race_id):
         race.mood = request.form.get("mood")
         race.weather = request.form.get("weather")
         race.participant_count = int(request.form.get("participant_count") or 0)
+        race.invite_code = request.form.get("invite_code")
 
         db.session.commit()
         flash("Race updated!", "success")
@@ -404,7 +460,35 @@ def edit_race(race_id):
 
     return render_template("edit_race.html", race=race)
 
+@app.route('/edit_result/<int:result_id>', methods=['GET', 'POST'])
+@login_required
+@role_required("editor", "admin", "superadmin")
+def edit_result(result_id):
+    result = Result.query.get_or_404(result_id)
+
+    if request.method == 'POST':
+        result.player_name = request.form.get('player_name')
+        result.uma_name = request.form.get('uma_name')
+        result.placement = int(request.form.get('placement'))
+        race = Race.query.get(result.race_id)
+        result.points = calculate_points(race, result.placement)
+        result.uma_strategy = request.form.get("uma_strategy")
+        result.uma_speed = parse_int(request.form.get("uma_speed"))
+        result.uma_stamina = parse_int(request.form.get("uma_stamina"))
+        result.uma_power = parse_int(request.form.get("uma_power"))
+        result.uma_guts = parse_int(request.form.get("uma_guts"))
+        result.uma_wisdom = parse_int(request.form.get("uma_wisdom"))
+        result.uma_image_url = request.form.get("pasted_image_url") or result.uma_image_url
+
+        db.session.commit()
+        flash("✅ Result updated.", "success")
+        return redirect(url_for('race_results', race_id=result.race_id))
+
+    return render_template('edit_result.html', result=result)
+
 @app.route("/delete_race/<int:race_id>", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
 def delete_race(race_id):
     race = Race.query.get_or_404(race_id)
 
@@ -416,8 +500,9 @@ def delete_race(race_id):
     flash("Race deleted successfully.", "success")
     return redirect(url_for("schedule"))
 
-
 @app.route("/add_race", methods=["GET", "POST"])
+@login_required
+@role_required("editor", "admin", "superadmin")
 def add_race():
     if request.method == "POST":
         new_race = Race(
@@ -434,7 +519,8 @@ def add_race():
             direction=request.form.get("direction"),
             mood=request.form.get("mood"),
             weather=request.form.get("weather"),
-            participant_count=int(request.form.get("participant_count") or 0)
+            participant_count=int(request.form.get("participant_count") or 0),
+            invite_code=request.form.get("invite_code")
         )
 
         db.session.add(new_race)
@@ -443,8 +529,6 @@ def add_race():
         return redirect(url_for("schedule"))
 
     return render_template("add_race.html")
-
-
 
 @app.route("/profile")
 @login_required
@@ -512,15 +596,19 @@ def claim_result(result_id):
 
 @app.route("/delete_result/<int:result_id>", methods=["POST", "GET"])
 @login_required
+@role_required('editor', 'admin', 'superadmin')
 def delete_result(result_id):
-    if not current_user.is_admin:
-        abort(403)  # Forbidden
-
     result = Result.query.get_or_404(result_id)
     db.session.delete(result)
     db.session.commit()
     flash("Result deleted successfully.", "success")
-    return redirect(url_for("results"))
+
+    # Redirect back to race result page if race ID was passed in form
+    redirect_race_id = request.form.get("redirect_to_race")
+    if redirect_race_id:
+        return redirect(url_for('race_results', race_id=redirect_race_id))
+
+    return redirect(url_for('results'))  # fallback
 
 @app.route('/')
 def home():

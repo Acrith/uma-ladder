@@ -78,9 +78,11 @@
     <li class="nav-item">
       <a class="nav-link {% if request.endpoint == 'ladder' %}active{% endif %}" href="{{ url_for('ladder') }}">Ladder</a>
     </li>
+    {% if current_user.is_authenticated and current_user.is_admin %}
     <li class="nav-item">
       <a class="nav-link {% if request.endpoint == 'results' %}active{% endif %}" href="{{ url_for('results') }}">Enter Result</a>
     </li>
+    {% endif %}
   </ul>
 
   <!-- Right Nav -->
