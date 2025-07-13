@@ -20,26 +20,30 @@
     <td>{{ user.id }}</td>
     <td>{{ user.username }}</td>
     <td>{% if user.is_admin %}✅{% else %}❌{% endif %}</td>
-    <td>
-      {% if user.id == 1 %}
-        🔒 Superadmin
-      {% elif user.id == current_user.id %}
-        🔒 You
-      {% else %}
-        <form method="POST" action="{{ url_for('set_user_role', user_id=user.id) }}" class="d-inline">
-          <select name="role" class="form-select form-select-sm d-inline w-auto">
-            {% for r in ['user', 'editor', 'admin'] %}
-              <option value="{{ r }}" {% if user.role == r %}selected{% endif %}>{{ r }}</option>
-            {% endfor %}
-          </select>
-          <button type="submit" class="btn btn-sm btn-primary">Update</button>
-        </form>
-        <a href="{{ url_for('delete_user', user_id=user.id) }}" class="btn btn-sm btn-danger"
-          onclick="return confirm('Are you sure you want to delete this user?');">
-          Delete
-        </a>
-      {% endif %}
-    </td>
+<td>
+  {% if user.id == 1 %}
+    🔒 Superadmin
+  {% elif user.id == current_user.id %}
+    🔒 You
+  {% else %}
+    <form method="POST" action="{{ url_for('set_user_role', user_id=user.id) }}" class="d-inline">
+      <select name="role" class="form-select form-select-sm d-inline w-auto">
+        {% for r in ['user', 'editor', 'admin'] %}
+          <option value="{{ r }}" {% if user.role == r %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-primary">Update</button>
+    </form>
+    <a href="{{ url_for('delete_user', user_id=user.id) }}" class="btn btn-sm btn-danger mt-1"
+       onclick="return confirm('Are you sure you want to delete this user?');">
+      Delete
+    </a>
+    <a href="{{ url_for('admin_generate_reset_link', user_id=user.id) }}"
+       class="btn btn-sm btn btn-warning">
+      Reset Password
+    </a>
+  {% endif %}
+</td>
   </tr>
   {% endif %}
 {% endfor %}

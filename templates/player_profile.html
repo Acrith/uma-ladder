@@ -28,7 +28,7 @@
     <tr>
       <td>{{ r.race.week }}</td>
       <td><a href="{{ url_for('race_results', race_id=r.race.id) }}" class="text-dark text-decoration-underline">{{ r.race.race_name }}</a> ({{ r.race.grade }})</td>
-      <<td style="position: relative;">
+      <td style="position: relative;">
   {% if r.uma_image_url %}
     <span class="uma-hover" data-img="{{ r.uma_image_url }}" data-bs-toggle="modal" data-bs-target="#imageModal"
           style="cursor: pointer; text-decoration: underline;">

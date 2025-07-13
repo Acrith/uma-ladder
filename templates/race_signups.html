@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Signups – {{ race.race_name }}{% endblock %}
+{% block content %}
+<h2><span class="me-2">📝</span>Signups – {{ race.race_name }}</h2>
+<p>
+  <strong>Season:</strong> {{ race.season }}
+  | <strong>Week:</strong> {{ race.week }}
+  | <strong>Grade:</strong> {{ race.grade }}
+</p>
+
+<ul>
+  {% for signup in race.signups %}
+    <li>
+      <a href="{{ url_for('player_profile', player_name=signup.user.username) }}">
+        {{ signup.user.username }}
+      </a>(Signed at {{ signup.timestamp.strftime('%Y-%m-%d %H:%M') }})
+    </li>
+  {% else %}
+    <p>No signups yet.</p>
+  {% endfor %}
+</ul>
+
+<a href="{{ url_for('schedule') }}" class="btn btn-secondary">← Back</a>
+{% endblock %}

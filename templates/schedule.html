@@ -21,7 +21,7 @@
       <th>Direction</th>
       <th>Mood</th>
       <th>Weather</th>
-      <th>P. Count</th>
+      <th>Signups</th>
       <th class="text-center">Actions</th>
     </tr>
   </thead>
@@ -41,19 +41,24 @@
 
 <td class="text-start">
   {{ race.race_name }}
+
   {% if race.invite_codes %}
-    <div class="mt-1">
-      {% for code in race.invite_codes %}
-        <div>
-          <small class="text-muted mb-0">
-            Room Code:
-            <span class="copy-code text-decoration-underline" data-code="{{ code }}" style="cursor: pointer;" title="Click to copy">
-              {{ code }}
-            </span>
-          </small>
-        </div>
-      {% endfor %}
-    </div>
+    {% for code in race.invite_codes %}
+      <div>
+        <small class="text-muted">
+          Room Code:
+          <span class="copy-code text-decoration-underline" data-code="{{ code }}" style="cursor: pointer;" title="Click to copy">
+            {{ code }}
+          </span>
+        </small>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if race.starts_in %}
+    <div><small class="text-muted">Starts in: {{ race.starts_in }}</small></div>
+  {% elif race.scheduled_date %}
+    <div><small class="text-muted">Scheduled: {{ race.scheduled_date.strftime('%d.%m.%Y') }}</small></div>
   {% endif %}
 </td>
 
@@ -76,17 +81,30 @@
       </td>
 
       <td>{{ race.weather }}</td>
-      <td>{{ race.participant_count }}</td>
+      <td class="{% if race.participant_count and race.signups | length >= race.participant_count %}text-danger fw-bold{% endif %}">
+  {{ race.signups | length }}
+  {% if race.participant_count %}
+    / {{ race.participant_count }}
+  {% endif %}
+</td>
 
       <td>
         <div class="d-flex gap-1 justify-content-center flex-wrap">
-          {% if current_user.is_authenticated and current_user.is_admin %}
-            <a href="{{ url_for('edit_race', race_id=race.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+          {% if current_user.is_authenticated and current_user.role in ['editor', 'admin', 'superadmin'] %}
+          <a href="{{ url_for('edit_race', race_id=race.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
           {% endif %}
 
           <a href="{{ url_for('race_results', race_id=race.id) }}" class="btn btn-sm btn-outline-info">Results</a>
-
-          {% if current_user.is_authenticated and current_user.is_admin and not race.completed %}
+    {% if current_user.is_authenticated %}
+      {% set is_signed_up = race.signups | selectattr("user_id", "equalto", current_user.id) | list | length > 0 %}
+      <form method="POST" action="{{ url_for('unsign_race' if is_signed_up else 'signup_race', race_id=race.id) }}">
+        <button type="submit" class="btn btn-sm {{ 'btn-warning' if is_signed_up else 'btn-success' }}">
+          {{ "Unsign" if is_signed_up else "Sign Up" }}
+        </button>
+      </form>
+    {% endif %}
+    <a href="{{ url_for('view_race_signups', race_id=race.id) }}" class="btn btn-sm btn-outline-primary">View Signups</a>
+          {% if current_user.is_authenticated and current_user.role in ['admin', 'superadmin'] and not race.completed %}
             <form method="POST" action="{{ url_for('mark_race_completed', race_id=race.id) }}">
               <button type="submit" class="btn btn-sm btn-outline-success" title="Mark Completed">✔</button>
             </form>
@@ -122,7 +140,7 @@
       <th>Direction</th>
       <th>Mood</th>
       <th>Weather</th>
-      <th>P. Count</th>
+      <th>Signups</th>
       <th class="text-center">Actions</th>
     </tr>
   </thead>
@@ -160,11 +178,19 @@
       </td>
 
       <td>{{ race.weather }}</td>
-      <td>{{ race.participant_count }}</td>
+<td>
+  {% if race.signups|length > 0 %}
+    {{ race.signups|length }}/{{ race.participant_count or '?' }}
+  {% elif race.results|length > 0 %}
+    ~{{ race.results|length }} (results)
+  {% else %}
+    <span class="text-muted">N/A</span>
+  {% endif %}
+</td>
 
       <td>
         <div class="d-flex gap-1 justify-content-center flex-wrap">
-          {% if current_user.is_authenticated and current_user.is_admin %}
+          {% if current_user.is_authenticated and current_user.role in ['editor', 'admin', 'superadmin'] %}
             <a href="{{ url_for('edit_race', race_id=race.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
           {% endif %}
           <a href="{{ url_for('race_results', race_id=race.id) }}" class="btn btn-sm btn-outline-info">Results</a>
@@ -177,9 +203,9 @@
 {% else %}
 <p>No completed races yet.</p>
 {% endif %}
-
+{% if current_user.is_authenticated and current_user.role in ['admin', 'superadmin'] %}
 <a href="{{ url_for('add_race') }}" class="btn btn-primary mt-4">➕ Add New Race</a>
-
+{% endif %}
 <script>
   document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.copy-code').forEach(span => {
@@ -198,6 +224,5 @@
     });
   });
 </script>
-
 {% endblock %}
 

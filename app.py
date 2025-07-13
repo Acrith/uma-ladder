@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, desc
 from functools import wraps
+from datetime import datetime, timedelta
 import os
 import uuid
 
@@ -18,6 +19,11 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
+
+db_path = "/data/ladder.db"
+while not os.path.exists(db_path):
+    print("⏳ Waiting for /data/ladder.db to appear...")
+    time.sleep(1)
 
 def generate_reset_token(username, expires_sec=3600):
     s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
@@ -80,10 +86,31 @@ class Race(db.Model):
     participant_count = db.Column(db.Integer, nullable=True)
     completed = db.Column(db.Boolean, default=False)
     invite_code = db.Column(db.String(255))  # Increased size to allow multiple codes
+    scheduled_date = db.Column(db.Date, nullable=True)
+    scheduled_start = db.Column(db.DateTime, nullable=True)
     
     @property
     def invite_codes(self):
         return [code.strip() for code in self.invite_code.split(',')] if self.invite_code else []
+
+    @property
+    def starts_in(self):
+        if self.scheduled_start:
+            delta = self.scheduled_start - datetime.utcnow()
+            if delta.total_seconds() > 0:
+                hours = delta.total_seconds() // 3600
+                minutes = (delta.total_seconds() % 3600) // 60
+                return f"{int(hours)}h{int(minutes)}m"
+        return None
+
+class RaceSignup(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    race_id = db.Column(db.Integer, db.ForeignKey("race.id"), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="signups")
+    race = db.relationship("Race", backref="signups")
 
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -317,6 +344,52 @@ def schedule():
     completed_races = Race.query.filter_by(completed=True).order_by(Race.week.desc(), Race.race_number.desc()).all()
     return render_template("schedule.html", upcoming_races=upcoming_races, completed_races=completed_races)
 
+@app.route('/signup_race/<int:race_id>', methods=['POST'])
+@login_required
+def signup_race(race_id):
+    race = Race.query.get_or_404(race_id)
+
+    # Get all signups for this user
+    week_signups = (
+        RaceSignup.query
+        .join(Race, RaceSignup.race_id == Race.id)
+        .filter(RaceSignup.user_id == current_user.id, Race.week == race.week)
+        .count()
+    )
+
+    if week_signups >= 3:
+        flash("⚠️ You can only sign up for 3 races per week.", "warning")
+    else:
+        existing = RaceSignup.query.filter_by(user_id=current_user.id, race_id=race.id).first()
+        if existing:
+            flash("You're already signed up for this race.", "info")
+        else:
+            signup = RaceSignup(user_id=current_user.id, race_id=race.id)
+            db.session.add(signup)
+            db.session.commit()
+            flash("✅ Successfully signed up for race!", "success")
+
+    return redirect(url_for('schedule'))
+
+@app.route('/unsign_race/<int:race_id>', methods=['POST'])
+@login_required
+def unsign_race(race_id):
+    signup = RaceSignup.query.filter_by(user_id=current_user.id, race_id=race_id).first()
+    if signup:
+        db.session.delete(signup)
+        db.session.commit()
+        flash("🚪 You have been unsigned from the race.", "info")
+    else:
+        flash("You're not signed up for this race.", "warning")
+    
+    return redirect(url_for('schedule'))
+
+@app.route('/race/<int:race_id>/signups')
+@login_required
+def view_race_signups(race_id):
+    race = Race.query.get_or_404(race_id)
+    return render_template('race_signups.html', race=race)
+
 @app.route("/race/<int:race_id>/complete", methods=["POST"])
 @login_required
 @role_required('editor', 'admin', 'superadmin')
@@ -449,6 +522,24 @@ def edit_race(race_id):
         race.weather = request.form.get("weather")
         race.participant_count = int(request.form.get("participant_count") or 0)
         race.invite_code = request.form.get("invite_code")
+        date_input = request.form.get("scheduled_date")
+        time_input = request.form.get("scheduled_start")
+
+        if date_input:
+            try:
+                race.scheduled_date = datetime.strptime(date_input, "%Y-%m-%d").date()
+            except ValueError:
+                race.scheduled_date = None
+        else:
+            race.scheduled_date = None
+
+        if time_input:
+            try:
+                race.scheduled_start = datetime.strptime(time_input, "%Y-%m-%dT%H:%M")
+            except ValueError:
+                race.scheduled_start = None
+        else:
+            race.scheduled_start = None
 
         db.session.commit()
         flash("Race updated!", "success")
