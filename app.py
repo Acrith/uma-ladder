@@ -11,19 +11,31 @@ import os
 import uuid
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'uma-ladder-config'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/ladder.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'uma-ladder-config'
+app.config['UPLOAD_FOLDER'] = '/data/uploads'
+
+# Wait until database file exists
+db_path = os.path.join("/data", "ladder.db")
+for _ in range(30):  # wait up to 15 seconds
+    if os.path.exists(db_path):
+        break
+    print("⏳ Waiting for /data/ladder.db to appear...")
+    time.sleep(0.5)
+else:
+    raise RuntimeError("Database file not mounted in time")
+
+# Ensure upload directory exists
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# Initialize SQLAlchemy
 db = SQLAlchemy(app)
 
+# Then init the login manager
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
-
-db_path = "/data/ladder.db"
-while not os.path.exists(db_path):
-    print("⏳ Waiting for /data/ladder.db to appear...")
-    time.sleep(1)
 
 def generate_reset_token(username, expires_sec=3600):
     s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
@@ -201,6 +213,10 @@ def recalculate_results_for_race(race):
         result.points = calculate_points(race, result.placement)
 
     db.session.commit()
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route("/admin/users")
 @login_required

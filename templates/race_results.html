@@ -25,20 +25,20 @@
         <td>{{ result.placement }}</td>
         <td><a href="{{ url_for('player_profile', player_name=result.player_name) }}" class="text-dark text-decoration-underline">{{ result.player_name }}</a></td>
         <td>
-  {% if result.uma_image_url %}
-    <span class="uma-hover" 
-          data-img="{{ result.uma_image_url }}" 
-          data-bs-toggle="modal" 
-          data-bs-target="#imageModal" 
-          style="cursor: pointer; text-decoration: underline; position: relative;">
-      <strong>{{ result.uma_name }}</strong>
-      <div class="hover-preview">
-        <img src="{{ result.uma_image_url }}" alt="Preview">
-      </div>
-    </span>
-  {% else %}
-    {{ result.uma_name }}
-  {% endif %}
+{% if result.uma_image_url %}
+  <span class="uma-hover" 
+        data-img="{{ url_for('uploaded_file', filename=result.uma_image_url) }}" 
+        data-bs-toggle="modal" 
+        data-bs-target="#imageModal" 
+        style="cursor: pointer; text-decoration: underline; position: relative;">
+    <strong>{{ result.uma_name }}</strong>
+    <div class="hover-preview">
+      <img src="{{ url_for('uploaded_file', filename=result.uma_image_url) }}" alt="Preview">
+    </div>
+  </span>
+{% else %}
+  {{ result.uma_name }}
+{% endif %}
   <br>Strategy: {{ result.uma_strategy or '-' }}
 </td>
         <td>{{ result.uma_speed or '-' }}</td>

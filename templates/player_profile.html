@@ -29,19 +29,22 @@
       <td>{{ r.race.week }}</td>
       <td><a href="{{ url_for('race_results', race_id=r.race.id) }}" class="text-dark text-decoration-underline">{{ r.race.race_name }}</a> ({{ r.race.grade }})</td>
       <td style="position: relative;">
-  {% if r.uma_image_url %}
-    <span class="uma-hover" data-img="{{ r.uma_image_url }}" data-bs-toggle="modal" data-bs-target="#imageModal"
-          style="cursor: pointer; text-decoration: underline;">
-      <strong>{{ r.uma_name }}</strong>
-    </span>
+{% if r.uma_image_url %}
+  <span class="uma-hover"
+        data-img="{{ url_for('uploaded_file', filename=r.uma_image_url) }}"
+        data-bs-toggle="modal"
+        data-bs-target="#imageModal"
+        style="cursor: pointer; text-decoration: underline;">
+    <strong>{{ r.uma_name }}</strong>
+  </span>
 
-    <!-- Hover image preview -->
-    <div class="hover-preview">
-      <img src="{{ r.uma_image_url }}" alt="Uma Preview" class="preview-img">
-    </div>
-  {% else %}
-    {{ r.uma_name }}
-  {% endif %}
+  <!-- Hover image preview -->
+  <div class="hover-preview">
+    <img src="{{ url_for('uploaded_file', filename=r.uma_image_url) }}" alt="Uma Preview" class="preview-img">
+  </div>
+{% else %}
+  {{ r.uma_name }}
+{% endif %}
 
   {% if r.uma_strategy %}
     <br><small><i>{{ r.uma_strategy }}</i></small>
@@ -84,17 +87,6 @@
 <a href="{{ url_for('ladder') }}" class="btn btn-secondary mt-3">← Back to Ladder</a>
 
 <!-- Image Modal -->
-<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
-      <div class="modal-body text-center">
-        <img id="fullUmaImage" src="" alt="Uma Screenshot" style="max-width: 100%; height: auto;" />
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Image Modal (Click-to-view) -->
 <div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">

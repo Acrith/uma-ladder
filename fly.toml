@@ -25,10 +25,10 @@ primary_region = 'waw'
   source = "uma_data"
   destination = "/data"
 
-  [checks]
+[checks]
   [checks.alive]
     type = "http"
     path = "/"
     interval = "15s"
     timeout = "5s"
-    grace_period = "30s"  # Allow more time for mount
+    grace_period = "60s"
