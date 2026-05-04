@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "auth/_form.html" import render_field %}
+{% block title %}Log in · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">Log in</h1>
+  <form method="post" class="max-w-sm">
+    {{ form.hidden_tag() }}
+    {{ render_field(form.username) }}
+    {{ render_field(form.password) }}
+    <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white">Log in</button>
+  </form>
+  <p class="mt-3 text-sm"><a href="{{ url_for('auth.request_reset') }}" class="underline">Forgot password?</a></p>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "auth/_form.html" import render_field %}
+{% block title %}Register · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">Create account</h1>
+  <form method="post" class="max-w-sm">
+    {{ form.hidden_tag() }}
+    {{ render_field(form.username) }}
+    {{ render_field(form.password) }}
+    {{ render_field(form.confirm) }}
+    <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white">Register</button>
+  </form>
+{% endblock %}

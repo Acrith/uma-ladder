@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Invalid reset link · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">Reset link is invalid or expired</h1>
+  <p><a href="{{ url_for('auth.request_reset') }}" class="underline">Request a new one</a>.</p>
+{% endblock %}
