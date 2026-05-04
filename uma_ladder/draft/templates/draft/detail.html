@@ -3,9 +3,6 @@
 {% block title %}Draft match #{{ match.id }} · Uma Ladder{% endblock %}
 {% block content %}
 
-  {# Polling is now gated by `should_poll` (computed server-side): only when
-     the user has no pending action this phase, so the swap doesn't nuke a
-     half-typed form. After they submit, polling resumes. #}
   <div
     {% if should_poll %}
       hx-get="{{ url_for('draft.detail', match_id=match.id) }}"
@@ -15,9 +12,10 @@
       hx-swap="outerHTML"
     {% endif %}
   >
-  <div id="draft-detail-body">
+  <div id="draft-detail-body" class="space-y-6">
 
-    <div class="flex flex-wrap items-start justify-between gap-3">
+    {# ─── TOP INFORMATION LAYER ────────────────────────────────────── #}
+    <header class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <p class="label-eyebrow">Draft match</p>
         <h1 class="mt-1 text-2xl font-semibold text-slate-100">#{{ match.id }}</h1>
@@ -32,271 +30,333 @@
         <span class="label-eyebrow">Join code</span>
         <span class="mt-1 text-mono-pill text-sm">{{ match.join_code }}</span>
       </div>
-    </div>
+    </header>
 
-    {# Players row #}
-    <div class="mt-6 grid gap-3 md:grid-cols-2">
-      {% set p_blocks = [
-        ("Host", match.host, match.host_ready),
-        ("Opponent", match.opponent, match.opponent_ready),
-      ] %}
-      {% for label, user, ready in p_blocks %}
-        <div class="surface-card relative overflow-hidden p-4">
-          <p class="label-eyebrow">{{ label }}</p>
-          <p class="mt-1 text-lg font-semibold text-slate-100">
-            {{ user.username if user else "— waiting —" }}
-          </p>
-          {% if ready %}
-            <span class="mt-2 inline-flex items-center gap-1.5 text-xs text-emerald-300">
-              <span class="h-2 w-2 rounded-full bg-emerald-400"></span> ready
-            </span>
-          {% elif user %}
-            <span class="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-500">
-              <span class="h-2 w-2 rounded-full bg-slate-600"></span> not ready
-            </span>
-          {% endif %}
+    {# Selected track sits prominently up top once rolled. #}
+    {% if match.selected_preset %}
+      {% call card(class="relative overflow-hidden p-5 border-amber-500/30 shadow-glow-amber") %}
+        <p class="label-eyebrow text-amber-300">Track</p>
+        <p class="mt-1 text-2xl font-semibold text-slate-50">{{ match.selected_preset.name }}</p>
+        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          {{ chip(match.selected_preset.surface, "violet" if match.selected_preset.surface == "Turf" else "amber") }}
+          {{ chip(match.selected_preset.distance_meters|string + "m · " + match.selected_preset.distance_category) }}
+          {{ chip(match.selected_preset.direction) }}
+          {% if match.selected_preset.course_variant %}{{ chip(match.selected_preset.course_variant) }}{% endif %}
+          {{ chip("Max " + match.selected_preset.max_runners|string) }}
         </div>
-      {% endfor %}
-    </div>
-
-    {# Phase: ready check #}
-    {% if match.status == 'ready_check' %}
-      {% set me_ready = (current_user.id == match.host_user_id and match.host_ready) or (current_user.id == match.opponent_user_id and match.opponent_ready) %}
-      <section class="mt-6">
-        {% call card(class="p-5") %}
-          <p class="label-eyebrow">Phase</p>
-          <h2 class="mt-1 text-lg font-semibold text-slate-100">Ready check</h2>
-          {% if not me_ready %}
-            <form method="post" action="{{ url_for('draft.ready', match_id=match.id) }}" class="mt-3">
-              {{ csrf_form.hidden_tag() }}
-              <button class="btn-primary">I'm ready</button>
-            </form>
-          {% else %}
-            <p class="mt-2 text-sm text-slate-400">Waiting for the other player.</p>
-          {% endif %}
-        {% endcall %}
-      </section>
+      {% endcall %}
     {% endif %}
 
-    {# Phase: track ban — typed input replaced with per-type selects, toggled via tiny JS. #}
-    {% if match.status == 'track_ban_phase' %}
-      {% set my_track_ban = bans|selectattr('user_id', 'equalto', current_user.id)|selectattr('ban_type', 'in', ['venue', 'direction', 'distance_category', 'surface'])|first %}
-      <section class="mt-6">
-        {% call card(class="p-5") %}
-          <p class="label-eyebrow">Phase</p>
-          <h2 class="mt-1 text-lg font-semibold text-slate-100">Track ban</h2>
-          {% if not my_track_ban %}
-            <form method="post" action="{{ url_for('draft.track_ban', match_id=match.id) }}" class="mt-3 grid gap-3 md:grid-cols-2">
-              {{ csrf_form.hidden_tag() }}
-              <div>
-                <label class="text-sm text-slate-300">Ban type</label>
-                <select id="track-ban-type" name="ban_type" class="input-base mt-1"
-                        onchange="document.querySelectorAll('[data-ban-options]').forEach(el => { el.hidden = el.dataset.banOptions !== this.value; el.disabled = el.dataset.banOptions !== this.value; });">
-                  <option value="venue">Venue</option>
-                  <option value="direction">Direction</option>
-                  <option value="distance_category">Distance category</option>
-                  <option value="surface">Surface</option>
-                </select>
+    {# ─── DUEL LAYOUT ─────────────────────────────────────────────── #}
+    {# Mobile: stack P1 → actions → P2. lg+: 3 columns side-by-side. #}
+    <div class="grid gap-4 lg:grid-cols-[1fr_2fr_1fr]">
+
+      {% macro player_panel(side) %}
+        <article class="surface-card relative overflow-hidden min-h-[26rem]">
+          {% if side.oshi_image %}
+            <img src="{{ side.oshi_image }}"
+                 alt=""
+                 loading="lazy"
+                 referrerpolicy="no-referrer"
+                 width="512"
+                 height="512"
+                 class="pointer-events-none absolute bottom-0 right-0 h-auto max-h-[20rem] w-auto max-w-[20rem] object-contain opacity-50"
+                 style="object-position: right bottom; mask-image: linear-gradient(to top, rgba(0,0,0,1) 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0) 100%); -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,1) 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0) 100%);" />
+            <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-fuchsia-500/10 via-transparent to-transparent"></div>
+          {% endif %}
+          <div class="relative p-5 flex flex-col h-full">
+            <div class="flex items-start gap-3">
+              <div class="shrink-0">
+                {% if side.profile and side.profile.avatar_url %}
+                  <img src="{{ side.profile.avatar_url }}" alt="" class="h-12 w-12 rounded-xl border-2 border-slate-800 object-cover {% if side.profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
+                {% elif side.user %}
+                  <div class="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-slate-800 bg-slate-800 text-base font-semibold text-slate-300 {% if side.profile and side.profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
+                    {{ side.user.username[:1] | upper }}
+                  </div>
+                {% else %}
+                  <div class="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/40 text-base font-semibold text-slate-500">?</div>
+                {% endif %}
               </div>
-              <div>
-                <label class="text-sm text-slate-300">Value</label>
-                {% for type, options in track_ban_options.items() %}
-                  <select name="condition_key_{{ type }}"
-                          data-ban-options="{{ type }}"
-                          class="input-base mt-1"
-                          {% if type != 'venue' %}hidden disabled{% endif %}>
-                    {% for opt in options %}
-                      <option value="{{ opt }}">{{ opt }}</option>
+              <div class="min-w-0 flex-1">
+                <p class="label-eyebrow">{{ side.label }}{% if side.is_me %} · you{% endif %}</p>
+                <p class="mt-0.5 truncate text-base font-semibold text-slate-50">
+                  {% if side.user %}
+                    {% if side.profile and side.profile.display_name %}{{ side.profile.display_name }}{% else %}{{ side.user.username }}{% endif %}
+                  {% else %}
+                    — waiting —
+                  {% endif %}
+                </p>
+                {% if side.user %}
+                  <p class="text-xs text-slate-400">@{{ side.user.username }}</p>
+                {% endif %}
+                {% if side.profile and side.profile.oshi %}
+                  <span class="mt-1 inline-block rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-medium text-fuchsia-200">
+                    {{ side.profile.oshi.name_en }}{% if side.profile.oshi_outfit %} · {{ side.profile.oshi_outfit.display_title }}{% endif %}
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if side.user %}
+              <div class="mt-3 text-xs">
+                {% if side.ready %}
+                  <span class="inline-flex items-center gap-1.5 text-emerald-300">
+                    <span class="h-2 w-2 rounded-full bg-emerald-400"></span> ready
+                  </span>
+                {% else %}
+                  <span class="inline-flex items-center gap-1.5 text-slate-500">
+                    <span class="h-2 w-2 rounded-full bg-slate-600"></span> not ready
+                  </span>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {# Actions taken (bans). #}
+            <div class="mt-4 space-y-1.5 text-xs">
+              {% set track_ban = side.bans|selectattr('ban_type', 'in', ['venue', 'direction', 'distance_category', 'surface'])|first %}
+              {% set uma_ban = side.bans|selectattr('ban_type', 'equalto', 'uma')|first %}
+
+              {% if track_ban %}
+                {% if track_ban.condition_key == "__skip__" %}
+                  <p class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-slate-500"></span><span class="text-slate-500">skipped track ban</span></p>
+                {% else %}
+                  <p class="flex items-center gap-2">
+                    <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+                    <span class="text-slate-400">Banned</span>
+                    <span class="font-medium text-cyan-200">{{ track_ban.ban_type }} · {{ track_ban.condition_key }}</span>
+                  </p>
+                {% endif %}
+              {% elif match.status == 'track_ban_phase' and side.user %}
+                <p class="text-slate-500 italic">picking track ban…</p>
+              {% endif %}
+
+              {% if uma_ban %}
+                <p class="flex items-center gap-2">
+                  <span class="h-1.5 w-1.5 rounded-full bg-fuchsia-400"></span>
+                  <span class="text-slate-400">Banned</span>
+                  <span class="font-medium text-fuchsia-200">
+                    {{ uma_ban.uma_character.name_en if uma_ban.uma_character else '?' }}{% if uma_ban.uma_outfit %} · {{ uma_ban.uma_outfit.display_title }}{% endif %}
+                  </span>
+                </p>
+              {% elif match.status == 'uma_ban_phase' and side.user %}
+                <p class="text-slate-500 italic">picking Uma ban…</p>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      {% endmacro %}
+
+      {# LEFT — host #}
+      {{ player_panel(sides[0]) }}
+
+      {# CENTER — phase actions #}
+      <div class="space-y-4">
+
+        {% if match.status == 'waiting_for_opponent' %}
+          {% call card(class="p-5") %}
+            <p class="label-eyebrow">Waiting</p>
+            <h2 class="mt-1 text-lg font-semibold text-slate-100">Send the join code to your opponent</h2>
+            <p class="mt-2 text-sm text-slate-400">They'll see your match on their <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">draft page</a> after pasting <span class="text-mono-pill">{{ match.join_code }}</span>.</p>
+          {% endcall %}
+        {% endif %}
+
+        {% if match.status == 'ready_check' %}
+          {% set me_ready = (current_user.id == match.host_user_id and match.host_ready) or (current_user.id == match.opponent_user_id and match.opponent_ready) %}
+          {% call card(class="p-5") %}
+            <p class="label-eyebrow">Phase</p>
+            <h2 class="mt-1 text-lg font-semibold text-slate-100">Ready check</h2>
+            {% if not me_ready %}
+              <form method="post" action="{{ url_for('draft.ready', match_id=match.id) }}" class="mt-3">
+                {{ csrf_form.hidden_tag() }}
+                <button class="btn-primary">I'm ready</button>
+              </form>
+            {% else %}
+              <p class="mt-2 text-sm text-slate-400">Waiting for the other player.</p>
+            {% endif %}
+          {% endcall %}
+        {% endif %}
+
+        {% if match.status == 'track_ban_phase' %}
+          {% set my_track_ban = bans|selectattr('user_id', 'equalto', current_user.id)|selectattr('ban_type', 'in', ['venue', 'direction', 'distance_category', 'surface'])|first %}
+          {% call card(class="p-5") %}
+            <p class="label-eyebrow">Phase</p>
+            <h2 class="mt-1 text-lg font-semibold text-slate-100">Track ban</h2>
+            {% if not my_track_ban %}
+              <form method="post" action="{{ url_for('draft.track_ban', match_id=match.id) }}" class="mt-3 grid gap-3 md:grid-cols-2">
+                {{ csrf_form.hidden_tag() }}
+                <div>
+                  <label class="text-sm text-slate-300">Ban type</label>
+                  <select id="track-ban-type" name="ban_type" class="input-base mt-1"
+                          onchange="document.querySelectorAll('[data-ban-options]').forEach(el => { el.hidden = el.dataset.banOptions !== this.value; el.disabled = el.dataset.banOptions !== this.value; });">
+                    {% for type_key, vals in track_ban_options.items() %}
+                      {% if vals %}
+                        <option value="{{ type_key }}">{{ type_key.replace('_', ' ') | capitalize }}</option>
+                      {% endif %}
                     {% endfor %}
                   </select>
-                {% endfor %}
-              </div>
-              <div class="md:col-span-2 flex items-center gap-2">
-                <button class="btn-primary">Submit ban</button>
-                <span class="grow"></span>
-              </div>
-            </form>
-            <form method="post" action="{{ url_for('draft.skip_track_ban', match_id=match.id) }}" class="mt-2">
-              {{ csrf_form.hidden_tag() }}
-              <button type="submit" class="btn-ghost">Skip my ban</button>
-            </form>
-          {% else %}
-            <p class="mt-2 text-sm">
-              You banned <span class="font-medium text-cyan-300">{{ my_track_ban.ban_type }} = {{ my_track_ban.condition_key }}</span>.
-            </p>
-            <p class="mt-1 text-xs text-slate-500">Waiting for opponent…</p>
-          {% endif %}
-          <form method="post" action="{{ url_for('draft.randomize', match_id=match.id) }}" class="mt-4">
-            {{ csrf_form.hidden_tag() }}
-            <button class="btn-warning">🎲 Roll the race (when both have banned)</button>
-          </form>
-        {% endcall %}
-      </section>
-    {% endif %}
-
-    {# Phase: uma ban — character first, then outfit (HTMX-loaded). #}
-    {% if match.status == 'uma_ban_phase' %}
-      {% set my_uma_ban = bans|selectattr('user_id', 'equalto', current_user.id)|selectattr('ban_type', 'equalto', 'uma')|first %}
-      <section class="mt-6">
-        {% call card(class="p-5") %}
-          <p class="label-eyebrow">Phase</p>
-          <h2 class="mt-1 text-lg font-semibold text-slate-100">Uma ban (blind)</h2>
-          {% if not my_uma_ban %}
-            <form method="post" action="{{ url_for('draft.uma_ban', match_id=match.id) }}" class="mt-3 grid gap-3 max-w-md">
-              {{ csrf_form.hidden_tag() }}
-              <div>
-                <label class="text-sm text-slate-300">Character</label>
-                <select id="uma-ban-char"
-                        name="uma_character_id"
-                        class="input-base mt-1"
-                        hx-get="{{ url_for('draft.partial_uma_ban_outfits', match_id=match.id) }}"
-                        hx-target="#uma-ban-outfit"
-                        hx-swap="outerHTML"
-                        hx-trigger="change"
-                        hx-include="this">
-                  <option value="">— choose character —</option>
-                  {% for c in characters %}
-                    <option value="{{ c.id }}">{{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}</option>
+                </div>
+                <div>
+                  <label class="text-sm text-slate-300">Value</label>
+                  {% set first_visible = namespace(type=None) %}
+                  {% for type_key, vals in track_ban_options.items() %}
+                    {% if vals %}
+                      {% if first_visible.type is none %}{% set first_visible.type = type_key %}{% endif %}
+                      <select name="condition_key_{{ type_key }}"
+                              data-ban-options="{{ type_key }}"
+                              class="input-base mt-1"
+                              {% if type_key != first_visible.type %}hidden disabled{% endif %}>
+                        {% for opt in vals %}<option value="{{ opt }}">{{ opt }}</option>{% endfor %}
+                      </select>
+                    {% endif %}
                   {% endfor %}
-                </select>
-              </div>
-              <div>
-                <label class="text-sm text-slate-300">Costume</label>
-                {% include "draft/_partial_uma_ban_outfits.html" with context %}
-                <p class="mt-1 text-xs text-slate-500">Bans target a specific costume — opponent can still race the same character in another costume.</p>
-              </div>
-              <button class="btn-primary">Submit Uma ban</button>
-            </form>
-          {% else %}
-            <p class="mt-2 text-sm">
-              You banned
-              <span class="font-medium text-fuchsia-300">{{ my_uma_ban.uma_character.name_en if my_uma_ban.uma_character else '?' }}</span>
-              {% if my_uma_ban.uma_outfit %}<span class="text-fuchsia-200/80">· {{ my_uma_ban.uma_outfit.display_title }}</span>{% endif %}.
-            </p>
-            <p class="mt-1 text-xs text-slate-500">Waiting for opponent…</p>
-          {% endif %}
-        {% endcall %}
-      </section>
-    {% endif %}
-
-    {# Selected race #}
-    {% if match.selected_preset %}
-      <section class="mt-6">
-        {% call card(class="p-5") %}
-          <p class="label-eyebrow">Selected race</p>
-          <h2 class="mt-1 text-lg font-semibold text-slate-100">{{ match.selected_preset.name }}</h2>
-          <p class="mt-1 text-xs text-slate-400">Max runners: {{ match.selected_preset.max_runners }}</p>
-        {% endcall %}
-      </section>
-    {% endif %}
-
-    {# Bans summary #}
-    {% if bans %}
-      <section class="mt-6">
-        {% call card(class="p-5") %}
-          <p class="label-eyebrow">Bans</p>
-          <ul class="mt-3 space-y-1.5 text-sm">
-            {% for b in bans %}
-              <li class="flex items-center gap-2">
-                <span class="h-1.5 w-1.5 rounded-full {% if b.ban_type == 'uma' %}bg-fuchsia-400{% else %}bg-cyan-400{% endif %}"></span>
-                <span class="text-slate-400">{% if b.user_id == match.host_user_id %}{{ match.host.username }}{% else %}{{ match.opponent.username if match.opponent else 'opp' }}{% endif %}</span>
-                <span class="text-slate-600">·</span>
-                <span class="text-slate-200">
-                  {% if b.ban_type == 'uma' %}
-                    {{ b.uma_character.name_en if b.uma_character else '?' }}
-                    {% if b.uma_outfit %}<span class="text-slate-500">· {{ b.uma_outfit.display_title }}</span>{% endif %}
-                  {% else %}
-                    {{ b.ban_type }} = {{ b.condition_key }}
-                  {% endif %}
-                </span>
-              </li>
-            {% endfor %}
-          </ul>
-        {% endcall %}
-      </section>
-    {% endif %}
-
-    {# Room code + results #}
-    {% if match.status in ('room_code_pending', 'room_code_available', 'room_code_expired') %}
-      <section class="mt-6 grid gap-4 lg:grid-cols-2">
-        {% call card(class="p-5") %}
-          <p class="label-eyebrow">Room code</p>
-          {% if match.room_code %}
-            <p class="mt-2 flex items-center gap-2 text-sm">
-              <span class="text-mono-pill text-base">{{ match.room_code }}</span>
-              {% if room_code_expired %}<span class="text-xs text-rose-300">expired</span>{% endif %}
-            </p>
-          {% endif %}
-          {% if current_user.id == match.host_user_id %}
-            <form method="post" action="{{ url_for('draft.room_code', match_id=match.id) }}" class="mt-3 flex gap-2">
-              {{ room_code_form.hidden_tag() }}
-              {{ room_code_form.room_code(class="input-base", placeholder="paste host code") }}
-              <button class="btn-primary">Set</button>
-            </form>
-          {% endif %}
-        {% endcall %}
-
-        {% if match.status in ('room_code_available', 'room_code_expired') %}
-          {% set banned_uma_bans = bans|selectattr('ban_type', 'equalto', 'uma')|list %}
-          {% set whole_char_banned_ids = banned_uma_bans|selectattr('uma_outfit_id', 'none')|map(attribute='uma_character_id')|select|list %}
-          {% call card(class="p-5") %}
-            <p class="label-eyebrow">Results</p>
-            <p class="mt-1 text-xs text-slate-500">
-              Bans:
-              {% if banned_uma_bans %}
-                {% for b in banned_uma_bans %}<span class="text-fuchsia-300">{{ b.uma_character.name_en if b.uma_character else '?' }}{% if b.uma_outfit %} · {{ b.uma_outfit.display_title }}{% endif %}</span>{% if not loop.last %}, {% endif %}{% endfor %}
-              {% else %}(none){% endif %}
-            </p>
-            <form method="post" action="{{ url_for('draft.submit_results', match_id=match.id) }}" class="mt-3 space-y-3">
+                </div>
+                <div class="md:col-span-2 flex items-center gap-2">
+                  <button class="btn-primary">Submit ban</button>
+                </div>
+              </form>
+              <form method="post" action="{{ url_for('draft.skip_track_ban', match_id=match.id) }}" class="mt-2">
+                {{ csrf_form.hidden_tag() }}
+                <button type="submit" class="btn-ghost">Skip my ban</button>
+              </form>
+            {% else %}
+              <p class="mt-2 text-sm text-slate-400">Waiting for opponent…</p>
+            {% endif %}
+            <form method="post" action="{{ url_for('draft.randomize', match_id=match.id) }}" class="mt-4">
               {{ csrf_form.hidden_tag() }}
-              {% for uid_label, uid in [(match.host.username, match.host_user_id), (match.opponent.username if match.opponent else 'opp', match.opponent_user_id)] %}
-                {% if uid is not none %}
-                  <fieldset class="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
-                    <legend class="px-1 text-xs font-medium uppercase tracking-wider text-slate-400">{{ uid_label }}</legend>
-                    <div class="grid gap-2 md:grid-cols-3">
-                      <input type="number" min="1" name="placement_{{ uid }}" class="input-base" placeholder="place" />
-                      <select id="result-char-{{ uid }}"
-                              name="uma_character_id_{{ uid }}"
-                              class="input-base md:col-span-2"
-                              hx-get="{{ url_for('draft.partial_result_outfits', match_id=match.id) }}?participant={{ uid }}"
-                              hx-target="#result-outfit-{{ uid }}"
-                              hx-swap="outerHTML"
-                              hx-trigger="change"
-                              hx-include="this">
-                        <option value="">— custom name —</option>
-                        {% for c in characters %}
-                          {% if c.id not in whole_char_banned_ids %}
-                            <option value="{{ c.id }}">{{ c.name_en }}</option>
-                          {% endif %}
-                        {% endfor %}
-                      </select>
-                      <select id="result-outfit-{{ uid }}" name="uma_outfit_id_{{ uid }}" class="input-base md:col-span-2">
-                        <option value="">— default / any outfit —</option>
-                      </select>
-                      <input name="custom_uma_name_{{ uid }}" class="input-base md:col-span-3" placeholder="custom Uma name (if not in list)" />
-                    </div>
-                  </fieldset>
-                {% endif %}
-              {% endfor %}
-              <button class="btn-primary">Submit results</button>
+              <button class="btn-warning w-full justify-center">🎲 Roll the race (when both have banned)</button>
             </form>
           {% endcall %}
         {% endif %}
-      </section>
-    {% endif %}
 
-    {# Completed banner #}
-    {% if match.status == 'completed' %}
-      <section class="mt-6">
-        {% call card(class="p-5 border-fuchsia-500/30 shadow-glow-fuchsia") %}
-          <p class="label-eyebrow">Result</p>
-          <p class="mt-1 text-lg text-slate-100">
-            Winner user_id <span class="text-fuchsia-300 font-semibold">{{ match.winner_user_id }}</span>
-            · Loser user_id <span class="text-slate-300">{{ match.loser_user_id }}</span>
-          </p>
-        {% endcall %}
-      </section>
-    {% endif %}
+        {% if match.status == 'uma_ban_phase' %}
+          {% set my_uma_ban = bans|selectattr('user_id', 'equalto', current_user.id)|selectattr('ban_type', 'equalto', 'uma')|first %}
+          {% call card(class="p-5") %}
+            <p class="label-eyebrow">Phase</p>
+            <h2 class="mt-1 text-lg font-semibold text-slate-100">Uma ban (blind)</h2>
+            {% if not my_uma_ban %}
+              <form method="post" action="{{ url_for('draft.uma_ban', match_id=match.id) }}" class="mt-3 grid gap-3">
+                {{ csrf_form.hidden_tag() }}
+                <div>
+                  <label class="text-sm text-slate-300">Character</label>
+                  <select id="uma-ban-char"
+                          name="uma_character_id"
+                          class="input-base mt-1"
+                          hx-get="{{ url_for('draft.partial_uma_ban_outfits', match_id=match.id) }}"
+                          hx-target="#uma-ban-outfit"
+                          hx-swap="outerHTML"
+                          hx-trigger="change"
+                          hx-include="this">
+                    <option value="">— choose character —</option>
+                    {% for c in characters %}
+                      <option value="{{ c.id }}">{{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label class="text-sm text-slate-300">Costume</label>
+                  {% include "draft/_partial_uma_ban_outfits.html" with context %}
+                  <p class="mt-1 text-xs text-slate-500">Bans target a specific costume — opponent can still race the same character in another costume.</p>
+                </div>
+                <button class="btn-primary">Submit Uma ban</button>
+              </form>
+            {% else %}
+              <p class="mt-2 text-sm text-slate-400">Waiting for opponent…</p>
+            {% endif %}
+          {% endcall %}
+        {% endif %}
+
+        {% if match.status in ('room_code_pending', 'room_code_available', 'room_code_expired') %}
+          {% call card(class="p-5") %}
+            <p class="label-eyebrow">Room code</p>
+            {% if match.room_code %}
+              <p class="mt-2 flex items-center gap-2 text-sm">
+                <span class="text-mono-pill text-base">{{ match.room_code }}</span>
+                {% if room_code_expired %}<span class="text-xs text-rose-300">expired</span>{% endif %}
+              </p>
+            {% endif %}
+            {% if current_user.id == match.host_user_id %}
+              <form method="post" action="{{ url_for('draft.room_code', match_id=match.id) }}" class="mt-3 flex gap-2">
+                {{ room_code_form.hidden_tag() }}
+                {{ room_code_form.room_code(class="input-base", placeholder="paste host code") }}
+                <button class="btn-primary">Set</button>
+              </form>
+            {% else %}
+              <p class="mt-2 text-xs text-slate-500">Host pastes the room code from the in-game lobby.</p>
+            {% endif %}
+          {% endcall %}
+
+          {% if match.status in ('room_code_available', 'room_code_expired') %}
+            {% set banned_uma_bans = bans|selectattr('ban_type', 'equalto', 'uma')|list %}
+            {% set whole_char_banned_ids = banned_uma_bans|selectattr('uma_outfit_id', 'none')|map(attribute='uma_character_id')|select|list %}
+            {% call card(class="p-5") %}
+              <p class="label-eyebrow">Results</p>
+              <p class="mt-1 text-xs text-slate-500">
+                Bans:
+                {% if banned_uma_bans %}
+                  {% for b in banned_uma_bans %}<span class="text-fuchsia-300">{{ b.uma_character.name_en if b.uma_character else '?' }}{% if b.uma_outfit %} · {{ b.uma_outfit.display_title }}{% endif %}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+                {% else %}(none){% endif %}
+              </p>
+              <form method="post" action="{{ url_for('draft.submit_results', match_id=match.id) }}" class="mt-3 space-y-3">
+                {{ csrf_form.hidden_tag() }}
+                {% for uid_label, uid in [(match.host.username, match.host_user_id), (match.opponent.username if match.opponent else 'opp', match.opponent_user_id)] %}
+                  {% if uid is not none %}
+                    <fieldset class="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+                      <legend class="px-1 text-xs font-medium uppercase tracking-wider text-slate-400">{{ uid_label }}</legend>
+                      <div class="grid gap-2">
+                        <input type="number" min="1" name="placement_{{ uid }}" class="input-base" placeholder="place" />
+                        <select id="result-char-{{ uid }}"
+                                name="uma_character_id_{{ uid }}"
+                                class="input-base"
+                                hx-get="{{ url_for('draft.partial_result_outfits', match_id=match.id) }}?participant={{ uid }}"
+                                hx-target="#result-outfit-{{ uid }}"
+                                hx-swap="outerHTML"
+                                hx-trigger="change"
+                                hx-include="this">
+                          <option value="">— custom name —</option>
+                          {% for c in characters %}
+                            {% if c.id not in whole_char_banned_ids %}
+                              <option value="{{ c.id }}">{{ c.name_en }}</option>
+                            {% endif %}
+                          {% endfor %}
+                        </select>
+                        <select id="result-outfit-{{ uid }}" name="uma_outfit_id_{{ uid }}" class="input-base">
+                          <option value="">— default / any outfit —</option>
+                        </select>
+                        <input name="custom_uma_name_{{ uid }}" class="input-base" placeholder="custom Uma name (if not in list)" />
+                      </div>
+                    </fieldset>
+                  {% endif %}
+                {% endfor %}
+                <button class="btn-primary">Submit results</button>
+              </form>
+            {% endcall %}
+          {% endif %}
+        {% endif %}
+
+        {% if match.status == 'completed' %}
+          {% call card(class="p-5 border-fuchsia-500/30 shadow-glow-fuchsia") %}
+            <p class="label-eyebrow">Result</p>
+            <p class="mt-1 text-lg text-slate-100">
+              Winner: <span class="text-fuchsia-300 font-semibold">
+                {% if match.winner_user_id == match.host_user_id %}{{ match.host.username }}{% elif match.opponent and match.winner_user_id == match.opponent_user_id %}{{ match.opponent.username }}{% else %}user_id {{ match.winner_user_id }}{% endif %}
+              </span>
+            </p>
+          {% endcall %}
+        {% endif %}
+
+        {% if match.status == 'randomization_failed' %}
+          {% call card(class="p-5 border-rose-500/30") %}
+            <p class="label-eyebrow text-rose-300">Roll failed</p>
+            <p class="mt-2 text-sm text-slate-300">No preset matched the bans. An admin can reset and re-roll.</p>
+          {% endcall %}
+        {% endif %}
+
+      </div>
+
+      {# RIGHT — opponent #}
+      {{ player_panel(sides[1]) }}
+
+    </div>
 
   </div>
   </div>

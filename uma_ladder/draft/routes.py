@@ -14,6 +14,7 @@ from flask_login import current_user, login_required
 from ..models import DraftBanType, DraftMatchStatus
 from ..models.enums import VENUES, Direction, DistanceCategory, Surface
 from ..services import draft as draft_service
+from ..services import profiles as profiles_service
 from ..services import seasons as seasons_service
 from ..services.profiles import (
     list_enabled_characters,
@@ -113,10 +114,47 @@ def detail(match_id: int) -> object:
         )
     else:
         track_ban_options = TRACK_BAN_OPTIONS
+
+    # Per-player panel context — profile + resolved Oshi image so the duel
+    # layout can render each side as a Live Preview-style card.
+    sides = []
+    side_meta = [
+        ("host", "Host", match.host, match.host_user_id, match.host_ready),
+        (
+            "opponent",
+            "Opponent",
+            match.opponent,
+            match.opponent_user_id,
+            match.opponent_ready,
+        ),
+    ]
+    for key, label, user, user_id, ready in side_meta:
+        profile = (
+            profiles_service.get_or_create_profile(user) if user else None
+        )
+        oshi_image = (
+            profiles_service.resolve_oshi_image(profile) if profile else None
+        )
+        player_bans = [b for b in bans if user_id is not None and b.user_id == user_id]
+        sides.append(
+            {
+                "key": key,
+                "label": label,
+                "user": user,
+                "user_id": user_id,
+                "profile": profile,
+                "oshi_image": oshi_image,
+                "ready": ready,
+                "bans": player_bans,
+                "is_me": user_id == current_user.id if user_id else False,
+            }
+        )
+
     return render_template(
         "draft/detail.html",
         match=match,
         bans=bans,
+        sides=sides,
         room_code_form=RoomCodeForm(),
         csrf_form=CsrfOnlyForm(),
         room_code_expired=draft_service.is_room_code_expired(match),
