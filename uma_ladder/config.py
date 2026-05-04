@@ -19,6 +19,7 @@ class BaseConfig:
     DISCORD_WEBHOOK_DRAFT_RESULTS_URL: str | None = None
     DISCORD_WEBHOOK_FALLBACK_URL: str | None = None
     OCR_PROVIDER: str = "manual"
+    GOOGLE_VISION_API_KEY: str | None = None
 
 
 def _env_or_none(key: str) -> str | None:
@@ -37,6 +38,7 @@ class DevConfig(BaseConfig):
     DISCORD_WEBHOOK_DRAFT_RESULTS_URL = _env_or_none("DISCORD_WEBHOOK_DRAFT_RESULTS_URL")
     DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
     OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
+    GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
 
 
 class TestConfig(BaseConfig):
@@ -67,6 +69,8 @@ class ProdConfig(BaseConfig):
             "DISCORD_WEBHOOK_DRAFT_RESULTS_URL"
         )
         cls.DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
+        cls.OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
+        cls.GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
         return cls
 
 

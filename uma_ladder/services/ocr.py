@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -96,24 +96,34 @@ class MockOcrProvider(OcrProvider):
         )
 
 
-_PROVIDERS: dict[str, type[OcrProvider]] = {
+ProviderFactory = Callable[[], OcrProvider]
+
+_PROVIDERS: dict[str, ProviderFactory] = {
     "manual": ManualOcrProvider,
     "mock": MockOcrProvider,
 }
 
 
 def get_provider() -> OcrProvider:
-    """Resolve the configured provider. Default: manual."""
+    """Resolve the configured provider. Default: manual.
+
+    `google_vision` is imported lazily so its module is only loaded in apps
+    that actually use it.
+    """
     name = current_app.config.get("OCR_PROVIDER", "manual")
-    cls = _PROVIDERS.get(name)
-    if cls is None:
+    if name == "google_vision":
+        from .ocr_google_vision import build_google_vision_provider
+
+        return build_google_vision_provider()
+    factory = _PROVIDERS.get(name)
+    if factory is None:
         raise RuntimeError(f"unknown OCR_PROVIDER: {name!r}")
-    return cls()
+    return factory()
 
 
-def register_provider(name: str, cls: type[OcrProvider]) -> None:
+def register_provider(name: str, factory: ProviderFactory) -> None:
     """Test/extension hook for plugging in additional providers."""
-    _PROVIDERS[name] = cls
+    _PROVIDERS[name] = factory
 
 
 # ---------- Storage + persistence ----------

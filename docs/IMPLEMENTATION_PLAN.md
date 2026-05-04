@@ -194,7 +194,36 @@ Scope:
 
 ---
 
-## PR 9 — Polish, Dockerfile, Fly deploy, Tailwind build (Milestone 8)
+## PR 9 — Google Vision OCR provider
+
+Scope:
+
+- `GoogleVisionOcrProvider` class behind the existing `OcrProvider` ABC.
+- Uses `DOCUMENT_TEXT_DETECTION` via the Vision REST API with API-key
+  auth (no service-account JSON to mount in production).
+- New env var `GOOGLE_VISION_API_KEY` in `.env.example` and `BaseConfig`
+  (defaults to `None`; provider raises a clear error when selected
+  without a key).
+- Row clustering: parse the response into `{placement, uma_name,
+  strategy?}` rows by sorting words by Y-coordinate, grouping into rows
+  by line spacing, and assigning columns by X-coordinate.
+- Injectable HTTP transport (mirrors the Discord pattern) so tests use
+  a `FakeVisionTransport` and never hit the network.
+- Tests: response parsing happy path with a fixture Vision JSON,
+  empty response handling, transport failure → attempt status=failed,
+  missing API key → clear error in `run_parse`.
+
+Out of scope: changing `OCR_PROVIDER` default away from `manual` —
+flip that in production by env var after you've validated accuracy on
+real screenshots.
+
+Done when: pytest green, ruff clean, `OCR_PROVIDER=google_vision`
++ `GOOGLE_VISION_API_KEY=…` in `.env` produces a parsed attempt for an
+uploaded screenshot in dev.
+
+---
+
+## PR 10 — Polish, Dockerfile, Fly deploy, Tailwind build (Milestone 8)
 
 Scope:
 
