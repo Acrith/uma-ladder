@@ -113,12 +113,14 @@
         <form method="post"
               action="{{ url_for('official.upload_result_screenshot', race_id=race.id) }}"
               enctype="multipart/form-data"
-              class="mt-3 rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+              data-clipboard-paste
+              class="mt-3 rounded-lg border border-slate-800 bg-slate-950/30 p-3 transition">
           <p class="label-eyebrow">From screenshot</p>
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <input type="file" name="image" accept="image/png,image/jpeg,image/webp" class="text-xs text-slate-300 file:mr-3 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-3 file:py-1 file:text-slate-300 hover:file:bg-slate-800" />
             <button class="btn-ghost">Parse with OCR →</button>
+            <button type="button" data-paste-arm class="btn-ghost text-xs" title="Click then Ctrl+V to paste a clipboard image and auto-submit">📋 Paste from clipboard</button>
             <span class="text-xs text-slate-500">You'll review and confirm before any results are saved.</span>
           </div>
         </form>
@@ -182,13 +184,15 @@
                   <form method="post"
                         action="{{ url_for('official.upload_result_details_screenshot', race_id=race.id, result_id=r.id) }}"
                         enctype="multipart/form-data"
-                        class="flex flex-wrap items-center gap-2">
+                        data-clipboard-paste
+                        class="flex flex-wrap items-center gap-2 rounded transition">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                     <input type="file"
                            name="image"
                            accept="image/png,image/jpeg,image/webp"
                            class="text-xs text-slate-300 file:mr-2 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-2 file:py-1 file:text-slate-300 hover:file:bg-slate-800" />
                     <button class="btn-ghost text-xs">Add details from screenshot</button>
+                    <button type="button" data-paste-arm class="btn-ghost text-xs" title="Click then Ctrl+V to paste a clipboard image and auto-submit">📋</button>
                   </form>
                 {% endif %}
               </div>
@@ -198,5 +202,61 @@
       {% endcall %}
     </section>
   {% endif %}
+
+  <script>
+    /* Clipboard-paste-to-upload helper.
+       Each form tagged [data-clipboard-paste] gets a button with
+       [data-paste-arm]. Click arms the form (cyan ring); the next
+       Ctrl+V on the page extracts the image, attaches it to the
+       form's file input, and submits. Auto-disarms after 10s. */
+    (function() {
+      let armed = null;
+      let disarmTimer = null;
+
+      function disarm() {
+        if (armed) {
+          armed.classList.remove('ring-2', 'ring-cyan-400', 'shadow-glow-cyan');
+        }
+        armed = null;
+        if (disarmTimer) {
+          clearTimeout(disarmTimer);
+          disarmTimer = null;
+        }
+      }
+
+      document.querySelectorAll('[data-clipboard-paste]').forEach(function(form) {
+        const btn = form.querySelector('[data-paste-arm]');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+          if (armed === form) { disarm(); return; }
+          disarm();
+          armed = form;
+          form.classList.add('ring-2', 'ring-cyan-400', 'shadow-glow-cyan');
+          disarmTimer = setTimeout(disarm, 10000);
+        });
+      });
+
+      document.addEventListener('paste', function(e) {
+        if (!armed) return;
+        const items = (e.clipboardData && e.clipboardData.items) || [];
+        for (const item of items) {
+          if (!item.type || !item.type.startsWith('image/')) continue;
+          const file = item.getAsFile();
+          if (!file) continue;
+          e.preventDefault();
+          const input = armed.querySelector('input[type=file]');
+          if (input) {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+          }
+          const formToSubmit = armed;
+          disarm();
+          formToSubmit.submit();
+          return;
+        }
+      });
+    })();
+  </script>
 
 {% endblock %}

@@ -268,6 +268,59 @@ def test_full_round_trip_via_routes(
         assert skills[2].skill_id is None
 
 
+def test_step_page_merges_existing_with_newly_parsed_skills(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Re-uploading a second screenshot should preserve already-saved
+    skills and append the new ones (case-insensitive dedupe). Uma skill
+    lists span two screens in-game, so the organiser uploads twice."""
+    app.config["OCR_PROVIDER"] = "mock"
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    _login(client, "org")
+    # First upload + save: persists the mock skills onto the result.
+    client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={"image": (io.BytesIO(_png_bytes()), "first.png")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    # Submit with the same names the mock returns.
+    client.post(
+        f"/official/{race_id}/results/{result_id}/details",
+        data={
+            "speed": "1100",
+            "skill_name_0": "Warning Shot!",
+            "skill_name_1": "Accelerator X",
+            "skill_name_2": "Made-up Skill",
+        },
+        follow_redirects=False,
+    )
+
+    # Second upload — the step page should now show the union of saved
+    # skills + freshly parsed ones, deduped case-insensitively.
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={"image": (io.BytesIO(_png_bytes()), "second.png")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    attempt_id_2 = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}/details-from-ocr/{attempt_id_2}"
+    )
+    body = resp.data.decode()
+    # All three saved skills appear (none dropped). Mock OCR returns the
+    # same set as before, so dedupe must collapse them — there should be
+    # no duplicate skill_name input.
+    assert body.count('value="Warning Shot!"') == 1
+    assert body.count('value="Accelerator X"') == 1
+    assert body.count('value="Made-up Skill"') == 1
+
+
 def test_non_organizer_cannot_upload_details(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
