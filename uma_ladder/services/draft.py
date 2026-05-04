@@ -20,7 +20,7 @@ from __future__ import annotations
 import random
 import secrets
 import string
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -38,7 +38,7 @@ from ..models import (
     UmaCharacter,
 )
 from .elo import DEFAULT_K, DEFAULT_RATING, apply_match
-from .randomizer import Bans, RandomizerError, pick_preset
+from .randomizer import Bans, RandomizerError, filter_presets, pick_preset
 
 ROOM_CODE_TTL = timedelta(hours=24)
 JOIN_CODE_LEN = 8
@@ -87,6 +87,10 @@ class DuplicateBanError(DraftError):
 
 
 class UnknownBanTargetError(DraftError):
+    pass
+
+
+class BanWouldEmptyPoolError(DraftError):
     pass
 
 
@@ -186,6 +190,122 @@ def ready_up(match_id: int, user_id: int) -> DraftMatch:
     return match
 
 
+_SKIP_SENTINEL = "__skip__"
+
+
+def _bans_from_rows(rows: Iterable[DraftMatchBan]) -> Bans:
+    """Build a randomizer Bans object from existing ban rows, ignoring
+    the `__skip__` placeholder a player records when opting out of a ban."""
+    venues: set[str] = set()
+    directions: set[str] = set()
+    distance_cats: set[str] = set()
+    surfaces: set[str] = set()
+    for b in rows:
+        key = (b.condition_key or "").strip()
+        if not key or key == _SKIP_SENTINEL:
+            continue
+        if b.ban_type == DraftBanType.VENUE:
+            venues.add(key)
+        elif b.ban_type == DraftBanType.DIRECTION:
+            directions.add(key)
+        elif b.ban_type == DraftBanType.DISTANCE_CATEGORY:
+            distance_cats.add(key)
+        elif b.ban_type == DraftBanType.SURFACE:
+            surfaces.add(key)
+    return Bans(
+        venues=frozenset(venues),
+        directions=frozenset(directions),
+        distance_categories=frozenset(distance_cats),
+        surfaces=frozenset(surfaces),
+    )
+
+
+def _add_to_bans(bans: Bans, ban_type: str, value: str) -> Bans:
+    if ban_type == DraftBanType.VENUE:
+        return Bans(
+            venues=bans.venues | {value},
+            directions=bans.directions,
+            distance_categories=bans.distance_categories,
+            surfaces=bans.surfaces,
+        )
+    if ban_type == DraftBanType.DIRECTION:
+        return Bans(
+            venues=bans.venues,
+            directions=bans.directions | {value},
+            distance_categories=bans.distance_categories,
+            surfaces=bans.surfaces,
+        )
+    if ban_type == DraftBanType.DISTANCE_CATEGORY:
+        return Bans(
+            venues=bans.venues,
+            directions=bans.directions,
+            distance_categories=bans.distance_categories | {value},
+            surfaces=bans.surfaces,
+        )
+    if ban_type == DraftBanType.SURFACE:
+        return Bans(
+            venues=bans.venues,
+            directions=bans.directions,
+            distance_categories=bans.distance_categories,
+            surfaces=bans.surfaces | {value},
+        )
+    return bans
+
+
+def feasible_track_ban_options(
+    match_id: int,
+    user_id: int,
+    *,
+    static_options: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Return the static option lists pruned to values that are *meaningful*
+    bans given the opponent's existing track ban. Two filters apply:
+
+    - Empty-pool: the candidate ban must leave at least one preset.
+      Catches direct conflicts (opp banned Direction=Left, Direction=Right
+      would empty everything).
+    - Non-redundant: the candidate ban must actually remove at least one
+      preset from the current pool. Catches cross-category dependencies
+      (opp banned Surface=Turf → there are no Long-Dirt presets, so
+      Distance=Long would ban nothing that wasn't already eliminated).
+    """
+    match = get_match(match_id)
+    rows = list_bans(match_id)
+    opponent_track_rows = [
+        b for b in rows
+        if b.user_id != user_id and b.ban_type in _TRACK_BAN_TYPES
+    ]
+    base_bans = _bans_from_rows(opponent_track_rows)
+    pool_presets = list(db.session.scalars(select(RacePreset)))
+    min_runners = 2 * match.umas_per_player
+
+    base_survivors = filter_presets(
+        pool_presets,
+        match.preset_pool,
+        base_bans,
+        min_max_runners=min_runners,
+    )
+
+    out: dict[str, list[str]] = {}
+    for ban_type, values in static_options.items():
+        kept: list[str] = []
+        for v in values:
+            candidate = _add_to_bans(base_bans, ban_type, v)
+            after = filter_presets(
+                pool_presets,
+                match.preset_pool,
+                candidate,
+                min_max_runners=min_runners,
+            )
+            if not after:
+                continue  # would empty pool
+            if len(after) == len(base_survivors):
+                continue  # redundant — bans nothing the opponent didn't already
+            kept.append(v)
+        out[ban_type] = kept
+    return out
+
+
 def submit_track_ban(
     match_id: int,
     user_id: int,
@@ -199,7 +319,8 @@ def submit_track_ban(
         raise InvalidMatchStateError(f"cannot ban track in state {match.status}")
     if ban_type not in _TRACK_BAN_TYPES:
         raise UnknownBanTargetError(f"{ban_type!r} is not a track condition")
-    if not condition_key.strip():
+    key = condition_key.strip()
+    if not key:
         raise UnknownBanTargetError("condition_key is required")
 
     existing = db.session.scalars(
@@ -211,11 +332,44 @@ def submit_track_ban(
     if existing is not None:
         raise DuplicateBanError()
 
+    # Server-side feasibility: even if the dropdown filtered correctly,
+    # a concurrent opponent ban could have landed between page render
+    # and submit. Re-check that this ban + opponent's leaves the pool
+    # non-empty. Skip placeholders bypass this check (they don't ban
+    # anything for real).
+    if key != _SKIP_SENTINEL:
+        rows = list_bans(match_id)
+        opp_rows = [
+            b for b in rows
+            if b.user_id != user_id and b.ban_type in _TRACK_BAN_TYPES
+        ]
+        base_bans = _bans_from_rows(opp_rows)
+        candidate_bans = _add_to_bans(base_bans, ban_type, key)
+        pool_presets = list(db.session.scalars(select(RacePreset)))
+        min_runners = 2 * match.umas_per_player
+        base_survivors = filter_presets(
+            pool_presets, match.preset_pool, base_bans, min_max_runners=min_runners
+        )
+        survivors = filter_presets(
+            pool_presets,
+            match.preset_pool,
+            candidate_bans,
+            min_max_runners=min_runners,
+        )
+        if not survivors:
+            raise BanWouldEmptyPoolError(
+                f"{ban_type}={key} would leave no eligible tracks"
+            )
+        if len(survivors) == len(base_survivors):
+            raise BanWouldEmptyPoolError(
+                f"{ban_type}={key} doesn't ban anything the opponent didn't already"
+            )
+
     ban = DraftMatchBan(
         draft_match_id=match_id,
         user_id=user_id,
         ban_type=ban_type,
-        condition_key=condition_key.strip(),
+        condition_key=key,
         locked_at=_utcnow(),
     )
     db.session.add(ban)

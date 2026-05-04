@@ -30,21 +30,31 @@ def _season(app: Flask) -> int:
 
 
 def _add_preset(app: Flask) -> None:
+    """Seed a small variety of presets so bans during the test don't all
+    fall foul of the feasibility check (each ban must remove >=1 preset
+    and leave >=1)."""
     with app.app_context():
-        db.session.add(
-            RacePreset(
-                source=PresetSource.CUSTOM_BUILTIN,
-                name="Sapporo Turf 2000m (Medium) Right",
-                venue="Sapporo",
-                surface="Turf",
-                distance_meters=2000,
-                distance_category="Medium",
-                direction="Right",
-                course_variant=None,
-                max_runners=18,
-                enabled=True,
+        rows = [
+            ("Sapporo Right", "Sapporo", "Right"),
+            ("Tokyo Left", "Tokyo", "Left"),
+            ("Hakodate Left", "Hakodate", "Left"),
+            ("Niigata Right", "Niigata", "Right"),
+        ]
+        for name, venue, direction in rows:
+            db.session.add(
+                RacePreset(
+                    source=PresetSource.CUSTOM_BUILTIN,
+                    name=name,
+                    venue=venue,
+                    surface="Turf",
+                    distance_meters=2000,
+                    distance_category="Medium",
+                    direction=direction,
+                    course_variant=None,
+                    max_runners=18,
+                    enabled=True,
+                )
             )
-        )
         db.session.commit()
 
 

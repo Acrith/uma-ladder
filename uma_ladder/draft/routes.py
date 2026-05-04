@@ -103,6 +103,16 @@ def detail(match_id: int) -> object:
         abort(404)
     bans = draft_service.list_bans(match_id)
     should_poll = _should_poll(match, bans)
+    # During the track-ban phase, prune options that would empty the pool
+    # given the opponent's existing ban + cross-category dependencies.
+    if match.status == DraftMatchStatus.TRACK_BAN_PHASE:
+        track_ban_options = draft_service.feasible_track_ban_options(
+            match_id,
+            current_user.id,
+            static_options=TRACK_BAN_OPTIONS,
+        )
+    else:
+        track_ban_options = TRACK_BAN_OPTIONS
     return render_template(
         "draft/detail.html",
         match=match,
@@ -111,7 +121,7 @@ def detail(match_id: int) -> object:
         csrf_form=CsrfOnlyForm(),
         room_code_expired=draft_service.is_room_code_expired(match),
         characters=list_enabled_characters(),
-        track_ban_options=TRACK_BAN_OPTIONS,
+        track_ban_options=track_ban_options,
         should_poll=should_poll,
     )
 

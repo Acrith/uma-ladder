@@ -182,6 +182,10 @@ def test_track_ban_dedupes_per_user(app: Flask) -> None:
         opp = _user("bob")
         m_id = _match_with_two(host, opp, season_id=s.id)
         _drive_to_track_ban(m_id, host, opp)
+        # Two presets so the Tokyo ban doesn't empty the pool (which would
+        # be caught by the new feasibility check before we test the dedup).
+        _preset(name="Tokyo P", venue="Tokyo")
+        _preset(name="Sapporo P", venue="Sapporo", direction="Right")
         draft_service.submit_track_ban(
             m_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
         )
@@ -198,7 +202,8 @@ def test_randomize_requires_both_track_bans(app: Flask) -> None:
         opp = _user("bob")
         m_id = _match_with_two(host, opp, season_id=s.id)
         _drive_to_track_ban(m_id, host, opp)
-        _preset(name="A")
+        _preset(name="A", venue="Tokyo")
+        _preset(name="B", venue="Sapporo")
         draft_service.submit_track_ban(
             m_id, host, ban_type=DraftBanType.VENUE, condition_key="Sapporo"
         )
@@ -213,8 +218,11 @@ def test_randomize_advances_to_uma_ban(app: Flask) -> None:
         opp = _user("bob")
         m_id = _match_with_two(host, opp, season_id=s.id)
         _drive_to_track_ban(m_id, host, opp)
-        keeper = _preset(name="Keeper", venue="Sapporo")
-        _preset(name="Banned", venue="Tokyo")
+        keeper = _preset(name="Keeper", venue="Sapporo", direction="Left")
+        _preset(name="Banned", venue="Tokyo", direction="Left")
+        # Add a Right preset so opp's Right ban does something (otherwise the
+        # redundancy check would reject it).
+        _preset(name="Right one", venue="Hakodate", direction="Right")
         draft_service.submit_track_ban(
             m_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
         )
@@ -404,6 +412,13 @@ def test_room_code_24h_expiry(app: Flask) -> None:
 
 
 def test_randomization_failure_marks_match(app: Flask) -> None:
+    """Defensive: even though submit_track_ban now rejects pool-emptying
+    bans, randomize_preset must still mark the match as
+    RANDOMIZATION_FAILED if a preset gets disabled or the pool changes
+    between ban submission and the roll. We exercise that path by
+    inserting a pool-emptying ban directly via the DB."""
+    from uma_ladder.models import DraftBanType, DraftMatchBan
+
     with app.app_context():
         s = _season()
         host = _user("alice")
@@ -411,12 +426,20 @@ def test_randomization_failure_marks_match(app: Flask) -> None:
         m_id = _match_with_two(host, opp, season_id=s.id)
         _drive_to_track_ban(m_id, host, opp)
         _preset(name="OnlyOne", venue="Tokyo", direction="Left")
-        draft_service.submit_track_ban(
-            m_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
-        )
-        draft_service.submit_track_ban(
-            m_id, opp, ban_type=DraftBanType.VENUE, condition_key="__skip__"
-        )
+        # Bypass submit_track_ban's feasibility check by writing rows
+        # directly — simulates the race-condition / pool-change path.
+        for uid, value in ((host, "Tokyo"), (opp, "__skip__")):
+            db.session.add(
+                DraftMatchBan(
+                    draft_match_id=m_id,
+                    user_id=uid,
+                    ban_type=DraftBanType.VENUE,
+                    condition_key=value,
+                    locked_at=datetime.now(UTC),
+                )
+            )
+        db.session.commit()
+
         from uma_ladder.services.randomizer import RandomizerError
 
         with pytest.raises(RandomizerError):
