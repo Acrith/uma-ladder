@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Draft PvP · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-xl font-semibold">Draft PvP</h1>
+    {% if current_user.is_authenticated %}
+      <a href="{{ url_for('draft.new') }}" class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">New match</a>
+    {% endif %}
+  </div>
+  {% with messages = get_flashed_messages() %}
+    {% for m in messages %}<p class="mb-3 text-sm text-red-700">{{ m }}</p>{% endfor %}
+  {% endwith %}
+  {% if current_user.is_authenticated %}
+    <form method="post" action="{{ url_for('draft.join_by_code') }}" class="mb-6 flex gap-2">
+      {{ join_form.hidden_tag() }}
+      {{ join_form.join_code(class="rounded border border-slate-300 px-2 py-1 text-sm", placeholder="Join code") }}
+      <button class="rounded bg-slate-700 px-3 py-1 text-sm text-white">Join</button>
+    </form>
+
+    <h2 class="font-semibold mb-2">Your matches</h2>
+    {% if not matches %}
+      <p class="text-sm text-slate-600">No matches yet.</p>
+    {% else %}
+      <ul class="divide-y divide-slate-200">
+        {% for m in matches %}
+          <li class="py-2 text-sm">
+            <a class="underline" href="{{ url_for('draft.detail', match_id=m.id) }}">Match #{{ m.id }}</a>
+            · {{ m.status }} · code <code>{{ m.join_code }}</code>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% else %}
+    <p class="text-sm text-slate-600">Log in to create or join draft matches.</p>
+  {% endif %}
+{% endblock %}

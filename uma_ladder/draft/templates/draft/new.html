@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "auth/_form.html" import render_field %}
+{% block title %}New draft match · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">New draft match</h1>
+  <form method="post" class="max-w-sm">
+    {{ form.hidden_tag() }}
+    {{ render_field(form.umas_per_player) }}
+    <div class="mb-3">
+      <label class="block text-sm font-medium text-slate-700">Preset pool</label>
+      {{ form.preset_pool(class="mt-1 w-full rounded border border-slate-300 px-2 py-1") }}
+    </div>
+    <button class="rounded bg-slate-900 px-3 py-1.5 text-white">Create</button>
+  </form>
+{% endblock %}

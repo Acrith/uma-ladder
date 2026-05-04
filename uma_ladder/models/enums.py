@@ -54,6 +54,30 @@ class RegistrationStatus(StrEnum):
     WAITLISTED = "waitlisted"
 
 
+class DraftMatchStatus(StrEnum):
+    WAITING_FOR_OPPONENT = "waiting_for_opponent"
+    SUBMITTING_UMAS = "submitting_umas"
+    READY_CHECK = "ready_check"
+    BAN_PHASE = "ban_phase"
+    RANDOMIZING_RACE = "randomizing_race"
+    RANDOMIZATION_FAILED = "randomization_failed"
+    ROOM_CODE_PENDING = "room_code_pending"
+    ROOM_CODE_AVAILABLE = "room_code_available"
+    ROOM_CODE_EXPIRED = "room_code_expired"
+    RESULTS_PENDING = "results_pending"
+    RESULTS_SUBMITTED = "results_submitted"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class DraftBanType(StrEnum):
+    UMA = "uma"
+    DIRECTION = "direction"
+    DISTANCE_CATEGORY = "distance_category"
+    VENUE = "venue"
+    SURFACE = "surface"
+
+
 # Canonical venues mentioned in the appendix. Used to validate ban inputs.
 VENUES: tuple[str, ...] = (
     "Sapporo",

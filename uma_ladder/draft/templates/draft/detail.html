@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Draft match #{{ match.id }} · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold">Draft match #{{ match.id }}</h1>
+  <p class="mt-1 text-sm text-slate-600">
+    Status: <strong>{{ match.status }}</strong> ·
+    Pool: {{ match.preset_pool }} ·
+    Umas/player: {{ match.umas_per_player }} ·
+    Join code: <code>{{ match.join_code }}</code>
+  </p>
+  <p class="mt-1 text-sm">
+    Host: {{ match.host.username }}
+    · Opponent: {{ match.opponent.username if match.opponent else '—' }}
+  </p>
+
+  {% with messages = get_flashed_messages() %}
+    {% for m in messages %}<p class="mt-2 text-sm text-red-700">{{ m }}</p>{% endfor %}
+  {% endwith %}
+
+  {% if match.status in ('submitting_umas', 'ready_check') %}
+    <h2 class="mt-6 font-semibold">Submit your Umas</h2>
+    <form method="post" action="{{ url_for('draft.submit_umas', match_id=match.id) }}" class="max-w-md">
+      {{ csrf_form.hidden_tag() }}
+      {% for i in range(match.umas_per_player) %}
+        <fieldset class="mb-3 rounded border border-slate-200 p-3">
+          <legend class="text-sm font-medium">Uma {{ i + 1 }}</legend>
+          <label class="text-xs">Character</label>
+          <select name="uma_character_id_{{ i }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1">
+            <option value="">— custom —</option>
+            {% for c in characters %}
+              <option value="{{ c.id }}">{{ c.name_en }}</option>
+            {% endfor %}
+          </select>
+          <label class="text-xs mt-2 block">Custom name (if not in list)</label>
+          <input name="custom_uma_name_{{ i }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+          <label class="text-xs mt-2 block">Build nickname</label>
+          <input name="build_nickname_{{ i }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+        </fieldset>
+      {% endfor %}
+      <button class="rounded bg-slate-900 px-3 py-1 text-sm text-white">Save Umas</button>
+    </form>
+    <form method="post" action="{{ url_for('draft.ready', match_id=match.id) }}" class="mt-2">
+      {{ csrf_form.hidden_tag() }}
+      <button class="rounded bg-emerald-700 px-3 py-1 text-sm text-white">Ready</button>
+    </form>
+  {% endif %}
+
+  <h2 class="mt-6 font-semibold">Submitted Umas</h2>
+  {% if not entries %}
+    <p class="text-sm text-slate-600">None yet.</p>
+  {% else %}
+    <ul class="text-sm">
+      {% for e in entries %}
+        <li>
+          {{ 'host' if e.user_id == match.host_user_id else 'opp' }}:
+          {{ e.uma_character.name_en if e.uma_character else e.custom_uma_name or '—' }}
+          {% if e.is_banned %}<span class="text-red-700">[banned]</span>{% endif %}
+          {% if e.locked_at %}<span class="text-slate-500">(locked)</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if match.status == 'ban_phase' %}
+    <h2 class="mt-6 font-semibold">Ban phase</h2>
+    <form method="post" action="{{ url_for('draft.bans', match_id=match.id) }}" class="max-w-md">
+      {{ csrf_form.hidden_tag() }}
+      <label class="text-xs">Ban opponent Uma</label>
+      <select name="banned_uma_entry_id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1">
+        {% for e in entries %}
+          {% if e.user_id != current_user.id %}
+            <option value="{{ e.id }}">{{ e.uma_character.name_en if e.uma_character else e.custom_uma_name }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <label class="text-xs mt-2 block">Track ban type</label>
+      <select name="track_ban_type" class="mt-1 w-full rounded border border-slate-300 px-2 py-1">
+        <option value="venue">Venue</option>
+        <option value="direction">Direction</option>
+        <option value="distance_category">Distance category</option>
+        <option value="surface">Surface</option>
+      </select>
+      <label class="text-xs mt-2 block">Track ban value</label>
+      <input name="track_condition_key" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" placeholder="e.g. Tokyo / Left / Sprint / Turf" />
+      <button class="mt-2 rounded bg-slate-900 px-3 py-1 text-sm text-white">Submit bans</button>
+    </form>
+    <form method="post" action="{{ url_for('draft.randomize', match_id=match.id) }}" class="mt-2">
+      {{ csrf_form.hidden_tag() }}
+      <button class="rounded bg-amber-700 px-3 py-1 text-sm text-white">Randomize race (when both banned)</button>
+    </form>
+  {% endif %}
+
+  {% if match.selected_preset %}
+    <h2 class="mt-6 font-semibold">Selected race</h2>
+    <p class="text-sm">{{ match.selected_preset.name }}</p>
+  {% endif %}
+
+  {% if match.status in ('room_code_pending', 'room_code_available', 'room_code_expired') %}
+    <h2 class="mt-6 font-semibold">Room code</h2>
+    {% if match.room_code %}
+      <p class="text-sm">
+        <code>{{ match.room_code }}</code>
+        {% if room_code_expired %}<span class="text-red-700">(expired)</span>{% endif %}
+      </p>
+    {% endif %}
+    <form method="post" action="{{ url_for('draft.room_code', match_id=match.id) }}" class="mt-2 flex gap-2">
+      {{ room_code_form.hidden_tag() }}
+      {{ room_code_form.room_code(class="rounded border border-slate-300 px-2 py-1 text-sm") }}
+      <button class="rounded bg-slate-900 px-3 py-1 text-sm text-white">Set code</button>
+    </form>
+
+    <h2 class="mt-6 font-semibold">Submit results</h2>
+    <form method="post" action="{{ url_for('draft.submit_results', match_id=match.id) }}" class="max-w-sm">
+      {{ csrf_form.hidden_tag() }}
+      <label class="text-xs">{{ match.host.username }} placement</label>
+      <input type="number" name="placement_{{ match.host_user_id }}" min="1" class="w-24 rounded border border-slate-300 px-1" />
+      <label class="text-xs mt-2 block">{{ match.opponent.username }} placement</label>
+      <input type="number" name="placement_{{ match.opponent_user_id }}" min="1" class="w-24 rounded border border-slate-300 px-1" />
+      <button class="mt-2 rounded bg-slate-900 px-3 py-1 text-sm text-white">Submit results</button>
+    </form>
+  {% endif %}
+
+  {% if match.status == 'completed' %}
+    <h2 class="mt-6 font-semibold">Result</h2>
+    <p class="text-sm">
+      Winner: <strong>{{ match.winner_user_id }}</strong>
+      · Loser: {{ match.loser_user_id }}
+    </p>
+  {% endif %}
+{% endblock %}

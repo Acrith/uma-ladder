@@ -34,8 +34,40 @@
     {% endif %}
   </section>
 
+  <section class="mb-6">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Draft Elo · top 5</h2>
+      {% if active_season %}
+        <a class="text-sm underline" href="{{ url_for('draft.ladder', season_id=active_season.id) }}">
+          See full ladder
+        </a>
+      {% endif %}
+    </div>
+    {% if not active_season %}
+      <p class="text-slate-600 text-sm">No active season.</p>
+    {% elif not elo_top5 %}
+      <p class="text-slate-600 text-sm">No draft results yet for {{ active_season.name }}.</p>
+    {% else %}
+      <table class="mt-2 text-sm">
+        <thead><tr class="text-left"><th class="pr-4">#</th><th class="pr-4">Player</th><th class="pr-4">Rating</th></tr></thead>
+        <tbody>
+          {% for row in elo_top5 %}
+            <tr class="border-t border-slate-200">
+              <td class="pr-4 py-1">{{ loop.index }}</td>
+              <td class="pr-4 py-1">
+                <a class="underline" href="{{ url_for('profiles.public', username=row.username) }}">{{ row.username }}</a>
+              </td>
+              <td class="pr-4 py-1">{{ row.rating }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
   <section>
     <a class="text-sm underline" href="{{ url_for('official.index') }}">All official races</a>
+    · <a class="text-sm underline" href="{{ url_for('draft.index') }}">Draft PvP</a>
     · <a class="text-sm underline" href="{{ url_for('presets.index') }}">Race presets</a>
   </section>
 {% endblock %}
