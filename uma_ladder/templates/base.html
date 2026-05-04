@@ -75,6 +75,9 @@
               {{ current_user.username }}
             </a>
             {% if current_user.has_at_least('admin') %}
+              <a href="{{ url_for('admin.index') }}" class="rounded-lg px-3 py-1.5 text-amber-300 hover:bg-slate-800/50 hover:text-amber-200" title="Admin">
+                Admin
+              </a>
               <a href="{{ url_for('notifications.index') }}" class="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Discord notifications">
                 ⌬
               </a>

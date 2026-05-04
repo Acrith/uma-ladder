@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Users · Admin · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Admin · Users</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Users <span class="text-slate-500 text-base font-normal">({{ total }})</span></h1>
+    </div>
+    <form method="get" class="flex items-center gap-2">
+      <input type="search"
+             name="q"
+             value="{{ q }}"
+             placeholder="Search username…"
+             class="input-base"
+             autocomplete="off" />
+      <button class="btn-primary">Search</button>
+    </form>
+  </div>
+
+  {% if not users %}
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">No users match.</div>
+  {% else %}
+    {% call card(class="mt-6 overflow-hidden") %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-900/50 text-xs uppercase tracking-wider text-slate-500">
+            <tr class="text-left">
+              <th class="px-4 py-3">#</th>
+              <th class="px-4 py-3">Username</th>
+              <th class="px-4 py-3">Role</th>
+              <th class="px-4 py-3">Created</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+              {% set tone = {'user': 'slate', 'organizer': 'cyan', 'editor': 'violet', 'admin': 'amber', 'superadmin': 'rose'}.get(u.role, 'slate') %}
+              <tr class="border-t border-slate-800">
+                <td class="px-4 py-2 text-slate-500">{{ u.id }}</td>
+                <td class="px-4 py-2 font-medium text-slate-200">@{{ u.username }}</td>
+                <td class="px-4 py-2">{{ chip(u.role, tone) }}</td>
+                <td class="px-4 py-2 text-slate-500">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+                <td class="px-4 py-2 text-right">
+                  <a href="{{ url_for('admin.user_detail', user_id=u.id) }}" class="text-cyan-300 hover:text-cyan-200">Edit</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endcall %}
+
+    {% if pages > 1 %}
+      <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+        <span>Page {{ page }} / {{ pages }}</span>
+        <div class="flex gap-2">
+          {% if page > 1 %}
+            <a class="btn-ghost" href="{{ url_for('admin.users_list', page=page - 1, q=q) }}">← Prev</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn-ghost" href="{{ url_for('admin.users_list', page=page + 1, q=q) }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

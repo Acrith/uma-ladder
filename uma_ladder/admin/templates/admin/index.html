@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Admin · Uma Ladder{% endblock %}
+{% block content %}
+  <p class="label-eyebrow">Admin</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Control room</h1>
+  <p class="mt-2 text-sm text-slate-400">Cross-user views for moderation and cleanup. Player-facing dashboards stay scoped to their own activity.</p>
+
+  <div class="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Users</p>
+      <p class="mt-1 text-3xl font-semibold text-slate-100">{{ user_count }}</p>
+      <a href="{{ url_for('admin.users_list') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage users →</a>
+    {% endcall %}
+
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Draft matches</p>
+      <p class="mt-1 text-3xl font-semibold text-slate-100">{{ match_count }}</p>
+      <p class="text-xs text-slate-500">{{ open_matches }} open (not completed/cancelled)</p>
+      <a href="{{ url_for('admin.matches_list') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage matches →</a>
+    {% endcall %}
+
+    {% call card(class="p-5 opacity-60") %}
+      <p class="label-eyebrow">Notifications</p>
+      <p class="mt-1 text-sm text-slate-400">Discord webhook attempts.</p>
+      <a href="{{ url_for('notifications.index') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Open →</a>
+    {% endcall %}
+  </div>
+{% endblock %}

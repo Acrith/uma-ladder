@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, draft_status_chip %}
+{% block title %}Draft matches · Admin · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Admin · Draft matches</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Matches <span class="text-slate-500 text-base font-normal">({{ total }})</span></h1>
+    </div>
+    <form method="get" class="flex flex-wrap items-center gap-2 text-sm">
+      <select name="status" class="input-base">
+        <option value="">all statuses</option>
+        {% for s in statuses %}
+          <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <select name="season_id" class="input-base">
+        <option value="">all seasons</option>
+        {% for s in seasons %}
+          <option value="{{ s.id }}" {% if season_id and season_id|int == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn-primary">Filter</button>
+    </form>
+  </div>
+
+  {% if not matches %}
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">No matches match.</div>
+  {% else %}
+    {% call card(class="mt-6 overflow-hidden") %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-900/50 text-xs uppercase tracking-wider text-slate-500">
+            <tr class="text-left">
+              <th class="px-4 py-3">#</th>
+              <th class="px-4 py-3">Created</th>
+              <th class="px-4 py-3">Season</th>
+              <th class="px-4 py-3">Host</th>
+              <th class="px-4 py-3">Opponent</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in matches %}
+              <tr class="border-t border-slate-800">
+                <td class="px-4 py-2 text-slate-500">{{ m.id }}</td>
+                <td class="px-4 py-2 text-slate-400">{{ m.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td class="px-4 py-2 text-slate-400">{{ m.season.name if m.season else '—' }}</td>
+                <td class="px-4 py-2 text-slate-300">@{{ m.host.username if m.host else '—' }}</td>
+                <td class="px-4 py-2 text-slate-300">{% if m.opponent %}@{{ m.opponent.username }}{% else %}<span class="text-slate-600">—</span>{% endif %}</td>
+                <td class="px-4 py-2">{{ draft_status_chip(m.status) }}</td>
+                <td class="px-4 py-2 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <a href="{{ url_for('draft.detail', match_id=m.id) }}" class="text-cyan-300 hover:text-cyan-200">View</a>
+                    {% if m.status not in ('completed', 'cancelled') %}
+                      <form method="post"
+                            action="{{ url_for('admin.cancel_match', match_id=m.id) }}"
+                            class="inline"
+                            onsubmit="return confirm('Cancel match #{{ m.id }}?');">
+                        {{ csrf_form.hidden_tag() }}
+                        <input type="hidden" name="next" value="{{ request.full_path }}" />
+                        <button class="text-rose-400 hover:text-rose-300">Cancel</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endcall %}
+
+    {% if pages > 1 %}
+      <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+        <span>Page {{ page }} / {{ pages }}</span>
+        <div class="flex gap-2">
+          {% if page > 1 %}
+            <a class="btn-ghost" href="{{ url_for('admin.matches_list', page=page - 1, status=status, season_id=season_id) }}">← Prev</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn-ghost" href="{{ url_for('admin.matches_list', page=page + 1, status=status, season_id=season_id) }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}
