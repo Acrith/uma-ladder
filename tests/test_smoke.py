@@ -32,10 +32,9 @@ def test_healthz_returns_ok(client: FlaskClient) -> None:
         "/ocr/",
     ],
 )
-def test_blueprint_placeholders_respond(client: FlaskClient, path: str) -> None:
+def test_blueprint_routes_respond(client: FlaskClient, path: str) -> None:
     response = client.get(path)
     assert response.status_code == 200, f"{path} returned {response.status_code}"
-    assert b"placeholder" in response.data
 
 
 def test_production_config_requires_secret(monkeypatch: pytest.MonkeyPatch) -> None:

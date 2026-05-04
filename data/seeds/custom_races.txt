@@ -1,0 +1,88 @@
+Turf Races
+Sapporo Turf 2600m (Long) Right Max Runners: 14
+Sapporo Turf 2000m (Medium) Right Max Runners: 16
+Sapporo Turf 1800m (Mile) Right Max Runners: 14
+Sapporo Turf 1500m (Sprint) Right Max Runners: 14
+Sapporo Turf 1200m (Sprint) Right Max Runners: 16
+Hakodate Turf 2600m (Long) Right Max Runners: 16
+Hakodate Turf 2000m (Medium) Right Max Runners: 16
+Hakodate Turf 1800m (Mile) Right Max Runners: 16
+Hakodate Turf 1200m (Sprint) Right Max Runners: 16
+Hakodate Turf 1000m (Sprint) Right Max Runners: 16
+Fukushima Turf 2600m (Long) Right Max Runners: 16
+Fukushima Turf 2000m (Medium) Right Max Runners: 16
+Fukushima Turf 1800m (Mile) Right Max Runners: 16
+Fukushima Turf 1200m (Sprint) Right Max Runners: 14
+Niigata Turf 2400m (Medium) Left / Inner Max Runners: 18
+Niigata Turf 2200m (Medium) Left / Inner Max Runners: 18
+Niigata Turf 2000m (Medium) Left / Outer Max Runners: 18
+Niigata Turf 2000m (Medium) Left / Inner Max Runners: 18
+Niigata Turf 1800m (Mile) Left / Outer Max Runners: 18
+Niigata Turf 1600m (Mile) Left / Outer Max Runners: 18
+Niigata Turf 1400m (Sprint) Left / Inner Max Runners: 18
+Niigata Turf 1200m (Sprint) Left / Inner Max Runners: 18
+Niigata Turf 1000m (Sprint) Stretch Max Runners: 18
+Tokyo Turf 3400m (Long) Left Max Runners: 18
+Tokyo Turf 2500m (Long) Left Max Runners: 18
+Tokyo Turf 2400m (Medium) Left Max Runners: 18
+Tokyo Turf 2300m (Medium) Left Max Runners: 18
+Tokyo Turf 2000m (Medium) Left Max Runners: 18
+Tokyo Turf 1800m (Mile) Left Max Runners: 18
+Tokyo Turf 1600m (Mile) Left Max Runners: 18
+Tokyo Turf 1400m (Sprint) Left Max Runners: 18
+Nakayama Turf 3600m (Long) Right / Inner Max Runners: 16
+Nakayama Turf 2500m (Long) Right / Inner Max Runners: 16
+Nakayama Turf 2200m (Medium) Right / Outer Max Runners: 18
+Nakayama Turf 2000m (Medium) Right / Inner Max Runners: 18
+Nakayama Turf 1800m (Mile) Right / Inner Max Runners: 16
+Nakayama Turf 1600m (Mile) Right / Outer Max Runners: 16
+Nakayama Turf 1200m (Sprint) Right / Outer Max Runners: 16
+Kyoto Turf 2200m (Medium) Right / Outer Max Runners: 18
+Kyoto Turf 2000m (Medium) Right / Inner Max Runners: 18
+Kyoto Turf 1800m (Mile) Right / Outer Max Runners: 18
+Kyoto Turf 1600m (Mile) Right / Outer Max Runners: 18
+Kyoto Turf 1600m (Mile) Right / Inner Max Runners: 18
+Kyoto Turf 1400m (Sprint) Right / Outer Max Runners: 18
+Kyoto Turf 1400m (Sprint) Right / Inner Max Runners: 18
+Kyoto Turf 1200m (Sprint) Right / Inner Max Runners: 18
+Hanshin Turf 3200m (Long) Right / Outer→Inner Max Runners: 18
+Hanshin Turf 3000m (Long) Right / Inner Max Runners: 16
+Hanshin Turf 2600m (Long) Right / Outer Max Runners: 18
+Hanshin Turf 2400m (Medium) Right / Outer Max Runners: 18
+Hanshin Turf 2200m (Medium) Right / Inner Max Runners: 18
+Hanshin Turf 2000m (Medium) Right / Inner Max Runners: 16
+Hanshin Turf 1800m (Mile) Right / Outer Max Runners: 18
+Hanshin Turf 1600m (Mile) Right / Outer Max Runners: 18
+Hanshin Turf 1400m (Sprint) Right / Inner Max Runners: 18
+Hanshin Turf 1200m (Sprint) Right / Inner Max Runners: 16
+Kokura Turf 2600m (Long) Right Max Runners: 16
+Kokura Turf 2000m (Medium) Right Max Runners: 18
+Kokura Turf 1800m (Mile) Right Max Runners: 16
+Kokura Turf 1200m (Sprint) Right Max Runners: 18
+
+Dirt Races
+Sapporo Dirt 1700m (Mile) Right Max Runners: 14
+Hakodate Dirt 1700m (Mile) Right Max Runners: 14
+Fukushima Dirt 1700m (Mile) Right Max Runners: 15
+Fukushima Dirt 1150m (Sprint) Right Max Runners: 16
+Niigata Dirt 1800m (Mile) Left Max Runners: 15
+Niigata Dirt 1200m (Sprint) Left Max Runners: 15
+Tokyo Dirt 2100m (Medium) Left Max Runners: 16
+Tokyo Dirt 1600m (Mile) Left Max Runners: 16
+Tokyo Dirt 1400m (Sprint) Left Max Runners: 16
+Tokyo Dirt 1300m (Sprint) Left Max Runners: 16
+Nakayama Dirt 1800m (Mile) Right Max Runners: 16
+Nakayama Dirt 1200m (Sprint) Right Max Runners: 16
+Chukyo Dirt 1800m (Mile) Left Max Runners: 16
+Chukyo Dirt 1400m (Sprint) Left Max Runners: 16
+Kyoto Dirt 1900m (Medium) Right Max Runners: 16
+Kyoto Dirt 1800m (Mile) Right Max Runners: 16
+Kyoto Dirt 1400m (Sprint) Right Max Runners: 16
+Kyoto Dirt 1200m (Sprint) Right Max Runners: 16
+Hanshin Dirt 2000m (Medium) Right Max Runners: 16
+Hanshin Dirt 1800m (Mile) Right Max Runners: 16
+Hanshin Dirt 1400m (Sprint) Right Max Runners: 16
+Kokura Dirt 1700m (Mile) Right Max Runners: 16
+Oi Dirt 2000m (Medium) Right Max Runners: 16
+Oi Dirt 1800m (Mile) Right Max Runners: 16
+Oi Dirt 1200m (Sprint) Right Max Runners: 16

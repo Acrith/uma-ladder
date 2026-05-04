@@ -7,6 +7,7 @@ from flask import Flask
 from flask.cli import AppGroup
 
 from .services.seed_characters import seed_characters
+from .services.seed_presets import seed_custom_presets
 
 uma_cli = AppGroup("uma", help="Uma Ladder maintenance commands.")
 
@@ -24,6 +25,23 @@ def cmd_seed_characters(file_path: Path | None) -> None:
     report = seed_characters(file_path)
     click.echo(
         f"seed-characters: inserted={report.inserted} "
+        f"updated={report.updated} skipped={report.skipped} total={report.total}"
+    )
+
+
+@uma_cli.command("seed-presets")
+@click.option(
+    "--file",
+    "file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the default custom_races.txt path.",
+)
+def cmd_seed_presets(file_path: Path | None) -> None:
+    """Idempotent upsert of custom race presets parsed from §22 appendix."""
+    report = seed_custom_presets(file_path)
+    click.echo(
+        f"seed-presets: inserted={report.inserted} "
         f"updated={report.updated} skipped={report.skipped} total={report.total}"
     )
 

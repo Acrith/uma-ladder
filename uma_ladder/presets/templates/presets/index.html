@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Race presets · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">Race presets</h1>
+  <p class="mb-4 text-sm text-slate-600">
+    {{ presets|length }} preset{{ '' if presets|length == 1 else 's' }} loaded.
+  </p>
+  <table class="min-w-full text-sm">
+    <thead class="text-left">
+      <tr>
+        <th class="py-1 pr-4">Name</th>
+        <th class="py-1 pr-4">Surface</th>
+        <th class="py-1 pr-4">Distance</th>
+        <th class="py-1 pr-4">Direction</th>
+        <th class="py-1 pr-4">Variant</th>
+        <th class="py-1 pr-4">Max</th>
+        <th class="py-1 pr-4">Enabled</th>
+        {% if current_user.is_authenticated and current_user.has_at_least('admin') %}
+          <th class="py-1 pr-4"></th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in presets %}
+        <tr class="border-t border-slate-200">
+          <td class="py-1 pr-4">{{ p.name }}</td>
+          <td class="py-1 pr-4">{{ p.surface }}</td>
+          <td class="py-1 pr-4">{{ p.distance_meters }}m ({{ p.distance_category }})</td>
+          <td class="py-1 pr-4">{{ p.direction }}</td>
+          <td class="py-1 pr-4">{{ p.course_variant or '—' }}</td>
+          <td class="py-1 pr-4">{{ p.max_runners }}</td>
+          <td class="py-1 pr-4">{{ 'yes' if p.enabled else 'no' }}</td>
+          {% if current_user.is_authenticated and current_user.has_at_least('admin') %}
+            <td class="py-1 pr-4">
+              <form method="post" action="{{ url_for('presets.toggle', preset_id=p.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit" class="rounded bg-slate-200 px-2 py-0.5">Toggle</button>
+              </form>
+            </td>
+          {% endif %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
