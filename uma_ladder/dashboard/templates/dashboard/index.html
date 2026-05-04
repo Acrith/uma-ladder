@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-2xl font-semibold mb-4">Uma Ladder</h1>
+
+  <section class="mb-6">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Official ladder · top 5</h2>
+      {% if active_season %}
+        <a class="text-sm underline" href="{{ url_for('official.ladder', season_id=active_season.id) }}">
+          See full ladder
+        </a>
+      {% endif %}
+    </div>
+    {% if not active_season %}
+      <p class="text-slate-600 text-sm">No active season.</p>
+    {% elif not ladder_top5 %}
+      <p class="text-slate-600 text-sm">No results yet for {{ active_season.name }}.</p>
+    {% else %}
+      <table class="mt-2 text-sm">
+        <thead><tr class="text-left"><th class="pr-4">#</th><th class="pr-4">Player</th><th class="pr-4">Points</th></tr></thead>
+        <tbody>
+          {% for row in ladder_top5 %}
+            <tr class="border-t border-slate-200">
+              <td class="pr-4 py-1">{{ loop.index }}</td>
+              <td class="pr-4 py-1">
+                <a class="underline" href="{{ url_for('profiles.public', username=row.username) }}">{{ row.username }}</a>
+              </td>
+              <td class="pr-4 py-1">{{ row.total_points }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section>
+    <a class="text-sm underline" href="{{ url_for('official.index') }}">All official races</a>
+    · <a class="text-sm underline" href="{{ url_for('presets.index') }}">Race presets</a>
+  </section>
+{% endblock %}

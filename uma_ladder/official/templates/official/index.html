@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Official races · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="mb-4 flex items-center justify-between">
+    <h1 class="text-xl font-semibold">Official races</h1>
+    {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+      <a href="{{ url_for('official.new') }}" class="rounded bg-slate-900 px-3 py-1.5 text-white text-sm">New race</a>
+    {% endif %}
+  </div>
+  {% if not races %}
+    <p class="text-slate-600">No official races yet.</p>
+  {% else %}
+    <ul class="divide-y divide-slate-200">
+      {% for race in races %}
+        <li class="py-3">
+          <a href="{{ url_for('official.detail', race_id=race.id) }}" class="font-medium underline">{{ race.name }}</a>
+          <span class="ml-2 text-xs text-slate-600">{{ race.status }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

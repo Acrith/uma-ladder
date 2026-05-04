@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "auth/_form.html" import render_field %}
+{% block title %}New official race · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">New official race</h1>
+  {% if not seasons %}
+    <p class="mb-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+      No seasons exist. Create one via the CLI or shell before adding races.
+    </p>
+  {% endif %}
+  <form method="post" class="max-w-lg">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+      <label class="block text-sm font-medium text-slate-700">Season</label>
+      <select name="season_id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1">
+        {% for s in seasons %}
+          <option value="{{ s.id }}">{{ s.name }} ({{ s.status }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    {{ render_field(form.name) }}
+    {{ render_field(form.preset_id) }}
+    {{ render_field(form.max_players) }}
+    {{ render_field(form.notes) }}
+    <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white">Create</button>
+  </form>
+{% endblock %}

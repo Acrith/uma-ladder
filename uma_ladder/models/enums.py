@@ -35,6 +35,25 @@ class SeasonStatus(StrEnum):
     ARCHIVED = "archived"
 
 
+class OfficialRaceStatus(StrEnum):
+    DRAFT = "draft"
+    REGISTRATION_OPEN = "registration_open"
+    REGISTRATION_CLOSED = "registration_closed"
+    ROOM_CODE_PENDING = "room_code_pending"
+    ROOM_CODE_AVAILABLE = "room_code_available"
+    ROOM_CODE_EXPIRED = "room_code_expired"
+    RESULTS_PENDING = "results_pending"
+    RESULTS_SUBMITTED = "results_submitted"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class RegistrationStatus(StrEnum):
+    REGISTERED = "registered"
+    CANCELLED = "cancelled"
+    WAITLISTED = "waitlisted"
+
+
 # Canonical venues mentioned in the appendix. Used to validate ban inputs.
 VENUES: tuple[str, ...] = (
     "Sapporo",
