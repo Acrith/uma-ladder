@@ -13,11 +13,13 @@ from .enums import (
     NotificationEvent,
     NotificationStatus,
     NotificationTarget,
+    OcrParseStatus,
     OfficialRaceStatus,
     PresetSource,
     RegistrationStatus,
     SeasonStatus,
     Surface,
+    UploadPurpose,
 )
 from .notifications import DiscordNotificationAttempt
 from .official_races import (
@@ -29,6 +31,7 @@ from .presets import RacePreset
 from .profiles import UserProfile
 from .seasons import Season
 from .uma_character import UmaCharacter
+from .uploads import OcrParseAttempt, UploadedImage
 from .users import Role, User
 
 __all__ = [
@@ -45,6 +48,8 @@ __all__ = [
     "NotificationEvent",
     "NotificationStatus",
     "NotificationTarget",
+    "OcrParseAttempt",
+    "OcrParseStatus",
     "OfficialRace",
     "OfficialRaceRegistration",
     "OfficialRaceResult",
@@ -57,6 +62,8 @@ __all__ = [
     "SeasonStatus",
     "Surface",
     "UmaCharacter",
+    "UploadPurpose",
+    "UploadedImage",
     "User",
     "UserProfile",
 ]

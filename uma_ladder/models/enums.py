@@ -99,6 +99,18 @@ class NotificationTarget(StrEnum):
     FALLBACK = "fallback"
 
 
+class UploadPurpose(StrEnum):
+    OCR_RESULT = "ocr_result"
+    OTHER = "other"
+
+
+class OcrParseStatus(StrEnum):
+    PENDING = "pending"
+    PARSED = "parsed"
+    FAILED = "failed"
+    CONFIRMED = "confirmed"
+
+
 # Canonical venues mentioned in the appendix. Used to validate ban inputs.
 VENUES: tuple[str, ...] = (
     "Sapporo",

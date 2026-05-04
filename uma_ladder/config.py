@@ -18,6 +18,7 @@ class BaseConfig:
     DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL: str | None = None
     DISCORD_WEBHOOK_DRAFT_RESULTS_URL: str | None = None
     DISCORD_WEBHOOK_FALLBACK_URL: str | None = None
+    OCR_PROVIDER: str = "manual"
 
 
 def _env_or_none(key: str) -> str | None:
@@ -35,6 +36,7 @@ class DevConfig(BaseConfig):
     DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL = _env_or_none("DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL")
     DISCORD_WEBHOOK_DRAFT_RESULTS_URL = _env_or_none("DISCORD_WEBHOOK_DRAFT_RESULTS_URL")
     DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
+    OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
 
 
 class TestConfig(BaseConfig):

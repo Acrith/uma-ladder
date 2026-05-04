@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}OCR · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">OCR result helper</h1>
+  <p class="text-sm text-slate-600">
+    Upload a race result screenshot. The configured OCR provider produces
+    a draft parse you can edit and confirm; the confirmed values are
+    metadata and do not write race results automatically. Type or copy the
+    confirmed placements into the appropriate official or draft result form.
+  </p>
+  {% if current_user.is_authenticated %}
+    <p class="mt-4">
+      <a class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" href="{{ url_for('ocr.upload') }}">Upload screenshot</a>
+    </p>
+  {% else %}
+    <p class="mt-4 text-sm">Log in to upload.</p>
+  {% endif %}
+{% endblock %}
