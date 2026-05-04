@@ -8,8 +8,10 @@ from flask.cli import AppGroup
 
 from .services.fetch_gametora import (
     fetch_characters,
+    fetch_g1_races,
     fetch_outfits,
     write_characters_snapshot,
+    write_g1_races_snapshot,
     write_outfits_snapshot,
 )
 from .services.seed_characters import DEFAULT_SEED_PATH as DEFAULT_CHARACTER_SEED_PATH
@@ -193,6 +195,29 @@ def cmd_seed_outfits(file_path: Path | None, prune_missing: bool) -> None:
         f"pruned={report.pruned} orphaned={report.orphaned} "
         f"total={report.total}"
     )
+
+
+@uma_cli.command("fetch-gametora-g1-races")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output JSON path. Defaults to data/seeds/g1_races.json.",
+)
+def cmd_fetch_gametora_g1_races(out_path: Path | None) -> None:
+    """One-off: fetch the full G1 race list from GameTora.
+
+    Writes a snapshot in the same shape `import-g1-races` consumes,
+    filtered to G1 grade and JRA / Oi venues (foreign races skipped).
+    """
+    from .services.seed_g1 import DEFAULT_SEED_PATH as DEFAULT_G1_SEED_PATH
+
+    target = out_path or DEFAULT_G1_SEED_PATH
+    click.echo(f"fetch-gametora-g1-races: writing to {target}")
+    rows = fetch_g1_races()
+    write_g1_races_snapshot(rows, target)
+    click.echo(f"fetch-gametora-g1-races: wrote {len(rows)} G1 races")
 
 
 def register_cli(app: Flask) -> None:

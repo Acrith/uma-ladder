@@ -286,8 +286,21 @@ def feasible_track_ban_options(
         min_max_runners=min_runners,
     )
 
+    # Direction is a binary axis (Left ↔ Right) for game-aptitude purposes.
+    # If the opponent already banned a direction, the current player can't
+    # also ban a direction — even if "Stretch" / "Straight" presets keep the
+    # pool non-empty, banning both directions makes no game sense.
+    opp_banned_direction = any(
+        b.ban_type == DraftBanType.DIRECTION and b.condition_key
+        and b.condition_key != _SKIP_SENTINEL
+        for b in opponent_track_rows
+    )
+
     out: dict[str, list[str]] = {}
     for ban_type, values in static_options.items():
+        if ban_type == DraftBanType.DIRECTION and opp_banned_direction:
+            out[ban_type] = []
+            continue
         kept: list[str] = []
         for v in values:
             candidate = _add_to_bans(base_bans, ban_type, v)
@@ -343,6 +356,18 @@ def submit_track_ban(
             b for b in rows
             if b.user_id != user_id and b.ban_type in _TRACK_BAN_TYPES
         ]
+        # Direction is binary; reject a second direction ban from the
+        # opposite player even if the pool would survive (Straight/Stretch
+        # presets exist in the data but don't represent real game tracks).
+        if ban_type == DraftBanType.DIRECTION and any(
+            b.ban_type == DraftBanType.DIRECTION
+            and b.condition_key
+            and b.condition_key != _SKIP_SENTINEL
+            for b in opp_rows
+        ):
+            raise BanWouldEmptyPoolError(
+                "direction is already banned by the opponent"
+            )
         base_bans = _bans_from_rows(opp_rows)
         candidate_bans = _add_to_bans(base_bans, ban_type, key)
         pool_presets = list(db.session.scalars(select(RacePreset)))

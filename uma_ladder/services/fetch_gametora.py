@@ -314,6 +314,183 @@ def write_characters_snapshot(
     )
 
 
+# ---------- G1 race fetcher ----------
+
+# Track id → venue. Mapping derived from cross-referencing GameTora's
+# /data/umamusume/races.<v>.json against the i18n strings in chunk
+# 2573 (which lists racetrack names in this order). Foreign venues
+# (Longchamp, Santa Anita, Del Mar) are intentionally omitted: our
+# `VENUES` enum only covers JRA + Oi, which matches the racetracks
+# Uma Ladder's user community actually uses.
+G1_TRACK_ID_TO_VENUE: dict[int, str] = {
+    10001: "Sapporo",
+    10002: "Hakodate",
+    10003: "Niigata",
+    10004: "Fukushima",
+    10005: "Nakayama",
+    10006: "Tokyo",
+    10007: "Chukyo",
+    10008: "Kyoto",
+    10009: "Hanshin",
+    10010: "Kokura",
+    10101: "Oi",
+}
+
+# direction (1/2) → enum value. The values 3/4 ("Straight"/"Stretch") don't
+# appear in upstream G1 data; they only exist on the custom-race appendix.
+G1_DIRECTION_MAP: dict[int, str] = {1: "Right", 2: "Left"}
+
+# terrain 1/2 → surface enum value.
+G1_TERRAIN_MAP: dict[int, str] = {1: "Turf", 2: "Dirt"}
+
+
+def _distance_category(meters: int) -> str:
+    """Standard Uma category buckets: Sprint ≤1400, Mile ≤1800,
+    Medium ≤2400, Long otherwise."""
+    if meters <= 1400:
+        return "Sprint"
+    if meters <= 1800:
+        return "Mile"
+    if meters <= 2400:
+        return "Medium"
+    return "Long"
+
+
+@dataclass(frozen=True)
+class FetchedG1Race:
+    name_en: str
+    name_jp: str | None
+    venue: str
+    surface: str
+    distance_meters: int
+    distance_category: str
+    direction: str
+    max_runners: int
+    profile_url: str | None
+
+    def to_seed_row(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "name": self.name_en,
+            "grade": "G1",
+            "venue": self.venue,
+            "surface": self.surface,
+            "distance_meters": self.distance_meters,
+            "distance_category": self.distance_category,
+            "direction": self.direction,
+            "course_variant": None,
+            "max_runners": self.max_runners,
+        }
+        if self.profile_url:
+            out["external_source_url"] = self.profile_url
+        return out
+
+
+def _coerce_g1(raw: dict[str, Any]) -> FetchedG1Race | None:
+    if raw.get("grade") != 100:
+        return None
+    track_id = raw.get("track")
+    venue = G1_TRACK_ID_TO_VENUE.get(track_id) if isinstance(track_id, int) else None
+    if venue is None:
+        # Unknown / foreign venue — skip rather than guess.
+        return None
+    direction = G1_DIRECTION_MAP.get(raw.get("direction"))
+    terrain = G1_TERRAIN_MAP.get(raw.get("terrain"))
+    distance = raw.get("distance")
+    if direction is None or terrain is None or not isinstance(distance, int):
+        return None
+    name_en = raw.get("name_en") or raw.get("name_jp")
+    if not name_en:
+        return None
+    max_runners = raw.get("entries") or 18
+    if not isinstance(max_runners, int) or max_runners <= 0:
+        max_runners = 18
+    url_name = raw.get("url_name")
+    profile_url = (
+        f"{GAMETORA_BASE}/umamusume/races/{url_name}" if url_name else None
+    )
+    return FetchedG1Race(
+        name_en=name_en,
+        name_jp=raw.get("name_jp"),
+        venue=venue,
+        surface=terrain,
+        distance_meters=distance,
+        distance_category=_distance_category(distance),
+        direction=direction,
+        max_runners=max_runners,
+        profile_url=profile_url,
+    )
+
+
+def fetch_g1_races(
+    transport: GameToraTransport | None = None,
+    *,
+    delay_seconds: float = DELAY_SECONDS,
+) -> list[FetchedG1Race]:
+    """Fetch the upstream race list and reduce it to G1s on supported
+    venues. Foreign-venue G1s (Arc de Triomphe, etc.) are filtered out."""
+    t = transport or UrllibGameToraTransport()
+    manifest = _get_json(t, f"{GAMETORA_BASE}/data/manifests/umamusume.json")
+    version = manifest.get("races")
+    if not isinstance(version, str) or not version:
+        raise GameToraError(
+            "manifest missing 'races' key — upstream layout may have changed"
+        )
+
+    if delay_seconds:
+        time.sleep(delay_seconds)
+
+    raw = _get_json(t, f"{GAMETORA_BASE}/data/umamusume/races.{version}.json")
+    if not isinstance(raw, list):
+        raise GameToraError("races payload is not a list")
+
+    out: list[FetchedG1Race] = []
+    seen: set[tuple[str, str, int, str]] = set()  # natural-key dedupe
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        coerced = _coerce_g1(row)
+        if coerced is None:
+            continue
+        # Some races have multiple instances per year (Sprinters Stakes
+        # at Nakayama + Niigata) — dedupe by natural key.
+        key = (
+            coerced.venue,
+            coerced.surface,
+            coerced.distance_meters,
+            coerced.direction,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(coerced)
+
+    out.sort(key=lambda g: (g.venue, g.distance_meters, g.name_en))
+    return out
+
+
+def write_g1_races_snapshot(
+    races: Sequence[FetchedG1Race],
+    out_path: Path,
+    *,
+    source_label: str = "gametora_v1",
+) -> None:
+    payload: dict[str, Any] = {
+        "source": source_label,
+        "attribution": (
+            "Race data sourced from GameTora "
+            "(https://gametora.com/umamusume/races); not affiliated with "
+            "Cygames. Maintain attribution when redistributing."
+        ),
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "races": [g.to_seed_row() for g in races],
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 # ---------- Outfit fetcher ----------
 
 

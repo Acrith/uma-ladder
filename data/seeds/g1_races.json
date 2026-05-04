@@ -1,31 +1,127 @@
 {
-  "source": "gametora_g1_snapshot_v0",
+  "source": "gametora_v1",
   "attribution": "Race data sourced from GameTora (https://gametora.com/umamusume/races); not affiliated with Cygames. Maintain attribution when redistributing.",
-  "imported_at": null,
+  "fetched_at": "2026-05-04T21:37:38.453748+00:00",
   "races": [
     {
-      "name": "Tokyo Yushun (Japanese Derby)",
+      "name": "Takamatsunomiya Kinen",
       "grade": "G1",
-      "venue": "Tokyo",
+      "venue": "Chukyo",
       "surface": "Turf",
-      "distance_meters": 2400,
-      "distance_category": "Medium",
+      "distance_meters": 1200,
+      "distance_category": "Sprint",
       "direction": "Left",
       "course_variant": null,
       "max_runners": 18,
-      "external_source_url": "https://gametora.com/umamusume/races"
+      "external_source_url": "https://gametora.com/umamusume/races/takamatsunomiya-kinen"
     },
     {
-      "name": "Arima Kinen",
+      "name": "Champions Cup",
       "grade": "G1",
-      "venue": "Nakayama",
+      "venue": "Chukyo",
+      "surface": "Dirt",
+      "distance_meters": 1800,
+      "distance_category": "Mile",
+      "direction": "Left",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/champions-cup"
+    },
+    {
+      "name": "Oka Sho",
+      "grade": "G1",
+      "venue": "Hanshin",
       "surface": "Turf",
-      "distance_meters": 2500,
+      "distance_meters": 1600,
+      "distance_category": "Mile",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/oka-sho"
+    },
+    {
+      "name": "Osaka Hai",
+      "grade": "G1",
+      "venue": "Hanshin",
+      "surface": "Turf",
+      "distance_meters": 2000,
+      "distance_category": "Medium",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/osaka-hai"
+    },
+    {
+      "name": "Takarazuka Kinen",
+      "grade": "G1",
+      "venue": "Hanshin",
+      "surface": "Turf",
+      "distance_meters": 2200,
+      "distance_category": "Medium",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/takarazuka-kinen"
+    },
+    {
+      "name": "Tenno Sho (Spring)",
+      "grade": "G1",
+      "venue": "Hanshin",
+      "surface": "Turf",
+      "distance_meters": 3200,
       "distance_category": "Long",
       "direction": "Right",
-      "course_variant": "Inner",
-      "max_runners": 16,
-      "external_source_url": "https://gametora.com/umamusume/races"
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/tenno-sho-spring"
+    },
+    {
+      "name": "Mile Championship",
+      "grade": "G1",
+      "venue": "Kyoto",
+      "surface": "Turf",
+      "distance_meters": 1600,
+      "distance_category": "Mile",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/mile-championship"
+    },
+    {
+      "name": "Shuka Sho",
+      "grade": "G1",
+      "venue": "Kyoto",
+      "surface": "Turf",
+      "distance_meters": 2000,
+      "distance_category": "Medium",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/shuuka-sho"
+    },
+    {
+      "name": "Queen Elizabeth II Cup",
+      "grade": "G1",
+      "venue": "Kyoto",
+      "surface": "Turf",
+      "distance_meters": 2200,
+      "distance_category": "Medium",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/queen-elizabeth-cup"
+    },
+    {
+      "name": "Kikuka Sho",
+      "grade": "G1",
+      "venue": "Kyoto",
+      "surface": "Turf",
+      "distance_meters": 3000,
+      "distance_category": "Long",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/kikka-sho"
     },
     {
       "name": "Tenno Sho (Spring)",
@@ -35,9 +131,129 @@
       "distance_meters": 3200,
       "distance_category": "Long",
       "direction": "Right",
-      "course_variant": "Outer",
+      "course_variant": null,
       "max_runners": 18,
-      "external_source_url": "https://gametora.com/umamusume/races"
+      "external_source_url": "https://gametora.com/umamusume/races/tenno-sho-spring"
+    },
+    {
+      "name": "Sprinters Stakes",
+      "grade": "G1",
+      "venue": "Nakayama",
+      "surface": "Turf",
+      "distance_meters": 1200,
+      "distance_category": "Sprint",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/sprinters-stakes"
+    },
+    {
+      "name": "Satsuki Sho",
+      "grade": "G1",
+      "venue": "Nakayama",
+      "surface": "Turf",
+      "distance_meters": 2000,
+      "distance_category": "Medium",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/satsuki-sho"
+    },
+    {
+      "name": "Japan Cup",
+      "grade": "G1",
+      "venue": "Nakayama",
+      "surface": "Turf",
+      "distance_meters": 2200,
+      "distance_category": "Medium",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/japan-cup"
+    },
+    {
+      "name": "Arima Kinen",
+      "grade": "G1",
+      "venue": "Nakayama",
+      "surface": "Turf",
+      "distance_meters": 2500,
+      "distance_category": "Long",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/arima-kinen"
+    },
+    {
+      "name": "Sprinters Stakes",
+      "grade": "G1",
+      "venue": "Niigata",
+      "surface": "Turf",
+      "distance_meters": 1200,
+      "distance_category": "Sprint",
+      "direction": "Left",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/sprinters-stakes"
+    },
+    {
+      "name": "JBC Sprint",
+      "grade": "G1",
+      "venue": "Oi",
+      "surface": "Dirt",
+      "distance_meters": 1200,
+      "distance_category": "Sprint",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/jbc-sprint"
+    },
+    {
+      "name": "JBC Ladies’ Classic",
+      "grade": "G1",
+      "venue": "Oi",
+      "surface": "Dirt",
+      "distance_meters": 1800,
+      "distance_category": "Mile",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/jbc-ladies-classic"
+    },
+    {
+      "name": "Teio Sho",
+      "grade": "G1",
+      "venue": "Oi",
+      "surface": "Dirt",
+      "distance_meters": 2000,
+      "distance_category": "Medium",
+      "direction": "Right",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/teio-sho"
+    },
+    {
+      "name": "February Stakes",
+      "grade": "G1",
+      "venue": "Tokyo",
+      "surface": "Dirt",
+      "distance_meters": 1600,
+      "distance_category": "Mile",
+      "direction": "Left",
+      "course_variant": null,
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races/february-stakes"
+    },
+    {
+      "name": "NHK Mile Cup",
+      "grade": "G1",
+      "venue": "Tokyo",
+      "surface": "Turf",
+      "distance_meters": 1600,
+      "distance_category": "Mile",
+      "direction": "Left",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races/nhk-mile-cup"
     },
     {
       "name": "Tenno Sho (Autumn)",
@@ -49,19 +265,19 @@
       "direction": "Left",
       "course_variant": null,
       "max_runners": 18,
-      "external_source_url": "https://gametora.com/umamusume/races"
+      "external_source_url": "https://gametora.com/umamusume/races/tenno-sho-autumn"
     },
     {
-      "name": "Yasuda Kinen",
+      "name": "Japanese Oaks",
       "grade": "G1",
       "venue": "Tokyo",
       "surface": "Turf",
-      "distance_meters": 1600,
-      "distance_category": "Mile",
+      "distance_meters": 2400,
+      "distance_category": "Medium",
       "direction": "Left",
       "course_variant": null,
       "max_runners": 18,
-      "external_source_url": "https://gametora.com/umamusume/races"
+      "external_source_url": "https://gametora.com/umamusume/races/oaks"
     }
   ]
 }
