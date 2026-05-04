@@ -223,6 +223,27 @@ uploaded screenshot in dev.
 
 ---
 
+## OCR refinements (deferred until after deploy + real usage)
+
+Future PRs once the product itself is stable and real screenshots
+reveal where the human bottleneck actually is:
+
+- **Layout templates + cropping** — define screenshot-relative regions
+  (placement / name / stats columns), crop before calling Vision, merge
+  per-region results. Replaces the naive Y-cluster + X-sort heuristic.
+- **Dictionary matching** — fuzzy-match OCR'd names against the seeded
+  `UmaCharacter` table (`name_en` and `name_jp`) so transcription noise
+  is corrected automatically.
+- **Stats parsing** — Speed/Stamina/Power/Guts/Wit extraction from the
+  stats grid.
+- **Auto-fill button** — post a confirmed parse directly into the
+  appropriate `submit_results` endpoint as a pre-filled form.
+
+Intentionally postponed: keep PR 10 focused on shipping the product,
+then iterate on OCR ergonomics from real-usage feedback.
+
+---
+
 ## PR 10 — Polish, Dockerfile, Fly deploy, Tailwind build (Milestone 8)
 
 Scope:

@@ -20,6 +20,10 @@ class BaseConfig:
     DISCORD_WEBHOOK_FALLBACK_URL: str | None = None
     OCR_PROVIDER: str = "manual"
     GOOGLE_VISION_API_KEY: str | None = None
+    # Set to True in production where Tailwind has been built into
+    # uma_ladder/static/css/output.css. Dev defaults to False so the CDN
+    # fallback in base.html avoids a build step on every reload.
+    TAILWIND_BUILT: bool = False
 
 
 def _env_or_none(key: str) -> str | None:
@@ -39,6 +43,7 @@ class DevConfig(BaseConfig):
     DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
     OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
     GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
+    TAILWIND_BUILT = os.environ.get("TAILWIND_BUILT", "").lower() in ("1", "true", "yes")
 
 
 class TestConfig(BaseConfig):
@@ -71,6 +76,11 @@ class ProdConfig(BaseConfig):
         cls.DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
         cls.OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
         cls.GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
+        cls.TAILWIND_BUILT = os.environ.get("TAILWIND_BUILT", "1").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
         return cls
 
 

@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from flask import Flask
+
+from uma_ladder.extensions import db
+from uma_ladder.models import RacePreset
+from uma_ladder.models.enums import PresetSource
+from uma_ladder.services.seed_g1 import G1ImportError, import_g1_races
+
+
+def _seed(tmp_path: Path, races: list[dict], name: str = "g1.json") -> Path:
+    p = tmp_path / name
+    p.write_text(json.dumps({"races": races}), encoding="utf-8")
+    return p
+
+
+def _row(**overrides) -> dict:
+    base = {
+        "name": "Tokyo Yushun",
+        "grade": "G1",
+        "venue": "Tokyo",
+        "surface": "Turf",
+        "distance_meters": 2400,
+        "distance_category": "Medium",
+        "direction": "Left",
+        "course_variant": None,
+        "max_runners": 18,
+        "external_source_url": "https://gametora.com/umamusume/races",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_inserts_then_skips(app: Flask, tmp_path: Path) -> None:
+    src = _seed(tmp_path, [_row(), _row(name="Arima Kinen", venue="Nakayama", direction="Right", course_variant="Inner", distance_meters=2500, distance_category="Long", max_runners=16)])
+    with app.app_context():
+        first = import_g1_races(src)
+        assert (first.inserted, first.updated, first.skipped) == (2, 0, 0)
+        second = import_g1_races(src)
+        assert (second.inserted, second.updated, second.skipped) == (0, 0, 2)
+        rows = db.session.query(RacePreset).all()
+        assert len(rows) == 2
+        assert all(r.source == PresetSource.G1_IMPORT for r in rows)
+        assert all(r.grade == "G1" for r in rows)
+
+
+def test_updates_changed_max_runners(app: Flask, tmp_path: Path) -> None:
+    a = _seed(tmp_path, [_row(max_runners=18)], name="a.json")
+    b = _seed(tmp_path, [_row(max_runners=14)], name="b.json")
+    with app.app_context():
+        import_g1_races(a)
+        report = import_g1_races(b)
+        assert report.updated == 1
+        row = db.session.query(RacePreset).first()
+        assert row.max_runners == 14
+
+
+def test_default_snapshot_loads(app: Flask) -> None:
+    with app.app_context():
+        report = import_g1_races()
+        assert report.total > 0
+
+
+def test_rejects_unknown_venue(app: Flask, tmp_path: Path) -> None:
+    src = _seed(tmp_path, [_row(venue="Mars")])
+    with app.app_context(), pytest.raises(G1ImportError) as exc:
+        import_g1_races(src)
+    assert "Mars" in str(exc.value)
+
+
+def test_rejects_missing_field(app: Flask, tmp_path: Path) -> None:
+    bad = _row()
+    del bad["max_runners"]
+    src = _seed(tmp_path, [bad])
+    with app.app_context(), pytest.raises(G1ImportError) as exc:
+        import_g1_races(src)
+    assert "max_runners" in str(exc.value)
+
+
+def test_rejects_non_int_distance(app: Flask, tmp_path: Path) -> None:
+    src = _seed(tmp_path, [_row(distance_meters="2400")])
+    with app.app_context(), pytest.raises(G1ImportError):
+        import_g1_races(src)
+
+
+def test_rejects_unknown_surface(app: Flask, tmp_path: Path) -> None:
+    src = _seed(tmp_path, [_row(surface="Sand")])
+    with app.app_context(), pytest.raises(G1ImportError):
+        import_g1_races(src)
+
+
+def test_g1_and_custom_can_coexist(app: Flask, tmp_path: Path) -> None:
+    """A G1 import does not collide with a same-natural-key custom preset."""
+    with app.app_context():
+        # custom preset at the same natural key
+        db.session.add(
+            RacePreset(
+                source=PresetSource.CUSTOM_BUILTIN,
+                name="Tokyo Turf 2400m custom",
+                venue="Tokyo",
+                surface="Turf",
+                distance_meters=2400,
+                distance_category="Medium",
+                direction="Left",
+                course_variant=None,
+                max_runners=18,
+                enabled=True,
+            )
+        )
+        db.session.commit()
+        src = _seed(tmp_path, [_row()])
+        # Same natural key → updates the existing row in place; we accept this
+        # for MVP because the unique constraint makes coexistence impossible.
+        # The G1 import wins (overwrites name + grade + source).
+        report = import_g1_races(src)
+        assert report.updated == 1
+        row = db.session.query(RacePreset).one()
+        assert row.source == PresetSource.G1_IMPORT
+        assert row.grade == "G1"

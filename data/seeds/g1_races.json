@@ -1,0 +1,67 @@
+{
+  "source": "gametora_g1_snapshot_v0",
+  "attribution": "Race data sourced from GameTora (https://gametora.com/umamusume/races); not affiliated with Cygames. Maintain attribution when redistributing.",
+  "imported_at": null,
+  "races": [
+    {
+      "name": "Tokyo Yushun (Japanese Derby)",
+      "grade": "G1",
+      "venue": "Tokyo",
+      "surface": "Turf",
+      "distance_meters": 2400,
+      "distance_category": "Medium",
+      "direction": "Left",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races"
+    },
+    {
+      "name": "Arima Kinen",
+      "grade": "G1",
+      "venue": "Nakayama",
+      "surface": "Turf",
+      "distance_meters": 2500,
+      "distance_category": "Long",
+      "direction": "Right",
+      "course_variant": "Inner",
+      "max_runners": 16,
+      "external_source_url": "https://gametora.com/umamusume/races"
+    },
+    {
+      "name": "Tenno Sho (Spring)",
+      "grade": "G1",
+      "venue": "Kyoto",
+      "surface": "Turf",
+      "distance_meters": 3200,
+      "distance_category": "Long",
+      "direction": "Right",
+      "course_variant": "Outer",
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races"
+    },
+    {
+      "name": "Tenno Sho (Autumn)",
+      "grade": "G1",
+      "venue": "Tokyo",
+      "surface": "Turf",
+      "distance_meters": 2000,
+      "distance_category": "Medium",
+      "direction": "Left",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races"
+    },
+    {
+      "name": "Yasuda Kinen",
+      "grade": "G1",
+      "venue": "Tokyo",
+      "surface": "Turf",
+      "distance_meters": 1600,
+      "distance_category": "Mile",
+      "direction": "Left",
+      "course_variant": null,
+      "max_runners": 18,
+      "external_source_url": "https://gametora.com/umamusume/races"
+    }
+  ]
+}

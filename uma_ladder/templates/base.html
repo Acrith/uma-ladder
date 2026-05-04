@@ -5,12 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}Uma Ladder{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    {% if config.DEBUG and not config.TAILWIND_BUILT %}
+      {# Dev fallback: CDN Tailwind so reloads don't require a rebuild. #}
+      <script src="https://cdn.tailwindcss.com"></script>
+    {% else %}
+      <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}" />
+    {% endif %}
   </head>
   <body class="min-h-screen bg-slate-50 text-slate-900">
     <header class="border-b bg-white">
-      <div class="mx-auto max-w-5xl px-4 py-3">
-        <a href="/" class="text-lg font-semibold">Uma Ladder</a>
+      <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
+        <a href="{{ url_for('dashboard.index') }}" class="text-lg font-semibold">Uma Ladder</a>
+        <nav class="flex items-center gap-4 text-sm">
+          <a href="{{ url_for('official.index') }}" class="hover:underline">Official</a>
+          <a href="{{ url_for('draft.index') }}" class="hover:underline">Draft</a>
+          <a href="{{ url_for('presets.index') }}" class="hover:underline">Presets</a>
+          {% if current_user.is_authenticated %}
+            <a href="{{ url_for('profiles.me') }}" class="hover:underline">{{ current_user.username }}</a>
+            <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" class="rounded bg-slate-200 px-2 py-1 text-xs hover:bg-slate-300">Log out</button>
+            </form>
+          {% else %}
+            <a href="{{ url_for('auth.login') }}" class="hover:underline">Log in</a>
+            <a href="{{ url_for('auth.register') }}" class="rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-700">Register</a>
+          {% endif %}
+        </nav>
       </div>
     </header>
     <main class="mx-auto max-w-5xl px-4 py-6">
