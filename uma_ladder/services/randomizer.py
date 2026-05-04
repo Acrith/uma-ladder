@@ -49,7 +49,11 @@ class RandomizerError(Exception):
 
 
 def filter_presets(
-    presets: Iterable[RacePreset], pool: str, bans: Bans
+    presets: Iterable[RacePreset],
+    pool: str,
+    bans: Bans,
+    *,
+    min_max_runners: int = 0,
 ) -> list[RacePreset]:
     sources = _POOL_SOURCES.get(pool)
     if sources is None:
@@ -59,6 +63,8 @@ def filter_presets(
         if not p.enabled:
             continue
         if p.source not in sources:
+            continue
+        if p.max_runners < min_max_runners:
             continue
         if p.venue in bans.venues:
             continue
@@ -77,10 +83,14 @@ def pick_preset(
     pool: str,
     bans: Bans,
     rng: random.Random | None = None,
+    *,
+    min_max_runners: int = 0,
 ) -> RacePreset:
-    candidates = filter_presets(presets, pool, bans)
+    candidates = filter_presets(presets, pool, bans, min_max_runners=min_max_runners)
     if not candidates:
         eliminated = []
+        if min_max_runners:
+            eliminated.append(f"min_max_runners={min_max_runners}")
         if bans.venues:
             eliminated.append(f"venues={sorted(bans.venues)}")
         if bans.directions:

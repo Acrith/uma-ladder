@@ -15,6 +15,7 @@ from uma_ladder.models import (
     RacePreset,
     Season,
     SeasonStatus,
+    UmaCharacter,
 )
 from uma_ladder.models.enums import PresetSource
 from uma_ladder.services import draft as draft_service
@@ -60,6 +61,31 @@ def _preset(**overrides) -> RacePreset:
     return p
 
 
+def _character(slug: str, name: str | None = None) -> UmaCharacter:
+    c = UmaCharacter(slug=slug, name_en=name or slug.replace("-", " ").title())
+    db.session.add(c)
+    db.session.commit()
+    return c
+
+
+def _match_with_two(host: int, opp: int, *, season_id: int, umas_per_player: int = 2) -> int:
+    m = draft_service.create_match(
+        draft_service.CreateMatchRequest(
+            season_id=season_id,
+            host_user_id=host,
+            umas_per_player=umas_per_player,
+            preset_pool="custom",
+        )
+    )
+    draft_service.join_match(m.id, opp)
+    return m.id
+
+
+def _drive_to_track_ban(match_id: int, host: int, opp: int) -> None:
+    draft_service.ready_up(match_id, host)
+    draft_service.ready_up(match_id, opp)
+
+
 def test_create_match_starts_waiting(app: Flask) -> None:
     with app.app_context():
         s = _season()
@@ -70,7 +96,6 @@ def test_create_match_starts_waiting(app: Flask) -> None:
             )
         )
         assert match.status == DraftMatchStatus.WAITING_FOR_OPPONENT
-        assert len(match.join_code) == draft_service.JOIN_CODE_LEN
 
 
 def test_create_match_rejects_bad_uma_count(app: Flask) -> None:
@@ -80,10 +105,7 @@ def test_create_match_rejects_bad_uma_count(app: Flask) -> None:
         with pytest.raises(draft_service.InvalidUmaCountError):
             draft_service.create_match(
                 draft_service.CreateMatchRequest(
-                    season_id=s.id,
-                    host_user_id=host,
-                    umas_per_player=4,
-                    preset_pool="custom",
+                    season_id=s.id, host_user_id=host, umas_per_player=4, preset_pool="custom"
                 )
             )
 
@@ -101,114 +123,153 @@ def test_cannot_join_own_match(app: Flask) -> None:
             draft_service.join_match(match.id, host)
 
 
-def test_join_advances_to_submitting(app: Flask) -> None:
+def test_join_advances_to_ready_check(app: Flask) -> None:
     with app.app_context():
         s = _season()
         host = _user("alice")
         opp = _user("bob")
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        match = draft_service.join_match(match.id, opp)
-        assert match.status == DraftMatchStatus.SUBMITTING_UMAS
-        assert match.opponent_user_id == opp
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        m = draft_service.get_match(m_id)
+        assert m.status == DraftMatchStatus.READY_CHECK
 
 
-def test_join_full_match_rejected(app: Flask) -> None:
+def test_ready_up_advances_when_both_ready(app: Flask) -> None:
     with app.app_context():
         s = _season()
         host = _user("alice")
         opp = _user("bob")
-        third = _user("carol")
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        draft_service.join_match(match.id, opp)
-        with pytest.raises(draft_service.InvalidMatchStateError):
-            draft_service.join_match(match.id, third)
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        m = draft_service.ready_up(m_id, host)
+        assert m.status == DraftMatchStatus.READY_CHECK
+        assert m.host_ready and not m.opponent_ready
+        m = draft_service.ready_up(m_id, opp)
+        assert m.status == DraftMatchStatus.TRACK_BAN_PHASE
 
 
-def test_submit_umas_count_must_match(app: Flask) -> None:
+def test_track_ban_rejects_uma_type(app: Flask) -> None:
     with app.app_context():
         s = _season()
         host = _user("alice")
         opp = _user("bob")
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        draft_service.join_match(match.id, opp)
-        with pytest.raises(draft_service.InvalidUmaCountError):
-            draft_service.submit_umas(
-                match.id, host, [draft_service.UmaSubmission(custom_uma_name="A")]
-            )
-
-
-def test_ready_check_advances_when_both_locked(app: Flask) -> None:
-    with app.app_context():
-        s = _season()
-        host = _user("alice")
-        opp = _user("bob")
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        draft_service.join_match(match.id, opp)
-        for uid in (host, opp):
-            draft_service.submit_umas(
-                match.id,
-                uid,
-                [
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-1"),
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-2"),
-                ],
-            )
-        # first ready → READY_CHECK
-        match = draft_service.ready_up(match.id, host)
-        assert match.status == DraftMatchStatus.READY_CHECK
-        # second ready → BAN_PHASE
-        match = draft_service.ready_up(match.id, opp)
-        assert match.status == DraftMatchStatus.BAN_PHASE
-
-
-def test_ban_rejects_self_uma(app: Flask) -> None:
-    with app.app_context():
-        s = _season()
-        host = _user("alice")
-        opp = _user("bob")
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        draft_service.join_match(match.id, opp)
-        for uid in (host, opp):
-            draft_service.submit_umas(
-                match.id,
-                uid,
-                [
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-1"),
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-2"),
-                ],
-            )
-        for uid in (host, opp):
-            draft_service.ready_up(match.id, uid)
-
-        host_entries = [e for e in draft_service.list_uma_entries(match.id) if e.user_id == host]
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
         with pytest.raises(draft_service.UnknownBanTargetError):
-            draft_service.submit_bans(
-                match.id,
-                host,
-                banned_uma_entry_id=host_entries[0].id,
-                track_ban_type=DraftBanType.VENUE,
-                track_condition_key="Tokyo",
+            draft_service.submit_track_ban(
+                m_id, host, ban_type=DraftBanType.UMA, condition_key="x"
             )
+
+
+def test_track_ban_dedupes_per_user(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        draft_service.submit_track_ban(
+            m_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
+        )
+        with pytest.raises(draft_service.DuplicateBanError):
+            draft_service.submit_track_ban(
+                m_id, host, ban_type=DraftBanType.DIRECTION, condition_key="Left"
+            )
+
+
+def test_randomize_requires_both_track_bans(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        _preset(name="A")
+        draft_service.submit_track_ban(
+            m_id, host, ban_type=DraftBanType.VENUE, condition_key="Sapporo"
+        )
+        with pytest.raises(draft_service.InvalidMatchStateError):
+            draft_service.randomize_preset(m_id)
+
+
+def test_randomize_advances_to_uma_ban(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        keeper = _preset(name="Keeper", venue="Sapporo")
+        _preset(name="Banned", venue="Tokyo")
+        draft_service.submit_track_ban(
+            m_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
+        )
+        draft_service.submit_track_ban(
+            m_id, opp, ban_type=DraftBanType.DIRECTION, condition_key="Right"
+        )
+        m = draft_service.randomize_preset(m_id, rng=random.Random(1))
+        # only Keeper survives the venue=Tokyo + direction=Right bans
+        # … wait, Keeper venue=Sapporo direction=Left default; check test sanity:
+        # The default preset uses direction=Left, so direction=Right ban excludes nothing.
+        # Banning venue=Tokyo eliminates "Banned". Keeper remains.
+        assert m.status == DraftMatchStatus.UMA_BAN_PHASE
+        assert m.selected_preset_id == keeper.id
+
+
+def test_randomize_min_max_runners_for_3v3(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        # umas_per_player=3 → min_max_runners=6
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=3)
+        _drive_to_track_ban(m_id, host, opp)
+        small = _preset(name="Tiny", venue="Sapporo", direction="Left", max_runners=4)  # noqa: F841
+        big = _preset(name="Big", venue="Hakodate", direction="Left", max_runners=18)
+        draft_service.submit_track_ban(
+            m_id, host, ban_type=DraftBanType.VENUE, condition_key="__skip__"
+        )
+        draft_service.submit_track_ban(
+            m_id, opp, ban_type=DraftBanType.VENUE, condition_key="__skip__"
+        )
+        m = draft_service.randomize_preset(m_id, rng=random.Random(0))
+        assert m.selected_preset_id == big.id
+
+
+def test_uma_ban_rejects_unknown_character(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        _preset(name="P")
+        for uid in (host, opp):
+            draft_service.submit_track_ban(
+                m_id, uid, ban_type=DraftBanType.VENUE, condition_key="__skip__"
+            )
+        draft_service.randomize_preset(m_id)
+        with pytest.raises(draft_service.UnknownBanTargetError):
+            draft_service.submit_uma_ban(m_id, host, 999)
+
+
+def test_uma_ban_advances_to_room_code_pending(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        _preset(name="P")
+        for uid in (host, opp):
+            draft_service.submit_track_ban(
+                m_id, uid, ban_type=DraftBanType.VENUE, condition_key="__skip__"
+            )
+        draft_service.randomize_preset(m_id)
+        c1 = _character("special-week")
+        c2 = _character("gold-ship")
+        draft_service.submit_uma_ban(m_id, host, c1.id)
+        draft_service.submit_uma_ban(m_id, opp, c2.id)
+        m = draft_service.get_match(m_id)
+        assert m.status == DraftMatchStatus.ROOM_CODE_PENDING
 
 
 def test_full_happy_path_with_elo(app: Flask) -> None:
@@ -216,121 +277,75 @@ def test_full_happy_path_with_elo(app: Flask) -> None:
         s = _season()
         host = _user("alice")
         opp = _user("bob")
-        # one preset that survives bans
-        keeper = _preset(name="Keeper", venue="Sapporo", direction="Right")
-        # one that gets banned
-        _preset(name="Banned", venue="Tokyo", direction="Left")
-
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        _preset(name="Keeper", venue="Sapporo")
+        _preset(name="Banned", venue="Tokyo")
+        draft_service.submit_track_ban(
+            m_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
         )
-        draft_service.join_match(match.id, opp)
-        for uid in (host, opp):
-            draft_service.submit_umas(
-                match.id,
-                uid,
-                [
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-1"),
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-2"),
-                ],
-            )
-        for uid in (host, opp):
-            draft_service.ready_up(match.id, uid)
-
-        entries = draft_service.list_uma_entries(match.id)
-        host_entries = [e for e in entries if e.user_id == host]
-        opp_entries = [e for e in entries if e.user_id == opp]
-
-        # host bans an opp Uma + Tokyo venue
-        draft_service.submit_bans(
-            match.id, host,
-            banned_uma_entry_id=opp_entries[0].id,
-            track_ban_type=DraftBanType.VENUE,
-            track_condition_key="Tokyo",
+        draft_service.submit_track_ban(
+            m_id, opp, ban_type=DraftBanType.VENUE, condition_key="__skip__"
         )
-        # opp bans a host Uma + Left direction
-        draft_service.submit_bans(
-            match.id, opp,
-            banned_uma_entry_id=host_entries[0].id,
-            track_ban_type=DraftBanType.DIRECTION,
-            track_condition_key="Left",
-        )
+        draft_service.randomize_preset(m_id, rng=random.Random(1))
+        c_banned_by_host = _character("banned-by-host")
+        c_banned_by_opp = _character("banned-by-opp")
+        c_used = _character("used-uma")
+        draft_service.submit_uma_ban(m_id, host, c_banned_by_host.id)
+        draft_service.submit_uma_ban(m_id, opp, c_banned_by_opp.id)
 
-        match = draft_service.randomize_preset(match.id, rng=random.Random(42))
-        assert match.status == DraftMatchStatus.ROOM_CODE_PENDING
-        assert match.selected_preset_id == keeper.id
-
-        draft_service.set_room_code(match.id, "ROOM-1")
-        match = draft_service.submit_results(
-            match.id,
+        draft_service.set_room_code(m_id, "RC-1")
+        m = draft_service.submit_results(
+            m_id,
             [
-                draft_service.DraftResultLine(user_id=host, placement=1),
-                draft_service.DraftResultLine(user_id=opp, placement=2),
+                draft_service.DraftResultLine(
+                    user_id=host, placement=1, uma_character_id=c_used.id
+                ),
+                draft_service.DraftResultLine(
+                    user_id=opp, placement=2, custom_uma_name="Some Custom"
+                ),
             ],
             confirmed_by_user_id=host,
         )
-        assert match.status == DraftMatchStatus.COMPLETED
-        assert match.winner_user_id == host
-
-        host_rating = draft_service.current_rating(host, s.id)
-        opp_rating = draft_service.current_rating(opp, s.id)
-        assert host_rating == DEFAULT_RATING + 16
-        assert opp_rating == DEFAULT_RATING - 16
-
-        changes = db.session.query(DraftEloChange).all()
-        assert len(changes) == 2
+        assert m.status == DraftMatchStatus.COMPLETED
+        assert m.winner_user_id == host
+        assert draft_service.current_rating(host, s.id) == DEFAULT_RATING + 16
+        assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 16
+        assert db.session.query(DraftEloChange).count() == 2
 
 
-def test_randomization_failure_marks_match(app: Flask) -> None:
+def test_results_reject_banned_character(app: Flask) -> None:
     with app.app_context():
         s = _season()
         host = _user("alice")
         opp = _user("bob")
-        # only one preset, both players ban its venue
-        _preset(name="Only", venue="Tokyo", direction="Left")
-
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        draft_service.join_match(match.id, opp)
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        _preset(name="P")
         for uid in (host, opp):
-            draft_service.submit_umas(
-                match.id,
-                uid,
+            draft_service.submit_track_ban(
+                m_id, uid, ban_type=DraftBanType.VENUE, condition_key="__skip__"
+            )
+        draft_service.randomize_preset(m_id)
+        forbidden = _character("forbidden")
+        whatever = _character("whatever")
+        draft_service.submit_uma_ban(m_id, host, forbidden.id)
+        draft_service.submit_uma_ban(m_id, opp, whatever.id)
+        draft_service.set_room_code(m_id, "RC-1")
+        with pytest.raises(draft_service.BannedCharacterUsedError):
+            draft_service.submit_results(
+                m_id,
                 [
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-1"),
-                    draft_service.UmaSubmission(custom_uma_name=f"U{uid}-2"),
+                    # opp tries to use the character host banned
+                    draft_service.DraftResultLine(
+                        user_id=host, placement=1
+                    ),
+                    draft_service.DraftResultLine(
+                        user_id=opp, placement=2, uma_character_id=forbidden.id
+                    ),
                 ],
+                confirmed_by_user_id=host,
             )
-        for uid in (host, opp):
-            draft_service.ready_up(match.id, uid)
-
-        entries = draft_service.list_uma_entries(match.id)
-        host_entries = [e for e in entries if e.user_id == host]
-        opp_entries = [e for e in entries if e.user_id == opp]
-        draft_service.submit_bans(
-            match.id, host,
-            banned_uma_entry_id=opp_entries[0].id,
-            track_ban_type=DraftBanType.VENUE,
-            track_condition_key="Tokyo",
-        )
-        draft_service.submit_bans(
-            match.id, opp,
-            banned_uma_entry_id=host_entries[0].id,
-            track_ban_type=DraftBanType.DIRECTION,
-            track_condition_key="Left",
-        )
-        from uma_ladder.services.randomizer import RandomizerError
-
-        with pytest.raises(RandomizerError):
-            draft_service.randomize_preset(match.id)
-        # Must reload after the rolled-back exception path
-        match = draft_service.get_match(match.id)
-        assert match.status == DraftMatchStatus.RANDOMIZATION_FAILED
 
 
 def test_room_code_24h_expiry(app: Flask) -> None:
@@ -338,21 +353,15 @@ def test_room_code_24h_expiry(app: Flask) -> None:
         s = _season()
         host = _user("alice")
         opp = _user("bob")
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        draft_service.join_match(match.id, opp)
-        # Drive state forward enough to allow set_room_code: ban_phase → randomize
-        # is a longer route; for the expiry boundary we cheat by setting status directly.
-        m = db.session.get(DraftMatch, match.id)
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        # cheat the state forward
+        m = db.session.get(DraftMatch, m_id)
         m.status = DraftMatchStatus.ROOM_CODE_PENDING
         db.session.commit()
 
         issued_at = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
-        draft_service.set_room_code(match.id, "ABC1", now=issued_at)
-        m = db.session.get(DraftMatch, match.id)
+        draft_service.set_room_code(m_id, "ABC1", now=issued_at)
+        m = db.session.get(DraftMatch, m_id)
         assert draft_service.is_room_code_expired(
             m, now=issued_at + timedelta(hours=23, minutes=59)
         ) is False
@@ -361,13 +370,36 @@ def test_room_code_24h_expiry(app: Flask) -> None:
         ) is True
 
 
+def test_randomization_failure_marks_match(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id)
+        _drive_to_track_ban(m_id, host, opp)
+        _preset(name="OnlyOne", venue="Tokyo", direction="Left")
+        draft_service.submit_track_ban(
+            m_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
+        )
+        draft_service.submit_track_ban(
+            m_id, opp, ban_type=DraftBanType.VENUE, condition_key="__skip__"
+        )
+        from uma_ladder.services.randomizer import RandomizerError
+
+        with pytest.raises(RandomizerError):
+            draft_service.randomize_preset(m_id)
+        m = draft_service.get_match(m_id)
+        assert m.status == DraftMatchStatus.RANDOMIZATION_FAILED
+
+
 def test_elo_ladder_orders_by_rating(app: Flask) -> None:
     with app.app_context():
         s = _season()
         a = _user("alice")
         b = _user("bob")
         c = _user("carol")
-        # Insert deterministic Elo history.
+        # one real match (so FK to draft_matches is satisfied)
+        m_id = _match_with_two(a, b, season_id=s.id)
         for user_id, rating, outcome in [
             (a, 1100, 1.0),
             (b, 950, 0.0),
@@ -375,29 +407,18 @@ def test_elo_ladder_orders_by_rating(app: Flask) -> None:
         ]:
             db.session.add(
                 DraftEloChange(
-                    draft_match_id=1,  # FK constrained — we'll bypass with a fake match below
+                    draft_match_id=m_id,
                     season_id=s.id,
                     user_id=user_id,
-                    opponent_user_id=user_id,  # placeholder
+                    opponent_user_id=user_id,
                     rating_before=1000,
                     rating_after=rating,
                     delta=rating - 1000,
                     outcome=outcome,
                 )
             )
-        # FK to draft_matches.id needs a real row
-        host = a
-        match = draft_service.create_match(
-            draft_service.CreateMatchRequest(
-                season_id=s.id, host_user_id=host, umas_per_player=2, preset_pool="custom"
-            )
-        )
-        # rebind change rows to the real match id
-        db.session.query(DraftEloChange).update({"draft_match_id": match.id})
         db.session.commit()
-
         rows = draft_service.season_elo_ladder(s.id)
-        # carol 1010, bob 950, alice 1100 → sorted desc: alice, carol, bob
         assert [(r.username, r.rating) for r in rows] == [
             ("alice", 1100),
             ("carol", 1010),

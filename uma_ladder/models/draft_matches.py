@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..extensions import db
@@ -35,6 +35,8 @@ class DraftMatch(db.Model):
     selected_preset_id: Mapped[int | None] = mapped_column(
         ForeignKey("race_presets.id", ondelete="SET NULL"), nullable=True
     )
+    host_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    opponent_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     room_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     room_code_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -64,37 +66,6 @@ class DraftMatch(db.Model):
         return f"<DraftMatch {self.id} status={self.status}>"
 
 
-class DraftMatchUmaEntry(db.Model):
-    __tablename__ = "draft_match_uma_entries"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    draft_match_id: Mapped[int] = mapped_column(
-        ForeignKey("draft_matches.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    uma_character_id: Mapped[int | None] = mapped_column(
-        ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True
-    )
-    custom_uma_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    build_nickname: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    screenshot_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    locked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_utcnow
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
-    )
-
-    uma_character = relationship("UmaCharacter", lazy="joined")
-
-
 class DraftMatchBan(db.Model):
     __tablename__ = "draft_match_bans"
 
@@ -106,8 +77,8 @@ class DraftMatchBan(db.Model):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     ban_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    banned_uma_entry_id: Mapped[int | None] = mapped_column(
-        ForeignKey("draft_match_uma_entries.id", ondelete="SET NULL"), nullable=True
+    uma_character_id: Mapped[int | None] = mapped_column(
+        ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True
     )
     condition_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(
@@ -116,6 +87,8 @@ class DraftMatchBan(db.Model):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+
+    uma_character = relationship("UmaCharacter", lazy="joined")
 
 
 class DraftRaceResult(db.Model):
@@ -128,9 +101,10 @@ class DraftRaceResult(db.Model):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    uma_entry_id: Mapped[int | None] = mapped_column(
-        ForeignKey("draft_match_uma_entries.id", ondelete="SET NULL"), nullable=True
+    uma_character_id: Mapped[int | None] = mapped_column(
+        ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True
     )
+    custom_uma_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     placement: Mapped[int] = mapped_column(Integer, nullable=False)
     strategy: Mapped[str | None] = mapped_column(String(32), nullable=True)
     speed: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -146,6 +120,7 @@ class DraftRaceResult(db.Model):
     )
 
     user = relationship("User", lazy="joined", foreign_keys=[user_id])
+    uma_character = relationship("UmaCharacter", lazy="joined")
 
 
 class DraftEloChange(db.Model):

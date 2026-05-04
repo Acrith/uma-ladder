@@ -2,7 +2,6 @@ from .draft_matches import (
     DraftEloChange,
     DraftMatch,
     DraftMatchBan,
-    DraftMatchUmaEntry,
     DraftRaceResult,
 )
 from .enums import (
@@ -11,12 +10,16 @@ from .enums import (
     DistanceCategory,
     DraftBanType,
     DraftMatchStatus,
+    NotificationEvent,
+    NotificationStatus,
+    NotificationTarget,
     OfficialRaceStatus,
     PresetSource,
     RegistrationStatus,
     SeasonStatus,
     Surface,
 )
+from .notifications import DiscordNotificationAttempt
 from .official_races import (
     OfficialRace,
     OfficialRaceRegistration,
@@ -32,13 +35,16 @@ __all__ = [
     "VENUES",
     "Direction",
     "DistanceCategory",
+    "DiscordNotificationAttempt",
     "DraftBanType",
     "DraftEloChange",
     "DraftMatch",
     "DraftMatchBan",
     "DraftMatchStatus",
-    "DraftMatchUmaEntry",
     "DraftRaceResult",
+    "NotificationEvent",
+    "NotificationStatus",
+    "NotificationTarget",
     "OfficialRace",
     "OfficialRaceRegistration",
     "OfficialRaceResult",

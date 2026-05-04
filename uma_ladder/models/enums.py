@@ -56,16 +56,13 @@ class RegistrationStatus(StrEnum):
 
 class DraftMatchStatus(StrEnum):
     WAITING_FOR_OPPONENT = "waiting_for_opponent"
-    SUBMITTING_UMAS = "submitting_umas"
     READY_CHECK = "ready_check"
-    BAN_PHASE = "ban_phase"
-    RANDOMIZING_RACE = "randomizing_race"
+    TRACK_BAN_PHASE = "track_ban_phase"
     RANDOMIZATION_FAILED = "randomization_failed"
+    UMA_BAN_PHASE = "uma_ban_phase"
     ROOM_CODE_PENDING = "room_code_pending"
     ROOM_CODE_AVAILABLE = "room_code_available"
     ROOM_CODE_EXPIRED = "room_code_expired"
-    RESULTS_PENDING = "results_pending"
-    RESULTS_SUBMITTED = "results_submitted"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -76,6 +73,30 @@ class DraftBanType(StrEnum):
     DISTANCE_CATEGORY = "distance_category"
     VENUE = "venue"
     SURFACE = "surface"
+
+
+class NotificationStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    SKIPPED = "skipped"  # webhook URL missing for this target
+
+
+class NotificationEvent(StrEnum):
+    OFFICIAL_RACE_PUBLISHED = "official_race_published"
+    OFFICIAL_ROOM_CODE = "official_room_code"
+    OFFICIAL_RESULTS = "official_results"
+    DRAFT_ROOM_CODE = "draft_room_code"
+    DRAFT_RESULTS = "draft_results"
+
+
+class NotificationTarget(StrEnum):
+    """Logical target name. Resolved to a webhook URL via env var."""
+
+    RACE_REGISTRATION = "race_registration"
+    OFFICIAL_RESULTS = "official_results"
+    DRAFT_RESULTS = "draft_results"
+    FALLBACK = "fallback"
 
 
 # Canonical venues mentioned in the appendix. Used to validate ban inputs.

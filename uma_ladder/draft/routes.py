@@ -25,7 +25,9 @@ def index() -> object:
     matches = []
     if current_user.is_authenticated:
         matches = draft_service.list_matches_for_user(current_user.id)
-    return render_template("draft/index.html", matches=matches, join_form=JoinDraftForm())
+    return render_template(
+        "draft/index.html", matches=matches, join_form=JoinDraftForm()
+    )
 
 
 @bp.route("/new", methods=["GET", "POST"])
@@ -82,49 +84,16 @@ def detail(match_id: int) -> object:
         match = draft_service.get_match(match_id)
     except draft_service.DraftNotFoundError:
         abort(404)
-    entries = draft_service.list_uma_entries(match_id)
     bans = draft_service.list_bans(match_id)
     return render_template(
         "draft/detail.html",
         match=match,
-        entries=entries,
         bans=bans,
         room_code_form=RoomCodeForm(),
         csrf_form=CsrfOnlyForm(),
         room_code_expired=draft_service.is_room_code_expired(match),
         characters=list_enabled_characters(),
     )
-
-
-@bp.post("/<int:match_id>/umas")
-@login_required
-def submit_umas(match_id: int) -> object:
-    form = CsrfOnlyForm()
-    if not form.validate_on_submit():
-        abort(400)
-    try:
-        match = draft_service.get_match(match_id)
-    except draft_service.DraftNotFoundError:
-        abort(404)
-
-    submissions: list[draft_service.UmaSubmission] = []
-    for i in range(match.umas_per_player):
-        char_raw = request.form.get(f"uma_character_id_{i}", "").strip()
-        char_id = int(char_raw) if char_raw.isdigit() else None
-        custom = request.form.get(f"custom_uma_name_{i}", "").strip() or None
-        nick = request.form.get(f"build_nickname_{i}", "").strip() or None
-        submissions.append(
-            draft_service.UmaSubmission(
-                uma_character_id=char_id,
-                custom_uma_name=custom,
-                build_nickname=nick,
-            )
-        )
-    try:
-        draft_service.submit_umas(match_id, current_user.id, submissions)
-    except draft_service.DraftError as exc:
-        flash(str(exc))
-    return redirect(url_for("draft.detail", match_id=match_id))
 
 
 @bp.post("/<int:match_id>/ready")
@@ -142,19 +111,18 @@ def ready(match_id: int) -> object:
     return redirect(url_for("draft.detail", match_id=match_id))
 
 
-@bp.post("/<int:match_id>/bans")
+@bp.post("/<int:match_id>/track-ban")
 @login_required
-def bans(match_id: int) -> object:
+def track_ban(match_id: int) -> object:
     form = CsrfOnlyForm()
     if not form.validate_on_submit():
         abort(400)
     try:
-        draft_service.submit_bans(
+        draft_service.submit_track_ban(
             match_id,
             current_user.id,
-            banned_uma_entry_id=int(request.form.get("banned_uma_entry_id", "0") or 0),
-            track_ban_type=(request.form.get("track_ban_type") or "").strip(),
-            track_condition_key=(request.form.get("track_condition_key") or "").strip(),
+            ban_type=(request.form.get("ban_type") or "").strip(),
+            condition_key=(request.form.get("condition_key") or "").strip(),
         )
     except draft_service.DraftNotFoundError:
         abort(404)
@@ -175,6 +143,45 @@ def randomize(match_id: int) -> object:
         abort(404)
     except RandomizerError as exc:
         flash(f"No preset matched the bans: {exc.reason}")
+    except draft_service.DraftError as exc:
+        flash(str(exc))
+    return redirect(url_for("draft.detail", match_id=match_id))
+
+
+@bp.post("/<int:match_id>/skip-track-ban")
+@login_required
+def skip_track_ban(match_id: int) -> object:
+    """Allow a player to skip their track ban (no condition picked)."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        # Record an empty venue ban as a placeholder so the gating works.
+        draft_service.submit_track_ban(
+            match_id,
+            current_user.id,
+            ban_type="venue",
+            condition_key="__skip__",
+        )
+    except draft_service.DraftError as exc:
+        flash(str(exc))
+    return redirect(url_for("draft.detail", match_id=match_id))
+
+
+@bp.post("/<int:match_id>/uma-ban")
+@login_required
+def uma_ban(match_id: int) -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    raw = request.form.get("uma_character_id", "").strip()
+    if not raw.isdigit():
+        flash("Pick a character.")
+        return redirect(url_for("draft.detail", match_id=match_id))
+    try:
+        draft_service.submit_uma_ban(match_id, current_user.id, int(raw))
+    except draft_service.DraftNotFoundError:
+        abort(404)
     except draft_service.DraftError as exc:
         flash(str(exc))
     return redirect(url_for("draft.detail", match_id=match_id))
@@ -215,9 +222,15 @@ def submit_results(match_id: int) -> object:
         if not placement_raw.isdigit():
             flash("Enter a placement for every player.")
             return redirect(url_for("draft.detail", match_id=match_id))
+        char_raw = request.form.get(f"uma_character_id_{participant}", "").strip()
+        char_id = int(char_raw) if char_raw.isdigit() else None
+        custom = request.form.get(f"custom_uma_name_{participant}", "").strip() or None
         lines.append(
             draft_service.DraftResultLine(
-                user_id=participant, placement=int(placement_raw)
+                user_id=participant,
+                placement=int(placement_raw),
+                uma_character_id=char_id,
+                custom_uma_name=custom,
             )
         )
     try:

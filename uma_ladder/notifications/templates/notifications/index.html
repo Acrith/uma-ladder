@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Discord notifications · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">Discord notifications</h1>
+  {% with messages = get_flashed_messages() %}
+    {% for m in messages %}<p class="mb-3 text-sm text-slate-700">{{ m }}</p>{% endfor %}
+  {% endwith %}
+  {% if not attempts %}
+    <p class="text-sm text-slate-600">No attempts yet.</p>
+  {% else %}
+    <table class="text-sm">
+      <thead>
+        <tr class="text-left">
+          <th class="pr-4">#</th>
+          <th class="pr-4">Created</th>
+          <th class="pr-4">Event</th>
+          <th class="pr-4">Target</th>
+          <th class="pr-4">Status</th>
+          <th class="pr-4">HTTP</th>
+          <th class="pr-4">Error</th>
+          <th class="pr-4"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in attempts %}
+          <tr class="border-t border-slate-200 align-top">
+            <td class="pr-4 py-1">{{ a.id }}</td>
+            <td class="pr-4 py-1">{{ a.created_at.isoformat() }}</td>
+            <td class="pr-4 py-1">{{ a.event_type }}</td>
+            <td class="pr-4 py-1">{{ a.target_name }}</td>
+            <td class="pr-4 py-1">
+              <span class="rounded px-2 py-0.5
+                {% if a.status == 'sent' %}bg-emerald-100 text-emerald-800
+                {% elif a.status == 'failed' %}bg-red-100 text-red-800
+                {% elif a.status == 'skipped' %}bg-slate-200 text-slate-700
+                {% else %}bg-amber-100 text-amber-800{% endif %}">
+                {{ a.status }}
+              </span>
+            </td>
+            <td class="pr-4 py-1">{{ a.response_code or '—' }}</td>
+            <td class="pr-4 py-1 text-red-700">{{ a.error_message or '' }}</td>
+            <td class="pr-4 py-1">
+              {% if a.status in retryable_statuses %}
+                <form method="post" action="{{ url_for('notifications.retry', attempt_id=a.id) }}">
+                  {{ csrf_form.hidden_tag() }}
+                  <button class="rounded bg-slate-200 px-2 py-0.5 text-xs">Retry</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}

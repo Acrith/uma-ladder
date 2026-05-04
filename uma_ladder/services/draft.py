@@ -1,3 +1,20 @@
+"""Draft PvP service — Workflow Z.
+
+Phase order:
+  WAITING_FOR_OPPONENT
+    → READY_CHECK            (both joined, neither readied)
+    → TRACK_BAN_PHASE        (each player bans one track condition)
+    → randomize_preset()     (synchronous; locks selected_preset_id)
+    → UMA_BAN_PHASE          (each player bans one UmaCharacter — blind)
+    → ROOM_CODE_PENDING
+    → ROOM_CODE_AVAILABLE    (host pastes code; 24h TTL)
+    → COMPLETED              (host submits placements + which Uma was used)
+
+No pre-race Uma submission — the Uma each player actually used is
+captured at result time. Banned characters cannot appear as a result's
+`uma_character_id`.
+"""
+
 from __future__ import annotations
 
 import random
@@ -16,9 +33,9 @@ from ..models import (
     DraftMatch,
     DraftMatchBan,
     DraftMatchStatus,
-    DraftMatchUmaEntry,
     DraftRaceResult,
     RacePreset,
+    UmaCharacter,
 )
 from .elo import DEFAULT_K, DEFAULT_RATING, apply_match
 from .randomizer import Bans, RandomizerError, pick_preset
@@ -26,6 +43,15 @@ from .randomizer import Bans, RandomizerError, pick_preset
 ROOM_CODE_TTL = timedelta(hours=24)
 JOIN_CODE_LEN = 8
 JOIN_CODE_ALPHABET = string.ascii_uppercase + string.digits
+
+_TRACK_BAN_TYPES = frozenset(
+    {
+        DraftBanType.VENUE,
+        DraftBanType.DIRECTION,
+        DraftBanType.DISTANCE_CATEGORY,
+        DraftBanType.SURFACE,
+    }
+)
 
 
 class DraftError(Exception):
@@ -64,6 +90,10 @@ class UnknownBanTargetError(DraftError):
     pass
 
 
+class BannedCharacterUsedError(DraftError):
+    pass
+
+
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -80,29 +110,20 @@ def _generate_join_code() -> str:
 class CreateMatchRequest:
     season_id: int
     host_user_id: int
-    umas_per_player: int
+    umas_per_player: int  # 2 or 3
     preset_pool: str  # "g1" | "custom" | "g1+custom"
-
-
-@dataclass(frozen=True)
-class UmaSubmission:
-    uma_character_id: int | None = None
-    custom_uma_name: str | None = None
-    build_nickname: str | None = None
-    notes: str | None = None
 
 
 def create_match(req: CreateMatchRequest) -> DraftMatch:
     if req.umas_per_player not in (2, 3):
         raise InvalidUmaCountError("umas_per_player must be 2 or 3")
-    # generate a unique join code; collision is astronomically unlikely but loop anyway.
     for _ in range(10):
         code = _generate_join_code()
         if db.session.scalars(
             select(DraftMatch).where(DraftMatch.join_code == code)
         ).first() is None:
             break
-    else:  # pragma: no cover — defence in depth
+    else:  # pragma: no cover
         raise DraftError("could not allocate a unique join code")
 
     match = DraftMatch(
@@ -140,7 +161,7 @@ def join_match(match_id: int, user_id: int) -> DraftMatch:
     if match.opponent_user_id is not None:
         raise MatchFullError()
     match.opponent_user_id = user_id
-    match.status = DraftMatchStatus.SUBMITTING_UMAS
+    match.status = DraftMatchStatus.READY_CHECK
     db.session.commit()
     return match
 
@@ -150,158 +171,91 @@ def _require_participant(match: DraftMatch, user_id: int) -> None:
         raise NotAParticipantError()
 
 
-def submit_umas(
-    match_id: int, user_id: int, submissions: Sequence[UmaSubmission]
-) -> Sequence[DraftMatchUmaEntry]:
-    match = get_match(match_id)
-    _require_participant(match, user_id)
-    if match.status not in (
-        DraftMatchStatus.SUBMITTING_UMAS,
-        DraftMatchStatus.READY_CHECK,
-    ):
-        raise InvalidMatchStateError(
-            f"cannot submit Umas in state {match.status}"
-        )
-    if len(submissions) != match.umas_per_player:
-        raise InvalidUmaCountError(
-            f"expected {match.umas_per_player} Umas, got {len(submissions)}"
-        )
-
-    # Replace any prior submissions for this user (re-submit before lock).
-    existing = db.session.scalars(
-        select(DraftMatchUmaEntry)
-        .where(DraftMatchUmaEntry.draft_match_id == match_id)
-        .where(DraftMatchUmaEntry.user_id == user_id)
-        .where(DraftMatchUmaEntry.locked_at.is_(None))
-    ).all()
-    for row in existing:
-        db.session.delete(row)
-
-    saved: list[DraftMatchUmaEntry] = []
-    for sub in submissions:
-        if sub.uma_character_id is None and not (sub.custom_uma_name or "").strip():
-            raise InvalidUmaCountError("each Uma needs a character or custom name")
-        entry = DraftMatchUmaEntry(
-            draft_match_id=match_id,
-            user_id=user_id,
-            uma_character_id=sub.uma_character_id,
-            custom_uma_name=sub.custom_uma_name,
-            build_nickname=sub.build_nickname,
-            notes=sub.notes,
-        )
-        db.session.add(entry)
-        saved.append(entry)
-    db.session.commit()
-    return saved
-
-
-def list_uma_entries(match_id: int) -> Sequence[DraftMatchUmaEntry]:
-    return list(
-        db.session.scalars(
-            select(DraftMatchUmaEntry)
-            .where(DraftMatchUmaEntry.draft_match_id == match_id)
-            .order_by(DraftMatchUmaEntry.user_id, DraftMatchUmaEntry.id)
-        )
-    )
-
-
 def ready_up(match_id: int, user_id: int) -> DraftMatch:
     match = get_match(match_id)
     _require_participant(match, user_id)
-    if match.status not in (
-        DraftMatchStatus.SUBMITTING_UMAS,
-        DraftMatchStatus.READY_CHECK,
-    ):
+    if match.status != DraftMatchStatus.READY_CHECK:
         raise InvalidMatchStateError(f"cannot ready in state {match.status}")
-
-    entries = list_uma_entries(match_id)
-    by_user: dict[int, list[DraftMatchUmaEntry]] = {}
-    for e in entries:
-        by_user.setdefault(e.user_id, []).append(e)
-
-    user_entries = by_user.get(user_id, [])
-    if len(user_entries) != match.umas_per_player:
-        raise InvalidUmaCountError(
-            f"submit {match.umas_per_player} Umas before readying"
-        )
-    now = _utcnow()
-    for e in user_entries:
-        if e.locked_at is None:
-            e.locked_at = now
-
-    # If both players have locked entries, advance to ban_phase.
-    locked_users = {
-        uid
-        for uid, items in by_user.items()
-        if all(i.locked_at is not None or uid == user_id for i in items)
-    }
-    if (
-        match.host_user_id in locked_users
-        and match.opponent_user_id is not None
-        and match.opponent_user_id in locked_users
-    ):
-        match.status = DraftMatchStatus.BAN_PHASE
+    if user_id == match.host_user_id:
+        match.host_ready = True
     else:
-        match.status = DraftMatchStatus.READY_CHECK
+        match.opponent_ready = True
+    if match.host_ready and match.opponent_ready:
+        match.status = DraftMatchStatus.TRACK_BAN_PHASE
     db.session.commit()
     return match
 
 
-def submit_bans(
+def submit_track_ban(
     match_id: int,
     user_id: int,
     *,
-    banned_uma_entry_id: int,
-    track_ban_type: str,
-    track_condition_key: str,
-) -> Sequence[DraftMatchBan]:
+    ban_type: str,
+    condition_key: str,
+) -> DraftMatchBan:
     match = get_match(match_id)
     _require_participant(match, user_id)
-    if match.status != DraftMatchStatus.BAN_PHASE:
-        raise InvalidMatchStateError(f"cannot ban in state {match.status}")
+    if match.status != DraftMatchStatus.TRACK_BAN_PHASE:
+        raise InvalidMatchStateError(f"cannot ban track in state {match.status}")
+    if ban_type not in _TRACK_BAN_TYPES:
+        raise UnknownBanTargetError(f"{ban_type!r} is not a track condition")
+    if not condition_key.strip():
+        raise UnknownBanTargetError("condition_key is required")
 
-    if track_ban_type not in (
-        DraftBanType.DIRECTION,
-        DraftBanType.DISTANCE_CATEGORY,
-        DraftBanType.VENUE,
-        DraftBanType.SURFACE,
-    ):
-        raise UnknownBanTargetError(f"track_ban_type must be a track condition, got {track_ban_type}")
-
-    target_entry = db.session.get(DraftMatchUmaEntry, banned_uma_entry_id)
-    if target_entry is None or target_entry.draft_match_id != match_id:
-        raise UnknownBanTargetError("banned uma entry not part of this match")
-    if target_entry.user_id == user_id:
-        raise UnknownBanTargetError("you cannot ban your own Uma")
-
-    # Reject re-bans by the same user.
     existing = db.session.scalars(
         select(DraftMatchBan)
         .where(DraftMatchBan.draft_match_id == match_id)
         .where(DraftMatchBan.user_id == user_id)
-    ).all()
-    if existing:
+        .where(DraftMatchBan.ban_type.in_(_TRACK_BAN_TYPES))
+    ).first()
+    if existing is not None:
         raise DuplicateBanError()
 
-    now = _utcnow()
-    uma_ban = DraftMatchBan(
+    ban = DraftMatchBan(
+        draft_match_id=match_id,
+        user_id=user_id,
+        ban_type=ban_type,
+        condition_key=condition_key.strip(),
+        locked_at=_utcnow(),
+    )
+    db.session.add(ban)
+    db.session.commit()
+    return ban
+
+
+def submit_uma_ban(match_id: int, user_id: int, uma_character_id: int) -> DraftMatchBan:
+    match = get_match(match_id)
+    _require_participant(match, user_id)
+    if match.status != DraftMatchStatus.UMA_BAN_PHASE:
+        raise InvalidMatchStateError(f"cannot ban Uma in state {match.status}")
+
+    char = db.session.get(UmaCharacter, uma_character_id)
+    if char is None or not char.enabled:
+        raise UnknownBanTargetError(f"unknown character {uma_character_id}")
+
+    existing = db.session.scalars(
+        select(DraftMatchBan)
+        .where(DraftMatchBan.draft_match_id == match_id)
+        .where(DraftMatchBan.user_id == user_id)
+        .where(DraftMatchBan.ban_type == DraftBanType.UMA)
+    ).first()
+    if existing is not None:
+        raise DuplicateBanError()
+
+    ban = DraftMatchBan(
         draft_match_id=match_id,
         user_id=user_id,
         ban_type=DraftBanType.UMA,
-        banned_uma_entry_id=banned_uma_entry_id,
-        locked_at=now,
+        uma_character_id=uma_character_id,
+        locked_at=_utcnow(),
     )
-    track_ban = DraftMatchBan(
-        draft_match_id=match_id,
-        user_id=user_id,
-        ban_type=track_ban_type,
-        condition_key=track_condition_key,
-        locked_at=now,
-    )
-    target_entry.is_banned = True
-    db.session.add_all([uma_ban, track_ban])
+    db.session.add(ban)
     db.session.commit()
-    return [uma_ban, track_ban]
+
+    if both_players_uma_banned(match_id):
+        match.status = DraftMatchStatus.ROOM_CODE_PENDING
+        db.session.commit()
+    return ban
 
 
 def list_bans(match_id: int) -> Sequence[DraftMatchBan]:
@@ -312,34 +266,46 @@ def list_bans(match_id: int) -> Sequence[DraftMatchBan]:
     )
 
 
-def both_players_banned(match_id: int) -> bool:
+def both_players_track_banned(match_id: int) -> bool:
     match = get_match(match_id)
     if match.opponent_user_id is None:
         return False
-    bans = list_bans(match_id)
-    by_user: dict[int, list[DraftMatchBan]] = {}
-    for b in bans:
-        by_user.setdefault(b.user_id, []).append(b)
-    needed = (match.host_user_id, match.opponent_user_id)
-    return all(uid in by_user and len(by_user[uid]) >= 2 for uid in needed)
+    rows = db.session.scalars(
+        select(DraftMatchBan)
+        .where(DraftMatchBan.draft_match_id == match_id)
+        .where(DraftMatchBan.ban_type.in_(_TRACK_BAN_TYPES))
+    ).all()
+    by_user = {b.user_id for b in rows}
+    return match.host_user_id in by_user and match.opponent_user_id in by_user
+
+
+def both_players_uma_banned(match_id: int) -> bool:
+    match = get_match(match_id)
+    if match.opponent_user_id is None:
+        return False
+    rows = db.session.scalars(
+        select(DraftMatchBan)
+        .where(DraftMatchBan.draft_match_id == match_id)
+        .where(DraftMatchBan.ban_type == DraftBanType.UMA)
+    ).all()
+    by_user = {b.user_id for b in rows}
+    return match.host_user_id in by_user and match.opponent_user_id in by_user
 
 
 def randomize_preset(
     match_id: int, *, rng: random.Random | None = None
 ) -> DraftMatch:
     match = get_match(match_id)
-    if match.status != DraftMatchStatus.BAN_PHASE:
+    if match.status != DraftMatchStatus.TRACK_BAN_PHASE:
         raise InvalidMatchStateError(f"cannot randomize in state {match.status}")
-    if not both_players_banned(match_id):
-        raise InvalidMatchStateError("waiting on both players' bans")
+    if not both_players_track_banned(match_id):
+        raise InvalidMatchStateError("waiting on both players' track bans")
 
-    # Aggregate track-condition bans.
-    bans_query = list_bans(match_id)
     venues: set[str] = set()
     directions: set[str] = set()
     distance_cats: set[str] = set()
     surfaces: set[str] = set()
-    for b in bans_query:
+    for b in list_bans(match_id):
         if b.ban_type == DraftBanType.VENUE and b.condition_key:
             venues.add(b.condition_key)
         elif b.ban_type == DraftBanType.DIRECTION and b.condition_key:
@@ -361,19 +327,26 @@ def randomize_preset(
                 surfaces=frozenset(surfaces),
             ),
             rng=rng,
+            min_max_runners=2 * match.umas_per_player,
         )
-    except RandomizerError as exc:
+    except RandomizerError:
         match.status = DraftMatchStatus.RANDOMIZATION_FAILED
         db.session.commit()
-        raise exc
+        raise
 
     match.selected_preset_id = chosen.id
-    match.status = DraftMatchStatus.ROOM_CODE_PENDING
+    match.status = DraftMatchStatus.UMA_BAN_PHASE
     db.session.commit()
     return match
 
 
-def set_room_code(match_id: int, code: str, *, now: datetime | None = None) -> DraftMatch:
+def set_room_code(
+    match_id: int,
+    code: str,
+    *,
+    now: datetime | None = None,
+    notify: bool = True,
+) -> DraftMatch:
     match = get_match(match_id)
     if match.status not in (
         DraftMatchStatus.ROOM_CODE_PENDING,
@@ -389,6 +362,13 @@ def set_room_code(match_id: int, code: str, *, now: datetime | None = None) -> D
     match.room_code_expires_at = issued + ROOM_CODE_TTL
     match.status = DraftMatchStatus.ROOM_CODE_AVAILABLE
     db.session.commit()
+    if notify:
+        try:
+            from ..notifications import services as notif_services
+
+            notif_services.notify_draft_room_code(match)
+        except Exception:  # noqa: BLE001
+            pass
     return match
 
 
@@ -402,7 +382,17 @@ def is_room_code_expired(match: DraftMatch, *, now: datetime | None = None) -> b
 class DraftResultLine:
     user_id: int
     placement: int
-    uma_entry_id: int | None = None
+    uma_character_id: int | None = None
+    custom_uma_name: str | None = None
+
+
+def banned_uma_character_ids(match_id: int) -> set[int]:
+    rows = db.session.scalars(
+        select(DraftMatchBan)
+        .where(DraftMatchBan.draft_match_id == match_id)
+        .where(DraftMatchBan.ban_type == DraftBanType.UMA)
+    ).all()
+    return {b.uma_character_id for b in rows if b.uma_character_id is not None}
 
 
 def submit_results(
@@ -410,6 +400,7 @@ def submit_results(
     lines: Sequence[DraftResultLine],
     *,
     confirmed_by_user_id: int,
+    notify: bool = True,
 ) -> DraftMatch:
     match = get_match(match_id)
     if match.opponent_user_id is None:
@@ -417,23 +408,32 @@ def submit_results(
     if match.status not in (
         DraftMatchStatus.ROOM_CODE_AVAILABLE,
         DraftMatchStatus.ROOM_CODE_EXPIRED,
-        DraftMatchStatus.RESULTS_PENDING,
     ):
         raise InvalidMatchStateError(f"cannot submit results in state {match.status}")
     if len(lines) < 2:
         raise DraftError("need at least both players' placements")
+
     placements = [line.placement for line in lines]
     if len(set(placements)) != len(placements):
         raise DraftError("duplicate placements")
 
-    # Build per-player best (lowest = best) placement using only their non-banned entries.
+    banned_ids = banned_uma_character_ids(match_id)
+    for line in lines:
+        if line.uma_character_id is not None and line.uma_character_id in banned_ids:
+            raise BannedCharacterUsedError(
+                f"character {line.uma_character_id} was banned"
+            )
+
     by_user_best: dict[int, int] = {}
     for line in lines:
         prev = by_user_best.get(line.user_id)
         if prev is None or line.placement < prev:
             by_user_best[line.user_id] = line.placement
 
-    if match.host_user_id not in by_user_best or match.opponent_user_id not in by_user_best:
+    if (
+        match.host_user_id not in by_user_best
+        or match.opponent_user_id not in by_user_best
+    ):
         raise DraftError("each player must have at least one placement")
 
     host_best = by_user_best[match.host_user_id]
@@ -451,13 +451,13 @@ def submit_results(
             DraftRaceResult(
                 draft_match_id=match_id,
                 user_id=line.user_id,
-                uma_entry_id=line.uma_entry_id,
+                uma_character_id=line.uma_character_id,
+                custom_uma_name=line.custom_uma_name,
                 placement=line.placement,
                 confirmed_by_user_id=confirmed_by_user_id,
             )
         )
 
-    # Apply Elo using each player's current rating.
     winner_rating = current_rating(winner_id, match.season_id)
     loser_rating = current_rating(loser_id, match.season_id)
     winner_change, loser_change = apply_match(
@@ -493,11 +493,28 @@ def submit_results(
     match.completed_at = _utcnow()
     match.status = DraftMatchStatus.COMPLETED
     db.session.commit()
+
+    if notify:
+        try:
+            from ..notifications import services as notif_services
+
+            notif_services.notify_draft_results(
+                match,
+                winner_username=match.host.username
+                if winner_id == match.host_user_id
+                else (match.opponent.username if match.opponent else "?"),
+                loser_username=match.host.username
+                if loser_id == match.host_user_id
+                else (match.opponent.username if match.opponent else "?"),
+                winner_delta=winner_change.delta,
+                loser_delta=loser_change.delta,
+            )
+        except Exception:  # noqa: BLE001
+            pass
     return match
 
 
 def current_rating(user_id: int, season_id: int) -> int:
-    """Return the user's current rating for this season, or DEFAULT_RATING."""
     latest = db.session.scalars(
         select(DraftEloChange)
         .where(DraftEloChange.user_id == user_id)
@@ -518,11 +535,10 @@ class EloLadderRow:
 
 
 def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLadderRow]:
-    from sqlalchemy import case as sql_case  # local import to avoid top-level shadow
+    from sqlalchemy import case as sql_case
 
     from ..models import User
 
-    # Latest change per (user, season). SQLite-portable: take MAX(id) per user.
     latest_subq = (
         select(
             DraftEloChange.user_id.label("user_id"),
@@ -537,7 +553,6 @@ def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLa
             User.id.label("user_id"),
             User.username.label("username"),
             DraftEloChange.rating_after.label("rating"),
-            func.count(DraftEloChange.id).label("matches_for_user"),
         )
         .join(DraftEloChange, DraftEloChange.user_id == User.id)
         .join(latest_subq, latest_subq.c.max_id == DraftEloChange.id)
@@ -547,7 +562,6 @@ def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLa
     )
     rows = db.session.execute(stmt).all()
 
-    # Wins query (separate, simpler): count outcome == 1 per user.
     wins_stmt = (
         select(
             DraftEloChange.user_id,
@@ -557,7 +571,10 @@ def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLa
         .where(DraftEloChange.season_id == season_id)
         .group_by(DraftEloChange.user_id)
     )
-    stats = {r.user_id: (int(r.wins or 0), int(r.matches or 0)) for r in db.session.execute(wins_stmt).all()}
+    stats = {
+        r.user_id: (int(r.wins or 0), int(r.matches or 0))
+        for r in db.session.execute(wins_stmt).all()
+    }
 
     out = [
         EloLadderRow(

@@ -14,6 +14,15 @@ class BaseConfig:
     WTF_CSRF_ENABLED = True
     TESTING = False
     DEBUG = False
+    DISCORD_WEBHOOK_RACE_REGISTRATION_URL: str | None = None
+    DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL: str | None = None
+    DISCORD_WEBHOOK_DRAFT_RESULTS_URL: str | None = None
+    DISCORD_WEBHOOK_FALLBACK_URL: str | None = None
+
+
+def _env_or_none(key: str) -> str | None:
+    val = os.environ.get(key, "")
+    return val or None
 
 
 class DevConfig(BaseConfig):
@@ -22,6 +31,10 @@ class DevConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", "sqlite:///uma_ladder.dev.sqlite"
     )
+    DISCORD_WEBHOOK_RACE_REGISTRATION_URL = _env_or_none("DISCORD_WEBHOOK_RACE_REGISTRATION_URL")
+    DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL = _env_or_none("DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL")
+    DISCORD_WEBHOOK_DRAFT_RESULTS_URL = _env_or_none("DISCORD_WEBHOOK_DRAFT_RESULTS_URL")
+    DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
 
 
 class TestConfig(BaseConfig):
@@ -42,6 +55,16 @@ class ProdConfig(BaseConfig):
             raise ConfigError("DATABASE_URL is required in production")
         cls.SECRET_KEY = secret
         cls.SQLALCHEMY_DATABASE_URI = db_url
+        cls.DISCORD_WEBHOOK_RACE_REGISTRATION_URL = _env_or_none(
+            "DISCORD_WEBHOOK_RACE_REGISTRATION_URL"
+        )
+        cls.DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL = _env_or_none(
+            "DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL"
+        )
+        cls.DISCORD_WEBHOOK_DRAFT_RESULTS_URL = _env_or_none(
+            "DISCORD_WEBHOOK_DRAFT_RESULTS_URL"
+        )
+        cls.DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
         return cls
 
 

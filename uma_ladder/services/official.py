@@ -168,7 +168,13 @@ def list_registrations(race_id: int) -> Sequence[OfficialRaceRegistration]:
     )
 
 
-def set_room_code(race_id: int, code: str, *, now: datetime | None = None) -> OfficialRace:
+def set_room_code(
+    race_id: int,
+    code: str,
+    *,
+    now: datetime | None = None,
+    notify: bool = True,
+) -> OfficialRace:
     race = _get_race(race_id)
     if race.status not in (
         OfficialRaceStatus.REGISTRATION_OPEN,
@@ -186,7 +192,21 @@ def set_room_code(race_id: int, code: str, *, now: datetime | None = None) -> Of
     race.room_code_expires_at = issued + ROOM_CODE_TTL
     race.status = OfficialRaceStatus.ROOM_CODE_AVAILABLE
     db.session.commit()
+    if notify:
+        _notify_room_code(race)
     return race
+
+
+def _notify_room_code(race: OfficialRace) -> None:
+    """Best-effort: never raises into the caller."""
+    try:
+        from ..notifications import services as notif_services
+
+        regs = list_registrations(race.id)
+        notif_services.notify_official_room_code(race, regs)
+    except Exception:  # noqa: BLE001
+        # Notification failures are recorded in DiscordNotificationAttempt.
+        pass
 
 
 def is_room_code_expired(race: OfficialRace, *, now: datetime | None = None) -> bool:
@@ -201,6 +221,7 @@ def submit_results(
     *,
     confirmed_by_user_id: int,
     apply_grade_multiplier: bool = False,
+    notify: bool = True,
 ) -> Sequence[OfficialRaceResult]:
     race = _get_race(race_id)
     if not lines:
@@ -237,7 +258,19 @@ def submit_results(
 
     race.status = OfficialRaceStatus.COMPLETED
     db.session.commit()
+    if notify:
+        _notify_results(race)
     return saved
+
+
+def _notify_results(race: OfficialRace) -> None:
+    try:
+        from ..notifications import services as notif_services
+
+        top = season_ladder(race.season_id, limit=5)
+        notif_services.notify_official_results(race, top)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @dataclass(frozen=True)

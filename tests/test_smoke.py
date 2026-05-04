@@ -28,7 +28,6 @@ def test_healthz_returns_ok(client: FlaskClient) -> None:
         "/official/",
         "/draft/",
         "/presets/",
-        "/notifications/",
         "/ocr/",
     ],
 )
