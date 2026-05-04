@@ -19,6 +19,13 @@ def index() -> object:
     draft_top5 = (
         draft_service.season_elo_ladder(season.id, limit=5) if season is not None else []
     )
+    upcoming_official = official_service.list_upcoming_races(limit=5)
+    # Pre-compute registration counts so the template doesn't need a
+    # service call inside the loop.
+    upcoming_with_counts = [
+        (r, len(official_service.list_registrations(r.id)))
+        for r in upcoming_official
+    ]
     my_matches = []
     if current_user.is_authenticated:
         my_matches = list(draft_service.list_matches_for_user(current_user.id))[:5]
@@ -28,6 +35,7 @@ def index() -> object:
         ladder_top5=official_top5,
         elo_top5=draft_top5,
         my_matches=my_matches,
+        upcoming_official=upcoming_with_counts,
     )
 
 

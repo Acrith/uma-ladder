@@ -13,6 +13,7 @@ from flask_login import current_user, login_required
 
 from ..models import Role
 from ..services import official as official_service
+from ..services import presets as presets_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
 from .forms import CreateOfficialRaceForm, ResultsForm, RoomCodeForm
@@ -47,7 +48,10 @@ def new() -> object:
             flash(str(exc))
         else:
             return redirect(url_for("official.detail", race_id=race.id))
-    return render_template("official/new.html", form=form, seasons=seasons)
+    presets = [p for p in presets_service.list_presets() if p.enabled]
+    return render_template(
+        "official/new.html", form=form, seasons=seasons, presets=presets
+    )
 
 
 @bp.get("/<int:race_id>")

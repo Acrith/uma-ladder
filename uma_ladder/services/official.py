@@ -334,6 +334,32 @@ def list_races(*, season_id: int | None = None) -> Sequence[OfficialRace]:
     return list(db.session.scalars(stmt))
 
 
+_UPCOMING_STATUSES = (
+    OfficialRaceStatus.REGISTRATION_OPEN,
+    OfficialRaceStatus.REGISTRATION_CLOSED,
+    OfficialRaceStatus.ROOM_CODE_PENDING,
+    OfficialRaceStatus.ROOM_CODE_AVAILABLE,
+)
+
+
+def list_upcoming_races(
+    *, season_id: int | None = None, limit: int | None = None
+) -> Sequence[OfficialRace]:
+    """Races a player can still join or that are about to launch — used
+    by the dashboard upcoming-races card. Excludes draft (organiser still
+    setting up), expired, and completed/cancelled."""
+    stmt = (
+        select(OfficialRace)
+        .where(OfficialRace.status.in_(_UPCOMING_STATUSES))
+        .order_by(OfficialRace.created_at.desc())
+    )
+    if season_id is not None:
+        stmt = stmt.where(OfficialRace.season_id == season_id)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(db.session.scalars(stmt))
+
+
 def get_race(race_id: int) -> OfficialRace:
     return _get_race(race_id)
 

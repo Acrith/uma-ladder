@@ -8,7 +8,10 @@ from wtforms.validators import DataRequired, Length, NumberRange, Optional
 class CreateOfficialRaceForm(FlaskForm):
     season_id = IntegerField("Season", validators=[DataRequired()])
     name = StringField("Race name", validators=[DataRequired(), Length(max=128)])
-    preset_id = IntegerField("Preset", validators=[Optional()])
+    # Track is required at creation time so the race has a definite course
+    # before registration opens. The dropdown is populated server-side; the
+    # pool filter + Random button are purely client-side helpers.
+    preset_id = IntegerField("Track", validators=[DataRequired()])
     max_players = IntegerField(
         "Max players", validators=[Optional(), NumberRange(min=1, max=64)]
     )
