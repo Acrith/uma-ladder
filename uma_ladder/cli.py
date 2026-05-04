@@ -6,8 +6,17 @@ import click
 from flask import Flask
 from flask.cli import AppGroup
 
+from .services.fetch_gametora import (
+    fetch_characters,
+    fetch_outfits,
+    write_characters_snapshot,
+    write_outfits_snapshot,
+)
+from .services.seed_characters import DEFAULT_SEED_PATH as DEFAULT_CHARACTER_SEED_PATH
 from .services.seed_characters import seed_characters
 from .services.seed_g1 import import_g1_races
+from .services.seed_outfits import DEFAULT_SEED_PATH as DEFAULT_OUTFIT_SEED_PATH
+from .services.seed_outfits import seed_outfits
 from .services.seed_presets import seed_custom_presets
 
 uma_cli = AppGroup("uma", help="Uma Ladder maintenance commands.")
@@ -21,12 +30,22 @@ uma_cli = AppGroup("uma", help="Uma Ladder maintenance commands.")
     default=None,
     help="Override the default seed JSON path.",
 )
-def cmd_seed_characters(file_path: Path | None) -> None:
+@click.option(
+    "--prune-missing",
+    is_flag=True,
+    default=False,
+    help=(
+        "Disable any DB character whose slug is not in the snapshot. "
+        "Use after switching to a smaller region-filtered snapshot."
+    ),
+)
+def cmd_seed_characters(file_path: Path | None, prune_missing: bool) -> None:
     """Idempotent upsert of curated Uma characters."""
-    report = seed_characters(file_path)
+    report = seed_characters(file_path, prune_missing=prune_missing)
     click.echo(
         f"seed-characters: inserted={report.inserted} "
-        f"updated={report.updated} skipped={report.skipped} total={report.total}"
+        f"updated={report.updated} skipped={report.skipped} "
+        f"pruned={report.pruned} total={report.total}"
     )
 
 
@@ -61,6 +80,118 @@ def cmd_import_g1_races(file_path: Path | None) -> None:
     click.echo(
         f"import-g1-races: inserted={report.inserted} "
         f"updated={report.updated} skipped={report.skipped} total={report.total}"
+    )
+
+
+@uma_cli.command("fetch-gametora-characters")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Where to write the snapshot JSON. Defaults to the file consumed "
+        "by `seed-characters` so a refresh is fetch → commit → seed."
+    ),
+)
+@click.option(
+    "--region",
+    type=click.Choice(["global", "en", "ko", "zh_tw", "tw", "jp", "all"]),
+    default="global",
+    show_default=True,
+    help=(
+        "Filter to characters playable on this server. 'global' is the EN "
+        "server (default). 'jp' is the Japan server (more characters). "
+        "'all' skips the region filter entirely."
+    ),
+)
+@click.option(
+    "--include-non-playable",
+    is_flag=True,
+    default=False,
+    help="Include event/NPC characters regardless of the region filter.",
+)
+def cmd_fetch_gametora_characters(
+    out_path: Path | None, region: str, include_non_playable: bool
+) -> None:
+    """One-off: fetch the latest character snapshot from GameTora.
+
+    Polite single-request fetch via the public manifest. Writes a JSON
+    file in the shape `seed-characters` consumes. Run this manually
+    when GameTora updates and you want to refresh local data; do not
+    invoke from a request handler.
+    """
+    target = out_path or DEFAULT_CHARACTER_SEED_PATH
+    click.echo(f"fetch-gametora-characters: region={region} → {target}")
+    rows = fetch_characters(
+        region=region, include_non_playable=include_non_playable
+    )
+    write_characters_snapshot(rows, target, region=region)
+    click.echo(
+        f"fetch-gametora-characters: wrote {len(rows)} characters "
+        f"(region={region}, include_non_playable={include_non_playable})"
+    )
+
+
+@uma_cli.command("fetch-gametora-outfits")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output JSON path. Defaults to data/seeds/uma_outfits.json.",
+)
+@click.option(
+    "--region",
+    type=click.Choice(["global", "en", "ko", "zh_tw", "tw", "jp", "all"]),
+    default="global",
+    show_default=True,
+    help="Filter to outfits released on this server.",
+)
+@click.option(
+    "--include-unreleased",
+    is_flag=True,
+    default=False,
+    help="Include outfits not yet released on the chosen region.",
+)
+def cmd_fetch_gametora_outfits(
+    out_path: Path | None, region: str, include_unreleased: bool
+) -> None:
+    """One-off: fetch outfit snapshot from GameTora's character-cards data."""
+    target = out_path or DEFAULT_OUTFIT_SEED_PATH
+    click.echo(f"fetch-gametora-outfits: region={region} → {target}")
+    rows = fetch_outfits(
+        region=region, only_released=not include_unreleased
+    )
+    write_outfits_snapshot(rows, target, region=region)
+    click.echo(
+        f"fetch-gametora-outfits: wrote {len(rows)} outfits "
+        f"(region={region}, only_released={not include_unreleased})"
+    )
+
+
+@uma_cli.command("seed-outfits")
+@click.option(
+    "--file",
+    "file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the default seed JSON path.",
+)
+@click.option(
+    "--prune-missing",
+    is_flag=True,
+    default=False,
+    help="Disable any outfit not in the snapshot.",
+)
+def cmd_seed_outfits(file_path: Path | None, prune_missing: bool) -> None:
+    """Idempotent upsert of UmaOutfit rows by (character, costume_id)."""
+    report = seed_outfits(file_path, prune_missing=prune_missing)
+    click.echo(
+        f"seed-outfits: inserted={report.inserted} "
+        f"updated={report.updated} skipped={report.skipped} "
+        f"pruned={report.pruned} orphaned={report.orphaned} "
+        f"total={report.total}"
     )
 
 

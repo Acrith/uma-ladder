@@ -102,8 +102,29 @@ dev:
 fly ssh console --app <your-app>
 flask uma seed-characters
 flask uma seed-presets
+flask uma import-g1-races
 exit
 ```
+
+**Refreshing GameTora data** is a separate, deliberate step you take
+locally — never as part of a request. When GameTora updates, run:
+
+```bash
+# locally, not on the production machine
+FLASK_APP=uma_ladder .venv/bin/flask uma fetch-gametora-characters
+git diff data/seeds/uma_characters.json
+git add data/seeds/uma_characters.json
+git commit -m "data: refresh GameTora character snapshot"
+git push
+fly deploy --app <your-app>
+fly ssh console --app <your-app> -C "flask uma seed-characters"
+```
+
+The fetcher hits GameTora's public manifest + data endpoint exactly
+twice (with a polite User-Agent and a 1-second delay between calls)
+and writes the snapshot to `data/seeds/uma_characters.json`. It is
+intentionally not invoked from any request handler. Use
+`--include-non-playable` if you want event/NPC characters too.
 
 To create the first season, drop into the Flask shell:
 

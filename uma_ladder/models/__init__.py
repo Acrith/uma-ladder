@@ -31,6 +31,7 @@ from .presets import RacePreset
 from .profiles import UserProfile
 from .seasons import Season
 from .uma_character import UmaCharacter
+from .uma_outfit import UmaOutfit
 from .uploads import OcrParseAttempt, UploadedImage
 from .users import Role, User
 
@@ -62,6 +63,7 @@ __all__ = [
     "SeasonStatus",
     "Surface",
     "UmaCharacter",
+    "UmaOutfit",
     "UploadPurpose",
     "UploadedImage",
     "User",

@@ -5,42 +5,99 @@
   <p class="label-eyebrow">Profile</p>
   <h1 class="mt-1 text-2xl font-semibold text-slate-100">Edit your profile</h1>
 
-  {% call card(class="mt-6 p-6 max-w-xl") %}
-    <form method="post" class="space-y-4">
-      {{ form.hidden_tag() }}
+  <div class="mt-6 grid gap-6 lg:grid-cols-[3fr_2fr]">
 
-      {% for f in [form.display_name, form.avatar_url, form.friend_code, form.discord_handle] %}
+    {# Form column #}
+    {% call card(class="p-6") %}
+      <form method="post" class="space-y-4">
+        {{ form.hidden_tag() }}
+
+        {% for f in [form.display_name, form.avatar_url, form.friend_code, form.discord_handle] %}
+          <div>
+            <label class="text-sm text-slate-300">{{ f.label.text }}</label>
+            {{ f(class="input-base mt-1") }}
+            {% for err in f.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+          </div>
+        {% endfor %}
+
         <div>
-          <label class="text-sm text-slate-300">{{ f.label.text }}</label>
-          {{ f(class="input-base mt-1") }}
-          {% for err in f.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+          <label class="text-sm text-slate-300">{{ form.description.label.text }}</label>
+          {{ form.description(class="input-base mt-1", rows=4) }}
         </div>
-      {% endfor %}
 
-      <div>
-        <label class="text-sm text-slate-300">{{ form.description.label.text }}</label>
-        {{ form.description(class="input-base mt-1", rows=4) }}
+        <div class="grid gap-4 md:grid-cols-2">
+          <div>
+            <label class="text-sm text-slate-300">Oshi character</label>
+            <select id="oshi-character-select"
+                    name="oshi_character_id"
+                    class="input-base mt-1"
+                    hx-get="{{ url_for('profiles.partial_outfits') }}"
+                    hx-target="#oshi-outfit-select"
+                    hx-swap="outerHTML"
+                    hx-trigger="change"
+                    hx-include="this">
+              <option value="">— none —</option>
+              {% for c in characters %}
+                <option value="{{ c.id }}" {% if profile.oshi_character_id == c.id %}selected{% endif %}>
+                  {{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            {% for err in form.oshi_character_id.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+            <p class="mt-1 text-xs text-slate-500">{{ characters|length }} available · global server</p>
+          </div>
+
+          <div>
+            <label class="text-sm text-slate-300">Outfit</label>
+            {% with selected_outfit_id = profile.oshi_outfit_id %}
+              {% include "profiles/_partial_outfits.html" %}
+            {% endwith %}
+            <p class="mt-1 text-xs text-slate-500">
+              {% if outfits %}{{ outfits|length }} outfit{{ '' if outfits|length == 1 else 's' }} on global{% else %}Select a character first{% endif %}
+            </p>
+          </div>
+        </div>
+
+        <button class="btn-primary">Save</button>
+      </form>
+    {% endcall %}
+
+    {# Live preview column — same hero treatment as public profile #}
+    <article class="surface-card relative overflow-hidden min-h-[24rem]">
+      {% if oshi_image %}
+        <img src="{{ oshi_image }}"
+             alt=""
+             referrerpolicy="no-referrer"
+             loading="lazy"
+             class="pointer-events-none absolute inset-y-0 right-0 h-full w-[80%] object-contain object-bottom"
+             style="mask-image: linear-gradient(to left, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%); -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%);" />
+        <div class="pointer-events-none absolute inset-y-0 right-0 w-2/3 bg-gradient-to-l from-fuchsia-500/20 via-fuchsia-500/5 to-transparent"></div>
+      {% endif %}
+      <div class="relative p-5">
+        <p class="label-eyebrow">Live preview</p>
+        <p class="mt-2 text-lg font-semibold text-slate-50">{{ profile.display_name or current_user.username }}</p>
+        <p class="text-xs text-slate-400">@{{ current_user.username }}</p>
+        {% if profile.oshi %}
+          <p class="mt-3 text-sm">
+            <span class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 text-xs font-medium text-fuchsia-200">
+              {{ profile.oshi.name_en }}
+            </span>
+          </p>
+          {% if profile.oshi_outfit %}
+            <p class="mt-1 text-xs text-fuchsia-200/80">
+              {{ profile.oshi_outfit.display_title }}
+              {% if profile.oshi_outfit.rarity %}<span class="ml-1 text-amber-300">{{ '★' * profile.oshi_outfit.rarity }}</span>{% endif %}
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="mt-3 text-xs text-slate-500">Pick an Oshi to see them here.</p>
+        {% endif %}
+        <p class="mt-6 text-xs text-slate-500">
+          Public:
+          <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.public', username=current_user.username) }}">/profiles/{{ current_user.username }}</a>
+        </p>
+        <p class="mt-2 text-xs text-slate-500">Save first; outfit changes apply on save.</p>
       </div>
-
-      <div>
-        <label class="text-sm text-slate-300">Oshi</label>
-        <select name="oshi_character_id" class="input-base mt-1">
-          <option value="">— none —</option>
-          {% for c in characters %}
-            <option value="{{ c.id }}" {% if profile.oshi_character_id == c.id %}selected{% endif %}>
-              {{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}
-            </option>
-          {% endfor %}
-        </select>
-        {% for err in form.oshi_character_id.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
-      </div>
-
-      <button class="btn-primary">Save</button>
-    </form>
-  {% endcall %}
-
-  <p class="mt-4 text-sm text-slate-400">
-    Public view:
-    <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.public', username=current_user.username) }}">/profiles/{{ current_user.username }}</a>
-  </p>
+    </article>
+  </div>
 {% endblock %}

@@ -1,0 +1,8 @@
+<select id="oshi-outfit-select" name="oshi_outfit_id" class="input-base mt-1">
+  <option value="">— default outfit —</option>
+  {% for o in outfits %}
+    <option value="{{ o.id }}" {% if selected_outfit_id == o.id %}selected{% endif %}>
+      {{ o.display_title }}{% if o.rarity %} · {{ '★' * o.rarity }}{% endif %}
+    </option>
+  {% endfor %}
+</select>

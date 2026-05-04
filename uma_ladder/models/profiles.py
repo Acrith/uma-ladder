@@ -27,6 +27,9 @@ class UserProfile(db.Model):
     oshi_character_id: Mapped[int | None] = mapped_column(
         ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    oshi_outfit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("uma_outfits.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
@@ -39,6 +42,9 @@ class UserProfile(db.Model):
     )
     oshi: Mapped[UmaCharacter | None] = relationship(  # type: ignore[name-defined]  # noqa: F821
         "UmaCharacter", lazy="joined"
+    )
+    oshi_outfit: Mapped[UmaOutfit | None] = relationship(  # noqa: F821
+        "UmaOutfit", lazy="joined", foreign_keys=[oshi_outfit_id]
     )
 
     def __repr__(self) -> str:

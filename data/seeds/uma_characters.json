@@ -1,30 +1,775 @@
 {
-  "source": "curated_subset_v1",
-  "attribution": "Character names from GameTora (https://gametora.com/umamusume/characters); not affiliated with Cygames.",
+  "source": "gametora_v1",
+  "attribution": "Character data sourced from GameTora (https://gametora.com/umamusume/characters); not affiliated with Cygames.",
+  "fetched_at": "2026-05-04T19:37:55.229030+00:00",
   "characters": [
-    { "slug": "special-week", "name_en": "Special Week", "name_jp": "スペシャルウィーク" },
-    { "slug": "silence-suzuka", "name_en": "Silence Suzuka", "name_jp": "サイレンススズカ" },
-    { "slug": "tokai-teio", "name_en": "Tokai Teio", "name_jp": "トウカイテイオー" },
-    { "slug": "mejiro-mcqueen", "name_en": "Mejiro McQueen", "name_jp": "メジロマックイーン" },
-    { "slug": "gold-ship", "name_en": "Gold Ship", "name_jp": "ゴールドシップ" },
-    { "slug": "vodka", "name_en": "Vodka", "name_jp": "ウオッカ" },
-    { "slug": "daiwa-scarlet", "name_en": "Daiwa Scarlet", "name_jp": "ダイワスカーレット" },
-    { "slug": "taiki-shuttle", "name_en": "Taiki Shuttle", "name_jp": "タイキシャトル" },
-    { "slug": "grass-wonder", "name_en": "Grass Wonder", "name_jp": "グラスワンダー" },
-    { "slug": "el-condor-pasa", "name_en": "El Condor Pasa", "name_jp": "エルコンドルパサー" },
-    { "slug": "rice-shower", "name_en": "Rice Shower", "name_jp": "ライスシャワー" },
-    { "slug": "mihono-bourbon", "name_en": "Mihono Bourbon", "name_jp": "ミホノブルボン" },
-    { "slug": "biwa-hayahide", "name_en": "Biwa Hayahide", "name_jp": "ビワハヤヒデ" },
-    { "slug": "narita-taishin", "name_en": "Narita Taishin", "name_jp": "ナリタタイシン" },
-    { "slug": "winning-ticket", "name_en": "Winning Ticket", "name_jp": "ウイニングチケット" },
-    { "slug": "air-groove", "name_en": "Air Groove", "name_jp": "エアグルーヴ" },
-    { "slug": "agnes-tachyon", "name_en": "Agnes Tachyon", "name_jp": "アグネスタキオン" },
-    { "slug": "manhattan-cafe", "name_en": "Manhattan Cafe", "name_jp": "マンハッタンカフェ" },
-    { "slug": "fine-motion", "name_en": "Fine Motion", "name_jp": "ファインモーション" },
-    { "slug": "king-halo", "name_en": "King Halo", "name_jp": "キングヘイロー" },
-    { "slug": "hishi-amazon", "name_en": "Hishi Amazon", "name_jp": "ヒシアマゾン" },
-    { "slug": "seiun-sky", "name_en": "Seiun Sky", "name_jp": "セイウンスカイ" },
-    { "slug": "symboli-rudolf", "name_en": "Symboli Rudolf", "name_jp": "シンボリルドルフ" },
-    { "slug": "maruzensky", "name_en": "Maruzensky", "name_jp": "マルゼンスキー" }
+    {
+      "slug": "admire-groove",
+      "name_en": "Admire Groove",
+      "name_jp": "アドマイヤグルーヴ",
+      "profile_url": "https://gametora.com/umamusume/characters/1118-admire-groove"
+    },
+    {
+      "slug": "admire-vega",
+      "name_en": "Admire Vega",
+      "name_jp": "アドマイヤベガ",
+      "profile_url": "https://gametora.com/umamusume/characters/1033-admire-vega"
+    },
+    {
+      "slug": "agnes-digital",
+      "name_en": "Agnes Digital",
+      "name_jp": "アグネスデジタル",
+      "profile_url": "https://gametora.com/umamusume/characters/1019-agnes-digital"
+    },
+    {
+      "slug": "agnes-tachyon",
+      "name_en": "Agnes Tachyon",
+      "name_jp": "アグネスタキオン",
+      "profile_url": "https://gametora.com/umamusume/characters/1032-agnes-tachyon"
+    },
+    {
+      "slug": "air-groove",
+      "name_en": "Air Groove",
+      "name_jp": "エアグルーヴ",
+      "profile_url": "https://gametora.com/umamusume/characters/1018-air-groove"
+    },
+    {
+      "slug": "air-messiah",
+      "name_en": "Air Messiah",
+      "name_jp": "エアメサイア",
+      "profile_url": "https://gametora.com/umamusume/characters/1111-air-messiah"
+    },
+    {
+      "slug": "air-shakur",
+      "name_en": "Air Shakur",
+      "name_jp": "エアシャカール",
+      "profile_url": "https://gametora.com/umamusume/characters/1036-air-shakur"
+    },
+    {
+      "slug": "almond-eye",
+      "name_en": "Almond Eye",
+      "name_jp": "アーモンドアイ",
+      "profile_url": "https://gametora.com/umamusume/characters/1129-almond-eye"
+    },
+    {
+      "slug": "aston-machan",
+      "name_en": "Aston Machan",
+      "name_jp": "アストンマーチャン",
+      "profile_url": "https://gametora.com/umamusume/characters/1087-aston-machan"
+    },
+    {
+      "slug": "bamboo-memory",
+      "name_en": "Bamboo Memory",
+      "name_jp": "バンブーメモリー",
+      "profile_url": "https://gametora.com/umamusume/characters/1053-bamboo-memory"
+    },
+    {
+      "slug": "believe",
+      "name_en": "Believe",
+      "name_jp": "ビリーヴ",
+      "profile_url": "https://gametora.com/umamusume/characters/1095-believe"
+    },
+    {
+      "slug": "biko-pegasus",
+      "name_en": "Biko Pegasus",
+      "name_jp": "ビコーペガサス",
+      "profile_url": "https://gametora.com/umamusume/characters/1054-biko-pegasus"
+    },
+    {
+      "slug": "biwa-hayahide",
+      "name_en": "Biwa Hayahide",
+      "name_jp": "ビワハヤヒデ",
+      "profile_url": "https://gametora.com/umamusume/characters/1023-biwa-hayahide"
+    },
+    {
+      "slug": "bubble-gum-fellow",
+      "name_en": "Bubble Gum Fellow",
+      "name_jp": "バブルガムフェロー",
+      "profile_url": "https://gametora.com/umamusume/characters/1124-bubble-gum-fellow"
+    },
+    {
+      "slug": "buena-vista",
+      "name_en": "Buena Vista",
+      "name_jp": "ブエナビスタ",
+      "profile_url": "https://gametora.com/umamusume/characters/1114-buena-vista"
+    },
+    {
+      "slug": "calstone-light-o",
+      "name_en": "Calstone Light O",
+      "name_jp": "カルストンライトオ",
+      "profile_url": "https://gametora.com/umamusume/characters/1120-calstone-light-o"
+    },
+    {
+      "slug": "cesario",
+      "name_en": "Cesario",
+      "name_jp": "シーザリオ",
+      "profile_url": "https://gametora.com/umamusume/characters/1110-cesario"
+    },
+    {
+      "slug": "cheval-grand",
+      "name_en": "Cheval Grand",
+      "name_jp": "シュヴァルグラン",
+      "profile_url": "https://gametora.com/umamusume/characters/1089-cheval-grand"
+    },
+    {
+      "slug": "chrono-genesis",
+      "name_en": "Chrono Genesis",
+      "name_jp": "クロノジェネシス",
+      "profile_url": "https://gametora.com/umamusume/characters/1133-chrono-genesis"
+    },
+    {
+      "slug": "copano-rickey",
+      "name_en": "Copano Rickey",
+      "name_jp": "コパノリッキー",
+      "profile_url": "https://gametora.com/umamusume/characters/1098-copano-rickey"
+    },
+    {
+      "slug": "curren-chan",
+      "name_en": "Curren Chan",
+      "name_jp": "カレンチャン",
+      "profile_url": "https://gametora.com/umamusume/characters/1038-curren-chan"
+    },
+    {
+      "slug": "daiichi-ruby",
+      "name_en": "Daiichi Ruby",
+      "name_jp": "ダイイチルビー",
+      "profile_url": "https://gametora.com/umamusume/characters/1085-daiichi-ruby"
+    },
+    {
+      "slug": "daitaku-helios",
+      "name_en": "Daitaku Helios",
+      "name_jp": "ダイタクヘリオス",
+      "profile_url": "https://gametora.com/umamusume/characters/1065-daitaku-helios"
+    },
+    {
+      "slug": "daiwa-scarlet",
+      "name_en": "Daiwa Scarlet",
+      "name_jp": "ダイワスカーレット",
+      "profile_url": "https://gametora.com/umamusume/characters/1009-daiwa-scarlet"
+    },
+    {
+      "slug": "dantsu-flame",
+      "name_en": "Dantsu Flame",
+      "name_jp": "ダンツフレーム",
+      "profile_url": "https://gametora.com/umamusume/characters/1092-dantsu-flame"
+    },
+    {
+      "slug": "dream-journey",
+      "name_en": "Dream Journey",
+      "name_jp": "ドリームジャーニー",
+      "profile_url": "https://gametora.com/umamusume/characters/1119-dream-journey"
+    },
+    {
+      "slug": "duramente",
+      "name_en": "Duramente",
+      "name_jp": "ドゥラメンテ",
+      "profile_url": "https://gametora.com/umamusume/characters/1108-duramente"
+    },
+    {
+      "slug": "durandal",
+      "name_en": "Durandal",
+      "name_jp": "デュランダル",
+      "profile_url": "https://gametora.com/umamusume/characters/1121-durandal"
+    },
+    {
+      "slug": "eishin-flash",
+      "name_en": "Eishin Flash",
+      "name_jp": "エイシンフラッシュ",
+      "profile_url": "https://gametora.com/umamusume/characters/1037-eishin-flash"
+    },
+    {
+      "slug": "el-condor-pasa",
+      "name_en": "El Condor Pasa",
+      "name_jp": "エルコンドルパサー",
+      "profile_url": "https://gametora.com/umamusume/characters/1014-el-condor-pasa"
+    },
+    {
+      "slug": "espoir-city",
+      "name_en": "Espoir City",
+      "name_jp": "エスポワールシチー",
+      "profile_url": "https://gametora.com/umamusume/characters/1081-espoir-city"
+    },
+    {
+      "slug": "fenomeno",
+      "name_en": "Fenomeno",
+      "name_jp": "フェノーメノ",
+      "profile_url": "https://gametora.com/umamusume/characters/1127-fenomeno"
+    },
+    {
+      "slug": "fine-motion",
+      "name_en": "Fine Motion",
+      "name_jp": "ファインモーション",
+      "profile_url": "https://gametora.com/umamusume/characters/1022-fine-motion"
+    },
+    {
+      "slug": "fuji-kiseki",
+      "name_en": "Fuji Kiseki",
+      "name_jp": "フジキセキ",
+      "profile_url": "https://gametora.com/umamusume/characters/1005-fuji-kiseki"
+    },
+    {
+      "slug": "furioso",
+      "name_en": "Furioso",
+      "name_jp": "フリオーソ",
+      "profile_url": "https://gametora.com/umamusume/characters/1079-furioso"
+    },
+    {
+      "slug": "fusaichi-pandora",
+      "name_en": "Fusaichi Pandora",
+      "name_jp": "フサイチパンドラ",
+      "profile_url": "https://gametora.com/umamusume/characters/1113-fusaichi-pandora"
+    },
+    {
+      "slug": "gentildonna",
+      "name_en": "Gentildonna",
+      "name_jp": "ジェンティルドンナ",
+      "profile_url": "https://gametora.com/umamusume/characters/1116-gentildonna"
+    },
+    {
+      "slug": "gold-city",
+      "name_en": "Gold City",
+      "name_jp": "ゴールドシチー",
+      "profile_url": "https://gametora.com/umamusume/characters/1040-gold-city"
+    },
+    {
+      "slug": "gold-ship",
+      "name_en": "Gold Ship",
+      "name_jp": "ゴールドシップ",
+      "profile_url": "https://gametora.com/umamusume/characters/1007-gold-ship"
+    },
+    {
+      "slug": "gran-alegria",
+      "name_en": "Gran Alegria",
+      "name_jp": "グランアレグリア",
+      "profile_url": "https://gametora.com/umamusume/characters/1131-gran-alegria"
+    },
+    {
+      "slug": "grass-wonder",
+      "name_en": "Grass Wonder",
+      "name_jp": "グラスワンダー",
+      "profile_url": "https://gametora.com/umamusume/characters/1011-grass-wonder"
+    },
+    {
+      "slug": "haru-urara",
+      "name_en": "Haru Urara",
+      "name_jp": "ハルウララ",
+      "profile_url": "https://gametora.com/umamusume/characters/1052-haru-urara"
+    },
+    {
+      "slug": "hishi-akebono",
+      "name_en": "Hishi Akebono",
+      "name_jp": "ヒシアケボノ",
+      "profile_url": "https://gametora.com/umamusume/characters/1028-hishi-akebono"
+    },
+    {
+      "slug": "hishi-amazon",
+      "name_en": "Hishi Amazon",
+      "name_jp": "ヒシアマゾン",
+      "profile_url": "https://gametora.com/umamusume/characters/1012-hishi-amazon"
+    },
+    {
+      "slug": "hishi-miracle",
+      "name_en": "Hishi Miracle",
+      "name_jp": "ヒシミラクル",
+      "profile_url": "https://gametora.com/umamusume/characters/1106-hishi-miracle"
+    },
+    {
+      "slug": "hokko-tarumae",
+      "name_en": "Hokko Tarumae",
+      "name_jp": "ホッコータルマエ",
+      "profile_url": "https://gametora.com/umamusume/characters/1099-hokko-tarumae"
+    },
+    {
+      "slug": "ikuno-dictus",
+      "name_en": "Ikuno Dictus",
+      "name_jp": "イクノディクタス",
+      "profile_url": "https://gametora.com/umamusume/characters/1063-ikuno-dictus"
+    },
+    {
+      "slug": "inari-one",
+      "name_en": "Inari One",
+      "name_jp": "イナリワン",
+      "profile_url": "https://gametora.com/umamusume/characters/1034-inari-one"
+    },
+    {
+      "slug": "ines-fujin",
+      "name_en": "Ines Fujin",
+      "name_jp": "アイネスフウジン",
+      "profile_url": "https://gametora.com/umamusume/characters/1031-ines-fujin"
+    },
+    {
+      "slug": "jungle-pocket",
+      "name_en": "Jungle Pocket",
+      "name_jp": "ジャングルポケット",
+      "profile_url": "https://gametora.com/umamusume/characters/1094-jungle-pocket"
+    },
+    {
+      "slug": "katsuragi-ace",
+      "name_en": "Katsuragi Ace",
+      "name_jp": "カツラギエース",
+      "profile_url": "https://gametora.com/umamusume/characters/1104-katsuragi-ace"
+    },
+    {
+      "slug": "kawakami-princess",
+      "name_en": "Kawakami Princess",
+      "name_jp": "カワカミプリンセス",
+      "profile_url": "https://gametora.com/umamusume/characters/1039-kawakami-princess"
+    },
+    {
+      "slug": "king-halo",
+      "name_en": "King Halo",
+      "name_jp": "キングヘイロー",
+      "profile_url": "https://gametora.com/umamusume/characters/1061-king-halo"
+    },
+    {
+      "slug": "kiseki",
+      "name_en": "Kiseki",
+      "name_jp": "キセキ",
+      "profile_url": "https://gametora.com/umamusume/characters/1137-kiseki"
+    },
+    {
+      "slug": "kitasan-black",
+      "name_en": "Kitasan Black",
+      "name_jp": "キタサンブラック",
+      "profile_url": "https://gametora.com/umamusume/characters/1068-kitasan-black"
+    },
+    {
+      "slug": "ksmiracle",
+      "name_en": "K.S.Miracle",
+      "name_jp": "ケイエスミラクル",
+      "profile_url": "https://gametora.com/umamusume/characters/1093-ksmiracle"
+    },
+    {
+      "slug": "loves-only-you",
+      "name_en": "Loves Only You",
+      "name_jp": "ラヴズオンリーユー",
+      "profile_url": "https://gametora.com/umamusume/characters/1132-loves-only-you"
+    },
+    {
+      "slug": "lucky-lilac",
+      "name_en": "Lucky Lilac",
+      "name_jp": "ラッキーライラック",
+      "profile_url": "https://gametora.com/umamusume/characters/1130-lucky-lilac"
+    },
+    {
+      "slug": "manhattan-cafe",
+      "name_en": "Manhattan Cafe",
+      "name_jp": "マンハッタンカフェ",
+      "profile_url": "https://gametora.com/umamusume/characters/1025-manhattan-cafe"
+    },
+    {
+      "slug": "maruzensky",
+      "name_en": "Maruzensky",
+      "name_jp": "マルゼンスキー",
+      "profile_url": "https://gametora.com/umamusume/characters/1004-maruzensky"
+    },
+    {
+      "slug": "marvelous-sunday",
+      "name_en": "Marvelous Sunday",
+      "name_jp": "マーベラスサンデー",
+      "profile_url": "https://gametora.com/umamusume/characters/1055-marvelous-sunday"
+    },
+    {
+      "slug": "matikanefukukitaru",
+      "name_en": "Matikanefukukitaru",
+      "name_jp": "マチカネフクキタル",
+      "profile_url": "https://gametora.com/umamusume/characters/1056-matikanefukukitaru"
+    },
+    {
+      "slug": "matikanetannhauser",
+      "name_en": "Matikanetannhauser",
+      "name_jp": "マチカネタンホイザ",
+      "profile_url": "https://gametora.com/umamusume/characters/1062-matikanetannhauser"
+    },
+    {
+      "slug": "mayano-top-gun",
+      "name_en": "Mayano Top Gun",
+      "name_jp": "マヤノトップガン",
+      "profile_url": "https://gametora.com/umamusume/characters/1024-mayano-top-gun"
+    },
+    {
+      "slug": "meisho-doto",
+      "name_en": "Meisho Doto",
+      "name_jp": "メイショウドトウ",
+      "profile_url": "https://gametora.com/umamusume/characters/1058-meisho-doto"
+    },
+    {
+      "slug": "mejiro-ardan",
+      "name_en": "Mejiro Ardan",
+      "name_jp": "メジロアルダン",
+      "profile_url": "https://gametora.com/umamusume/characters/1071-mejiro-ardan"
+    },
+    {
+      "slug": "mejiro-bright",
+      "name_en": "Mejiro Bright",
+      "name_jp": "メジロブライト",
+      "profile_url": "https://gametora.com/umamusume/characters/1074-mejiro-bright"
+    },
+    {
+      "slug": "mejiro-dober",
+      "name_en": "Mejiro Dober",
+      "name_jp": "メジロドーベル",
+      "profile_url": "https://gametora.com/umamusume/characters/1059-mejiro-dober"
+    },
+    {
+      "slug": "mejiro-mcqueen",
+      "name_en": "Mejiro McQueen",
+      "name_jp": "メジロマックイーン",
+      "profile_url": "https://gametora.com/umamusume/characters/1013-mejiro-mcqueen"
+    },
+    {
+      "slug": "mejiro-palmer",
+      "name_en": "Mejiro Palmer",
+      "name_jp": "メジロパーマー",
+      "profile_url": "https://gametora.com/umamusume/characters/1064-mejiro-palmer"
+    },
+    {
+      "slug": "mejiro-ramonu",
+      "name_en": "Mejiro Ramonu",
+      "name_jp": "メジロラモーヌ",
+      "profile_url": "https://gametora.com/umamusume/characters/1086-mejiro-ramonu"
+    },
+    {
+      "slug": "mejiro-ryan",
+      "name_en": "Mejiro Ryan",
+      "name_jp": "メジロライアン",
+      "profile_url": "https://gametora.com/umamusume/characters/1027-mejiro-ryan"
+    },
+    {
+      "slug": "mihono-bourbon",
+      "name_en": "Mihono Bourbon",
+      "name_jp": "ミホノブルボン",
+      "profile_url": "https://gametora.com/umamusume/characters/1026-mihono-bourbon"
+    },
+    {
+      "slug": "mr-cb",
+      "name_en": "Mr. C.B.",
+      "name_jp": "ミスターシービー",
+      "profile_url": "https://gametora.com/umamusume/characters/1057-mr-cb"
+    },
+    {
+      "slug": "nakayama-festa",
+      "name_en": "Nakayama Festa",
+      "name_jp": "ナカヤマフェスタ",
+      "profile_url": "https://gametora.com/umamusume/characters/1049-nakayama-festa"
+    },
+    {
+      "slug": "narita-brian",
+      "name_en": "Narita Brian",
+      "name_jp": "ナリタブライアン",
+      "profile_url": "https://gametora.com/umamusume/characters/1016-narita-brian"
+    },
+    {
+      "slug": "narita-taishin",
+      "name_en": "Narita Taishin",
+      "name_jp": "ナリタタイシン",
+      "profile_url": "https://gametora.com/umamusume/characters/1050-narita-taishin"
+    },
+    {
+      "slug": "narita-top-road",
+      "name_en": "Narita Top Road",
+      "name_jp": "ナリタトップロード",
+      "profile_url": "https://gametora.com/umamusume/characters/1077-narita-top-road"
+    },
+    {
+      "slug": "neo-universe",
+      "name_en": "Neo Universe",
+      "name_jp": "ネオユニヴァース",
+      "profile_url": "https://gametora.com/umamusume/characters/1105-neo-universe"
+    },
+    {
+      "slug": "nice-nature",
+      "name_en": "Nice Nature",
+      "name_jp": "ナイスネイチャ",
+      "profile_url": "https://gametora.com/umamusume/characters/1060-nice-nature"
+    },
+    {
+      "slug": "nishino-flower",
+      "name_en": "Nishino Flower",
+      "name_jp": "ニシノフラワー",
+      "profile_url": "https://gametora.com/umamusume/characters/1051-nishino-flower"
+    },
+    {
+      "slug": "no-reason",
+      "name_en": "No Reason",
+      "name_jp": "ノーリーズン",
+      "profile_url": "https://gametora.com/umamusume/characters/1096-no-reason"
+    },
+    {
+      "slug": "north-flight",
+      "name_en": "North Flight",
+      "name_jp": "ノースフライト",
+      "profile_url": "https://gametora.com/umamusume/characters/1082-north-flight"
+    },
+    {
+      "slug": "oguri-cap",
+      "name_en": "Oguri Cap",
+      "name_jp": "オグリキャップ",
+      "profile_url": "https://gametora.com/umamusume/characters/1006-oguri-cap"
+    },
+    {
+      "slug": "orfevre",
+      "name_en": "Orfevre",
+      "name_jp": "オルフェーヴル",
+      "profile_url": "https://gametora.com/umamusume/characters/1115-orfevre"
+    },
+    {
+      "slug": "rhein-kraft",
+      "name_en": "Rhein Kraft",
+      "name_jp": "ラインクラフト",
+      "profile_url": "https://gametora.com/umamusume/characters/1109-rhein-kraft"
+    },
+    {
+      "slug": "rice-shower",
+      "name_en": "Rice Shower",
+      "name_jp": "ライスシャワー",
+      "profile_url": "https://gametora.com/umamusume/characters/1030-rice-shower"
+    },
+    {
+      "slug": "royce-and-royce",
+      "name_en": "Royce and Royce",
+      "name_jp": "ロイスアンドロイス",
+      "profile_url": "https://gametora.com/umamusume/characters/1103-royce-and-royce"
+    },
+    {
+      "slug": "sakura-bakushin-o",
+      "name_en": "Sakura Bakushin O",
+      "name_jp": "サクラバクシンオー",
+      "profile_url": "https://gametora.com/umamusume/characters/1041-sakura-bakushin-o"
+    },
+    {
+      "slug": "sakura-chiyono-o",
+      "name_en": "Sakura Chiyono O",
+      "name_jp": "サクラチヨノオー",
+      "profile_url": "https://gametora.com/umamusume/characters/1069-sakura-chiyono-o"
+    },
+    {
+      "slug": "sakura-laurel",
+      "name_en": "Sakura Laurel",
+      "name_jp": "サクラローレル",
+      "profile_url": "https://gametora.com/umamusume/characters/1076-sakura-laurel"
+    },
+    {
+      "slug": "satono-crown",
+      "name_en": "Satono Crown",
+      "name_jp": "サトノクラウン",
+      "profile_url": "https://gametora.com/umamusume/characters/1088-satono-crown"
+    },
+    {
+      "slug": "satono-diamond",
+      "name_en": "Satono Diamond",
+      "name_jp": "サトノダイヤモンド",
+      "profile_url": "https://gametora.com/umamusume/characters/1067-satono-diamond"
+    },
+    {
+      "slug": "seeking-the-pearl",
+      "name_en": "Seeking the Pearl",
+      "name_jp": "シーキングザパール",
+      "profile_url": "https://gametora.com/umamusume/characters/1042-seeking-the-pearl"
+    },
+    {
+      "slug": "seiun-sky",
+      "name_en": "Seiun Sky",
+      "name_jp": "セイウンスカイ",
+      "profile_url": "https://gametora.com/umamusume/characters/1020-seiun-sky"
+    },
+    {
+      "slug": "shinko-windy",
+      "name_en": "Shinko Windy",
+      "name_jp": "シンコウウインディ",
+      "profile_url": "https://gametora.com/umamusume/characters/1043-shinko-windy"
+    },
+    {
+      "slug": "silence-suzuka",
+      "name_en": "Silence Suzuka",
+      "name_jp": "サイレンススズカ",
+      "profile_url": "https://gametora.com/umamusume/characters/1002-silence-suzuka"
+    },
+    {
+      "slug": "sirius-symboli",
+      "name_en": "Sirius Symboli",
+      "name_jp": "シリウスシンボリ",
+      "profile_url": "https://gametora.com/umamusume/characters/1070-sirius-symboli"
+    },
+    {
+      "slug": "smart-falcon",
+      "name_en": "Smart Falcon",
+      "name_jp": "スマートファルコン",
+      "profile_url": "https://gametora.com/umamusume/characters/1046-smart-falcon"
+    },
+    {
+      "slug": "sounds-of-earth",
+      "name_en": "Sounds of Earth",
+      "name_jp": "サウンズオブアース",
+      "profile_url": "https://gametora.com/umamusume/characters/1102-sounds-of-earth"
+    },
+    {
+      "slug": "special-week",
+      "name_en": "Special Week",
+      "name_jp": "スペシャルウィーク",
+      "profile_url": "https://gametora.com/umamusume/characters/1001-special-week"
+    },
+    {
+      "slug": "stay-gold",
+      "name_en": "Stay Gold",
+      "name_jp": "ステイゴールド",
+      "profile_url": "https://gametora.com/umamusume/characters/1135-stay-gold"
+    },
+    {
+      "slug": "still-in-love",
+      "name_en": "Still in Love",
+      "name_jp": "スティルインラブ",
+      "profile_url": "https://gametora.com/umamusume/characters/1097-still-in-love"
+    },
+    {
+      "slug": "super-creek",
+      "name_en": "Super Creek",
+      "name_jp": "スーパークリーク",
+      "profile_url": "https://gametora.com/umamusume/characters/1045-super-creek"
+    },
+    {
+      "slug": "sweep-tosho",
+      "name_en": "Sweep Tosho",
+      "name_jp": "スイープトウショウ",
+      "profile_url": "https://gametora.com/umamusume/characters/1044-sweep-tosho"
+    },
+    {
+      "slug": "symboli-kris-s",
+      "name_en": "Symboli Kris S",
+      "name_jp": "シンボリクリスエス",
+      "profile_url": "https://gametora.com/umamusume/characters/1083-symboli-kris-s"
+    },
+    {
+      "slug": "symboli-rudolf",
+      "name_en": "Symboli Rudolf",
+      "name_jp": "シンボリルドルフ",
+      "profile_url": "https://gametora.com/umamusume/characters/1017-symboli-rudolf"
+    },
+    {
+      "slug": "taiki-shuttle",
+      "name_en": "Taiki Shuttle",
+      "name_jp": "タイキシャトル",
+      "profile_url": "https://gametora.com/umamusume/characters/1010-taiki-shuttle"
+    },
+    {
+      "slug": "tamamo-cross",
+      "name_en": "Tamamo Cross",
+      "name_jp": "タマモクロス",
+      "profile_url": "https://gametora.com/umamusume/characters/1021-tamamo-cross"
+    },
+    {
+      "slug": "tanino-gimlet",
+      "name_en": "Tanino Gimlet",
+      "name_jp": "タニノギムレット",
+      "profile_url": "https://gametora.com/umamusume/characters/1084-tanino-gimlet"
+    },
+    {
+      "slug": "tap-dance-city",
+      "name_en": "Tap Dance City",
+      "name_jp": "タップダンスシチー",
+      "profile_url": "https://gametora.com/umamusume/characters/1107-tap-dance-city"
+    },
+    {
+      "slug": "tm-opera-o",
+      "name_en": "TM Opera O",
+      "name_jp": "テイエムオペラオー",
+      "profile_url": "https://gametora.com/umamusume/characters/1015-tm-opera-o"
+    },
+    {
+      "slug": "tokai-teio",
+      "name_en": "Tokai Teio",
+      "name_jp": "トウカイテイオー",
+      "profile_url": "https://gametora.com/umamusume/characters/1003-tokai-teio"
+    },
+    {
+      "slug": "tosen-jordan",
+      "name_en": "Tosen Jordan",
+      "name_jp": "トーセンジョーダン",
+      "profile_url": "https://gametora.com/umamusume/characters/1048-tosen-jordan"
+    },
+    {
+      "slug": "transcend",
+      "name_en": "Transcend",
+      "name_jp": "トランセンド",
+      "profile_url": "https://gametora.com/umamusume/characters/1080-transcend"
+    },
+    {
+      "slug": "tsurumaru-tsuyoshi",
+      "name_en": "Tsurumaru Tsuyoshi",
+      "name_jp": "ツルマルツヨシ",
+      "profile_url": "https://gametora.com/umamusume/characters/1073-tsurumaru-tsuyoshi"
+    },
+    {
+      "slug": "twin-turbo",
+      "name_en": "Twin Turbo",
+      "name_jp": "ツインターボ",
+      "profile_url": "https://gametora.com/umamusume/characters/1066-twin-turbo"
+    },
+    {
+      "slug": "verxina",
+      "name_en": "Verxina",
+      "name_jp": "ヴィルシーナ",
+      "profile_url": "https://gametora.com/umamusume/characters/1090-verxina"
+    },
+    {
+      "slug": "victoire-pisa",
+      "name_en": "Victoire Pisa",
+      "name_jp": "ヴィクトワールピサ",
+      "profile_url": "https://gametora.com/umamusume/characters/1143-victoire-pisa"
+    },
+    {
+      "slug": "vivlos",
+      "name_en": "Vivlos",
+      "name_jp": "ヴィブロス",
+      "profile_url": "https://gametora.com/umamusume/characters/1091-vivlos"
+    },
+    {
+      "slug": "vodka",
+      "name_en": "Vodka",
+      "name_jp": "ウオッカ",
+      "profile_url": "https://gametora.com/umamusume/characters/1008-vodka"
+    },
+    {
+      "slug": "win-variation",
+      "name_en": "Win Variation",
+      "name_jp": "ウインバリアシオン",
+      "profile_url": "https://gametora.com/umamusume/characters/1117-win-variation"
+    },
+    {
+      "slug": "winning-ticket",
+      "name_en": "Winning Ticket",
+      "name_jp": "ウイニングチケット",
+      "profile_url": "https://gametora.com/umamusume/characters/1035-winning-ticket"
+    },
+    {
+      "slug": "wonder-acute",
+      "name_en": "Wonder Acute",
+      "name_jp": "ワンダーアキュート",
+      "profile_url": "https://gametora.com/umamusume/characters/1100-wonder-acute"
+    },
+    {
+      "slug": "yaeno-muteki",
+      "name_en": "Yaeno Muteki",
+      "name_jp": "ヤエノムテキ",
+      "profile_url": "https://gametora.com/umamusume/characters/1072-yaeno-muteki"
+    },
+    {
+      "slug": "yamanin-zephyr",
+      "name_en": "Yamanin Zephyr",
+      "name_jp": "ヤマニンゼファー",
+      "profile_url": "https://gametora.com/umamusume/characters/1078-yamanin-zephyr"
+    },
+    {
+      "slug": "yukino-bijin",
+      "name_en": "Yukino Bijin",
+      "name_jp": "ユキノビジン",
+      "profile_url": "https://gametora.com/umamusume/characters/1029-yukino-bijin"
+    },
+    {
+      "slug": "zenno-rob-roy",
+      "name_en": "Zenno Rob Roy",
+      "name_jp": "ゼンノロブロイ",
+      "profile_url": "https://gametora.com/umamusume/characters/1047-zenno-rob-roy"
+    }
   ]
 }
