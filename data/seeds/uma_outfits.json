@@ -1,7 +1,7 @@
 {
   "source": "gametora_v1",
   "attribution": "Character data sourced from GameTora (https://gametora.com/umamusume/characters); not affiliated with Cygames.",
-  "fetched_at": "2026-05-04T19:58:58.599763+00:00",
+  "fetched_at": "2026-05-04T20:31:22.035562+00:00",
   "outfits": [
     {
       "char_id": 1001,
@@ -14,11 +14,11 @@
     },
     {
       "char_id": 1001,
-      "costume_id": 100130,
+      "costume_id": 100102,
       "released_globally": true,
       "title_en": "[Hopp'n♪Happy Heart]",
       "title_jp": "[ほっぴん♪ビタミンハート]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1001_100130.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1001_100102.png",
       "rarity": 3
     },
     {
@@ -59,11 +59,11 @@
     },
     {
       "char_id": 1004,
-      "costume_id": 100430,
+      "costume_id": 100402,
       "released_globally": true,
       "title_en": "[Hot☆Summer Night]",
       "title_jp": "[ぶっとび☆さまーナイト]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1004_100430.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1004_100402.png",
       "rarity": 3
     },
     {
@@ -77,11 +77,11 @@
     },
     {
       "char_id": 1005,
-      "costume_id": 100520,
+      "costume_id": 100502,
       "released_globally": true,
       "title_en": "[Succès Étoilé]",
       "title_jp": "[シュクセ・エトワーレ]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1005_100520.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1005_100502.png",
       "rarity": 3
     },
     {
@@ -95,11 +95,11 @@
     },
     {
       "char_id": 1006,
-      "costume_id": 100646,
+      "costume_id": 100602,
       "released_globally": true,
       "title_en": "[Ashen Miracle]",
       "title_jp": "[キセキの白星]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1006_100646.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1006_100602.png",
       "rarity": 3
     },
     {
@@ -149,11 +149,11 @@
     },
     {
       "char_id": 1011,
-      "costume_id": 101116,
+      "costume_id": 101102,
       "released_globally": true,
       "title_en": "[Saintly Jade Cleric ]",
       "title_jp": "[セイントジェード・ヒーラー]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1011_101116.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1011_101102.png",
       "rarity": 3
     },
     {
@@ -194,11 +194,11 @@
     },
     {
       "char_id": 1014,
-      "costume_id": 101416,
+      "costume_id": 101402,
       "released_globally": true,
       "title_en": "[Kukulkan Warrior]",
       "title_jp": "[ククルカン・モンク]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1014_101416.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1014_101402.png",
       "rarity": 3
     },
     {
@@ -212,11 +212,11 @@
     },
     {
       "char_id": 1015,
-      "costume_id": 101510,
+      "costume_id": 101502,
       "released_globally": true,
       "title_en": "[New Year, Same Radiance!]",
       "title_jp": "[初晴・青き絢爛]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1015_101510.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1015_101502.png",
       "rarity": 3
     },
     {
@@ -239,11 +239,11 @@
     },
     {
       "char_id": 1017,
-      "costume_id": 101743,
+      "costume_id": 101702,
       "released_globally": true,
       "title_en": "[Archer by Moonlight]",
       "title_jp": "[皓月の弓取り]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1017_101743.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1017_101702.png",
       "rarity": 3
     },
     {
@@ -257,11 +257,11 @@
     },
     {
       "char_id": 1018,
-      "costume_id": 101826,
+      "costume_id": 101802,
       "released_globally": true,
       "title_en": "[Quercus Civilis]",
       "title_jp": "[クエルクス・キウィーリス]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1018_101826.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1018_101802.png",
       "rarity": 3
     },
     {
@@ -284,11 +284,11 @@
     },
     {
       "char_id": 1020,
-      "costume_id": 102020,
+      "costume_id": 102002,
       "released_globally": true,
       "title_en": "[Soirée des Chatons]",
       "title_jp": "[ソワレ・ド・シャトン]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1020_102020.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1020_102002.png",
       "rarity": 3
     },
     {
@@ -320,11 +320,11 @@
     },
     {
       "char_id": 1023,
-      "costume_id": 102346,
+      "costume_id": 102302,
       "released_globally": true,
       "title_en": "[Rouge Caroler]",
       "title_jp": "[ノエルージュ・キャロル]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1023_102346.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1023_102302.png",
       "rarity": 3
     },
     {
@@ -338,11 +338,11 @@
     },
     {
       "char_id": 1024,
-      "costume_id": 102426,
+      "costume_id": 102402,
       "released_globally": true,
       "title_en": "[Sunlight Bouquet]",
       "title_jp": "[サンライト・ブーケ]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1024_102426.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1024_102402.png",
       "rarity": 3
     },
     {
@@ -365,11 +365,11 @@
     },
     {
       "char_id": 1026,
-      "costume_id": 102613,
+      "costume_id": 102602,
       "released_globally": true,
       "title_en": "[CODE: ICING]",
       "title_jp": "[CODE：グラサージュ]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1026_102613.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1026_102602.png",
       "rarity": 3
     },
     {
@@ -401,11 +401,11 @@
     },
     {
       "char_id": 1030,
-      "costume_id": 103040,
+      "costume_id": 103002,
       "released_globally": true,
       "title_en": "[Vampire Makeover!]",
       "title_jp": "[Make up Vampire!]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1030_103040.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1030_103002.png",
       "rarity": 3
     },
     {
@@ -455,11 +455,11 @@
     },
     {
       "char_id": 1037,
-      "costume_id": 103713,
+      "costume_id": 103702,
       "released_globally": true,
       "title_en": "[Precise Chocolatier]",
       "title_jp": "[コレクト・ショコラティエ]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1037_103713.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1037_103702.png",
       "rarity": 3
     },
     {
@@ -491,11 +491,11 @@
     },
     {
       "char_id": 1040,
-      "costume_id": 104043,
+      "costume_id": 104002,
       "released_globally": true,
       "title_en": "[Autumn Cosmos]",
       "title_jp": "[秋桜ダンツァトリーチェ]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1040_104043.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1040_104002.png",
       "rarity": 3
     },
     {
@@ -518,11 +518,11 @@
     },
     {
       "char_id": 1045,
-      "costume_id": 104540,
+      "costume_id": 104502,
       "released_globally": true,
       "title_en": "[Chiffon-Wrapped Mummy]",
       "title_jp": "[シフォンリボンマミー]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1045_104540.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1045_104502.png",
       "rarity": 3
     },
     {
@@ -572,11 +572,11 @@
     },
     {
       "char_id": 1052,
-      "costume_id": 105210,
+      "costume_id": 105202,
       "released_globally": true,
       "title_en": "[New Year ♪ New Urara!]",
       "title_jp": "[初うらら♪さくさくら]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1052_105210.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1052_105202.png",
       "rarity": 3
     },
     {
@@ -590,11 +590,11 @@
     },
     {
       "char_id": 1056,
-      "costume_id": 105623,
+      "costume_id": 105602,
       "released_globally": true,
       "title_en": "[Lucky Tidings]",
       "title_jp": "[吉兆・初あらし]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1056_105623.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1056_105602.png",
       "rarity": 3
     },
     {
@@ -626,11 +626,11 @@
     },
     {
       "char_id": 1060,
-      "costume_id": 106050,
+      "costume_id": 106002,
       "released_globally": true,
       "title_en": "[Run & Win]",
       "title_jp": "[RUN＆WIN]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1060_106050.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1060_106002.png",
       "rarity": 3
     },
     {
@@ -644,11 +644,11 @@
     },
     {
       "char_id": 1061,
-      "costume_id": 106150,
+      "costume_id": 106102,
       "released_globally": true,
       "title_en": "[Cheerleader in Noble White]",
       "title_jp": "[白く気高き激励の装]",
-      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1061_106150.png",
+      "image_url": "https://gametora.com/images/umamusume/characters/chara_stand_1061_106102.png",
       "rarity": 3
     },
     {

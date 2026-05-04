@@ -192,8 +192,11 @@ def _coerce_character(raw: dict[str, Any]) -> FetchedCharacter | None:
     if not slug or not name_en:
         return None
     char_id = raw.get("char_id") if isinstance(raw.get("char_id"), int) else None
+    # GameTora's character pages are addressed by the 6-digit costume id
+    # (`char_id * 100 + outfit_suffix`). The default-outfit URL is the
+    # canonical character page, so we anchor profile_url there.
     profile_url = (
-        f"{GAMETORA_BASE}/umamusume/characters/{char_id}-{slug}"
+        f"{GAMETORA_BASE}/umamusume/characters/{char_id * 100 + 1}-{slug}"
         if char_id is not None
         else None
     )
@@ -350,7 +353,11 @@ def _outfit_image_url(char_id: int, costume_id: int) -> str:
 
 def _coerce_outfit(raw: dict[str, Any], region: str) -> FetchedOutfit | None:
     char_id = raw.get("char_id")
-    costume_id = raw.get("costume") or raw.get("card_id")
+    # GameTora's URL slug + image filename use `card_id`. The `costume`
+    # field is a different game-internal id that *usually* matches but
+    # diverges for "alternate version" outfits (Cheerleader skins, RUN&WIN,
+    # etc.) — using costume there 404s the image. Always prefer card_id.
+    costume_id = raw.get("card_id") or raw.get("costume")
     if not isinstance(char_id, int) or not isinstance(costume_id, int):
         return None
 

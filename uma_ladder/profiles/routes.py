@@ -67,8 +67,17 @@ def me() -> object:
 @bp.get("/_partials/outfits")
 @login_required
 def partial_outfits() -> object:
-    """HTMX endpoint: outfit dropdown for the chosen character."""
-    raw = request.args.get("character_id", "").strip()
+    """HTMX endpoint: outfit dropdown for the chosen character.
+
+    Reads `oshi_character_id` from the query — that's the form field name,
+    so `hx-include="this"` on the character `<select>` posts it directly
+    without needing a `hx-vals` rename.
+    """
+    raw = (
+        request.args.get("oshi_character_id")
+        or request.args.get("character_id")
+        or ""
+    ).strip()
     selected_outfit = request.args.get("selected_outfit_id", "").strip()
     char_id = int(raw) if raw.isdigit() else None
     outfits = (

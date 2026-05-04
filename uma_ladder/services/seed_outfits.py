@@ -28,6 +28,20 @@ DEFAULT_SEED_PATH = (
 _PROFILE_URL_CHAR_ID_RE = re.compile(r"/characters/(\d+)-")
 
 
+def _profile_url_to_char_id(url: str) -> int | None:
+    """Recover the 4-digit GameTora char_id from a /characters/<6digit>-<slug>
+    URL. The 6-digit id is `char_id*100 + outfit_suffix`."""
+    m = _PROFILE_URL_CHAR_ID_RE.search(url)
+    if not m:
+        return None
+    raw = int(m.group(1))
+    # Old URLs stored just the 4-digit char_id; new URLs use 6-digit
+    # `<char_id>01`. Both fit if we divide by 100 only when ≥ 6 digits.
+    if raw >= 100000:
+        return raw // 100
+    return raw
+
+
 @dataclass(frozen=True)
 class SeedReport:
     inserted: int
@@ -55,10 +69,9 @@ def _build_char_id_to_local_id() -> dict[int, int]:
     for c in db.session.scalars(select(UmaCharacter)).all():
         if not c.profile_url:
             continue
-        m = _PROFILE_URL_CHAR_ID_RE.search(c.profile_url)
-        if not m:
-            continue
-        out[int(m.group(1))] = c.id
+        char_id = _profile_url_to_char_id(c.profile_url)
+        if char_id is not None:
+            out[char_id] = c.id
     return out
 
 

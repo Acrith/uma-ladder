@@ -1,25 +1,38 @@
 {% extends "base.html" %}
-{% from "_components.html" import card %}
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
 
-  {# Hero card: full-bleed Oshi on the right, profile mini-cards stacked on the left. #}
-  <article class="surface-card relative overflow-hidden">
+  {# Outfit-aware GameTora link: prefer the specific costume page when set. #}
+  {% set gametora_link = none %}
+  {% if profile.oshi %}
+    {% if profile.oshi_outfit and profile.oshi_outfit.costume_id %}
+      {% set gametora_link = "https://gametora.com/umamusume/characters/" ~ profile.oshi_outfit.costume_id ~ "-" ~ profile.oshi.slug %}
+    {% else %}
+      {% set gametora_link = profile.oshi.profile_url %}
+    {% endif %}
+  {% endif %}
+
+  <article class="surface-card relative overflow-hidden min-h-[42rem]">
     {% if oshi_image %}
+      {# Source PNGs are 512×512. Display at 384px so on 2x DPI screens
+         we only ask the browser to upscale ~1.5× instead of 2×. Anchored
+         flush to the bottom-right corner of the card (right-0). #}
       <img src="{{ oshi_image }}"
            alt="{{ profile.oshi.name_en if profile.oshi else '' }}"
            loading="lazy"
            referrerpolicy="no-referrer"
-           class="pointer-events-none absolute inset-y-0 right-0 h-full w-[55%] object-contain object-bottom"
-           style="mask-image: linear-gradient(to left, rgba(0,0,0,1) 35%, rgba(0,0,0,0.8) 60%, rgba(0,0,0,0) 95%); -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,1) 35%, rgba(0,0,0,0.8) 60%, rgba(0,0,0,0) 95%);" />
+           width="512"
+           height="512"
+           class="pointer-events-none absolute bottom-0 right-0 h-auto max-h-[24rem] w-auto max-w-[24rem] object-contain opacity-60"
+           style="image-rendering: -webkit-optimize-contrast; mask-image: linear-gradient(to left, rgba(0,0,0,1) 45%, rgba(0,0,0,0.6) 80%, rgba(0,0,0,0) 100%); -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,1) 45%, rgba(0,0,0,0.6) 80%, rgba(0,0,0,0) 100%);" />
       <div class="pointer-events-none absolute inset-y-0 right-0 w-2/3 bg-gradient-to-l from-fuchsia-500/20 via-fuchsia-500/5 to-transparent"></div>
       <div class="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-cyan-500/15 via-transparent to-transparent"></div>
     {% endif %}
 
-    <div class="relative grid gap-6 p-6 md:grid-cols-[3fr_2fr] md:p-8 min-h-[28rem]">
+    <div class="relative grid gap-6 p-6 md:grid-cols-[3fr_2fr] md:p-10">
       <div class="space-y-4">
 
-        {# Identity card #}
+        {# Identity card with Oshi as a small inline annotation. #}
         <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-5 backdrop-blur-sm">
           <div class="flex items-start gap-4">
             <div class="shrink-0">
@@ -37,68 +50,61 @@
               <p class="label-eyebrow">Trainer</p>
               <h1 class="mt-0.5 truncate text-2xl font-semibold text-slate-50">{{ profile.display_name or user.username }}</h1>
               <p class="mt-0.5 text-sm text-slate-400">@{{ user.username }}</p>
+              {% if profile.oshi %}
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400">Oshi:</span>
+                  {% if gametora_link %}
+                    <a href="{{ gametora_link }}" target="_blank" rel="noopener"
+                       class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 hover:text-fuchsia-100">
+                      {{ profile.oshi.name_en }}
+                      {% if profile.oshi_outfit %}<span class="text-fuchsia-300/70">· {{ profile.oshi_outfit.display_title }}</span>{% endif %}
+                      {% if profile.oshi_outfit and profile.oshi_outfit.rarity %}<span class="ml-1 text-amber-300">{{ '★' * profile.oshi_outfit.rarity }}</span>{% endif %}
+                    </a>
+                  {% else %}
+                    <span class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 font-medium text-fuchsia-200">
+                      {{ profile.oshi.name_en }}
+                      {% if profile.oshi_outfit %}<span class="text-fuchsia-300/70">· {{ profile.oshi_outfit.display_title }}</span>{% endif %}
+                    </span>
+                  {% endif %}
+                </div>
+              {% endif %}
             </div>
           </div>
         </div>
 
-        {# Oshi card — only when set #}
-        {% if profile.oshi %}
-          <div class="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/[0.06] p-4">
-            <p class="label-eyebrow text-fuchsia-300">Oshi</p>
-            <p class="mt-1 text-base font-semibold text-slate-100">
-              {{ profile.oshi.name_en }}
-              {% if profile.oshi.name_jp %}
-                <span class="ml-1 text-xs text-slate-400">{{ profile.oshi.name_jp }}</span>
-              {% endif %}
-            </p>
-            {% if profile.oshi_outfit %}
-              <p class="mt-1 text-xs text-fuchsia-200/80">
-                Outfit: <span class="font-medium">{{ profile.oshi_outfit.display_title }}</span>
-                {% if profile.oshi_outfit.rarity %}
-                  <span class="ml-1 text-amber-300">{{ '★' * profile.oshi_outfit.rarity }}</span>
-                {% endif %}
-              </p>
-            {% endif %}
-            {% if profile.oshi.profile_url %}
-              <a href="{{ profile.oshi.profile_url }}" target="_blank" rel="noopener"
-                 class="mt-2 inline-flex text-xs text-cyan-300 hover:text-cyan-200">
-                View on GameTora →
-              </a>
-            {% endif %}
-          </div>
-        {% endif %}
-
-        {# Contact card — only when at least one field is set #}
+        {# Contact card — single inline row separated by pipes. #}
         {% if profile.friend_code or profile.discord_handle %}
-          <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+          <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4 backdrop-blur-sm">
             <p class="label-eyebrow">Contact</p>
-            <div class="mt-2 space-y-1.5 text-sm">
+            <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
               {% if profile.friend_code %}
-                <p class="text-slate-300">
+                <span>
                   <span class="text-slate-500">Friend code:</span>
                   <span class="text-mono-pill ml-1">{{ profile.friend_code }}</span>
-                </p>
+                </span>
+              {% endif %}
+              {% if profile.friend_code and profile.discord_handle %}
+                <span class="text-slate-700">|</span>
               {% endif %}
               {% if profile.discord_handle %}
-                <p class="text-slate-300">
+                <span>
                   <span class="text-slate-500">Discord:</span>
                   <span class="ml-1">{{ profile.discord_handle }}</span>
-                </p>
+                </span>
               {% endif %}
-            </div>
+            </p>
           </div>
         {% endif %}
 
         {# Bio card — only when description present #}
         {% if profile.description %}
-          <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+          <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4 backdrop-blur-sm">
             <p class="label-eyebrow">About</p>
             <p class="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-300">{{ profile.description }}</p>
           </div>
         {% endif %}
 
       </div>
-      {# Right column intentionally empty — image is the backdrop. #}
       <div class="hidden md:block"></div>
     </div>
   </article>

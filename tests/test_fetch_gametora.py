@@ -36,6 +36,9 @@ def _row(**overrides) -> dict:
         "en_name": "Special Week",
         "jp_name": "スペシャルウィーク",
         "playable": True,
+        "playable_en": True,
+        "playable_ko": True,
+        "playable_zh_tw": True,
     }
     base.update(overrides)
     return base
@@ -63,7 +66,15 @@ def test_coerce_happy_path() -> None:
     assert c.slug == "special-week"
     assert c.name_en == "Special Week"
     assert c.name_jp == "スペシャルウィーク"
-    assert c.profile_url == "https://gametora.com/umamusume/characters/1001-special-week"
+    # GameTora addresses character pages by the 6-digit costume id, not
+    # the 4-digit char_id — `<char_id>01-<slug>`.
+    assert c.profile_url == (
+        "https://gametora.com/umamusume/characters/100101-special-week"
+    )
+    assert c.image_url == (
+        "https://gametora.com/images/umamusume/characters/"
+        "chara_stand_1001_100101.png"
+    )
     assert c.playable is True
 
 
@@ -75,24 +86,63 @@ def test_coerce_missing_name_en_returns_none() -> None:
     assert _coerce_character(_row(en_name="")) is None
 
 
-def test_coerce_no_char_id_no_profile_url() -> None:
+def test_coerce_no_char_id_no_profile_url_no_image() -> None:
     c = _coerce_character(_row(char_id=None))
     assert c is not None
     assert c.profile_url is None
+    assert c.image_url is None
 
 
 # ---------- fetch_characters ----------
 
 
-def test_fetch_filters_non_playable_by_default() -> None:
+def test_fetch_filters_to_global_by_default() -> None:
     transport = _transport_with(
         "abc123",
         [
-            _row(url_name="alice", en_name="Alice", playable=True),
-            _row(url_name="ghost", en_name="Ghost NPC", playable=False),
+            _row(url_name="alice", en_name="Alice", playable_en=True),
+            _row(url_name="jp-only", en_name="JP Only", playable_en=False, playable=True),
         ],
     )
     rows = fetch_characters(transport, delay_seconds=0)
+    assert [r.slug for r in rows] == ["alice"]
+
+
+def test_fetch_region_jp_uses_bare_playable() -> None:
+    transport = _transport_with(
+        "abc123",
+        [
+            _row(url_name="alice", en_name="Alice", playable=True, playable_en=True),
+            _row(url_name="jp-only", en_name="JP Only", playable=True, playable_en=False),
+            _row(url_name="ghost", en_name="Ghost NPC", playable=False, playable_en=False),
+        ],
+    )
+    rows = fetch_characters(transport, region="jp", delay_seconds=0)
+    assert sorted(r.slug for r in rows) == ["alice", "jp-only"]
+
+
+def test_fetch_region_all_includes_any_playable() -> None:
+    transport = _transport_with(
+        "abc123",
+        [
+            _row(url_name="alice", en_name="Alice", playable=True, playable_en=True),
+            _row(url_name="jp-only", en_name="JP Only", playable=True, playable_en=False),
+            _row(url_name="ghost", en_name="Ghost", playable=False, playable_en=False),
+        ],
+    )
+    rows = fetch_characters(transport, region="all", delay_seconds=0)
+    assert sorted(r.slug for r in rows) == ["alice", "jp-only"]
+
+
+def test_fetch_unknown_region_falls_back_to_global() -> None:
+    transport = _transport_with(
+        "abc123",
+        [
+            _row(url_name="alice", en_name="Alice", playable_en=True),
+            _row(url_name="jp-only", en_name="JP Only", playable_en=False, playable=True),
+        ],
+    )
+    rows = fetch_characters(transport, region="mars", delay_seconds=0)
     assert [r.slug for r in rows] == ["alice"]
 
 
@@ -100,8 +150,8 @@ def test_fetch_includes_non_playable_when_flag_set() -> None:
     transport = _transport_with(
         "abc123",
         [
-            _row(url_name="alice", en_name="Alice", playable=True),
-            _row(url_name="ghost", en_name="Ghost", playable=False),
+            _row(url_name="alice", en_name="Alice", playable=True, playable_en=True),
+            _row(url_name="ghost", en_name="Ghost", playable=False, playable_en=False),
         ],
     )
     rows = fetch_characters(
@@ -222,18 +272,22 @@ def test_snapshot_round_trips_through_seed(tmp_path: Path) -> None:
     rows = fetch_characters(transport, delay_seconds=0)
 
     out = tmp_path / "snap.json"
-    write_characters_snapshot(rows, out)
+    write_characters_snapshot(rows, out, region="global")
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["source"]
     assert payload["attribution"]
     assert payload["fetched_at"]
+    assert payload["region"] == "global"
     assert [c["slug"] for c in payload["characters"]] == ["alice", "bob"]
     assert payload["characters"][0]["name_en"] == "Alice"
     assert payload["characters"][0]["name_jp"] == "アリス"
+    assert "image_url" in payload["characters"][0]
+    assert payload["characters"][0]["image_url"].endswith("chara_stand_1001_100101.png")
     # bob has no name_jp → omitted
     assert "name_jp" not in payload["characters"][1]
-    # bob has char_id → profile_url emitted
-    assert payload["characters"][1]["profile_url"].endswith("/1002-bob")
+    # bob has char_id → profile_url + image_url emitted (6-digit URL)
+    assert payload["characters"][1]["profile_url"].endswith("/100201-bob")
+    assert payload["characters"][1]["image_url"].endswith("chara_stand_1002_100201.png")
 
 
 def test_snapshot_consumed_by_seed_characters(app, tmp_path: Path) -> None:

@@ -20,6 +20,7 @@ class SeedReport:
     inserted: int
     updated: int
     skipped: int
+    pruned: int = 0
 
     @property
     def total(self) -> int:
@@ -34,19 +35,31 @@ def _load_seed(path: Path) -> list[dict]:
     return chars
 
 
-def seed_characters(path: Path | None = None, *, source: str = "seed_curated") -> SeedReport:
+def seed_characters(
+    path: Path | None = None,
+    *,
+    source: str = "seed_curated",
+    prune_missing: bool = False,
+) -> SeedReport:
     """Idempotent upsert of curated Uma characters by slug.
 
     Returns counts of inserted, updated, and skipped (already up-to-date) rows.
     Safe to re-run.
+
+    `prune_missing=True` flips ``enabled=False`` on any DB row whose slug is
+    NOT in the snapshot. Use this to align the dev DB with a smaller
+    region-filtered snapshot (e.g. switching from JP to global). Disabled
+    rows are kept in the DB so historical Oshi references stay intact.
     """
     src = path or DEFAULT_SEED_PATH
     rows = _load_seed(src)
     now = datetime.now(UTC)
 
-    inserted = updated = skipped = 0
+    inserted = updated = skipped = pruned = 0
+    seen_slugs: set[str] = set()
     for raw in rows:
         slug = raw["slug"]
+        seen_slugs.add(slug)
         name_en = raw["name_en"]
         name_jp = raw.get("name_jp")
         image_url = raw.get("image_url")
@@ -66,6 +79,7 @@ def seed_characters(path: Path | None = None, *, source: str = "seed_curated") -
                     profile_url=profile_url,
                     source=source,
                     imported_at=now,
+                    enabled=True,
                 )
             )
             inserted += 1
@@ -76,16 +90,30 @@ def seed_characters(path: Path | None = None, *, source: str = "seed_curated") -
             or existing.name_jp != name_jp
             or existing.image_url != image_url
             or existing.profile_url != profile_url
+            or not existing.enabled
         )
         if changed:
             existing.name_en = name_en
             existing.name_jp = name_jp
             existing.image_url = image_url
             existing.profile_url = profile_url
+            existing.enabled = True
             existing.imported_at = now
             updated += 1
         else:
             skipped += 1
 
+    if prune_missing:
+        stale = db.session.scalars(
+            select(UmaCharacter)
+            .where(UmaCharacter.enabled.is_(True))
+            .where(UmaCharacter.slug.notin_(seen_slugs) if seen_slugs else True)
+        ).all()
+        for row in stale:
+            row.enabled = False
+            pruned += 1
+
     db.session.commit()
-    return SeedReport(inserted=inserted, updated=updated, skipped=skipped)
+    return SeedReport(
+        inserted=inserted, updated=updated, skipped=skipped, pruned=pruned
+    )
