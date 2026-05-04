@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "auth/_form.html" import render_field %}
+{% block title %}Your profile · Uma Ladder{% endblock %}
+{% block content %}
+  <h1 class="text-xl font-semibold mb-4">Your profile</h1>
+  {% with messages = get_flashed_messages() %}
+    {% for m in messages %}<p class="mb-3 text-sm text-emerald-700">{{ m }}</p>{% endfor %}
+  {% endwith %}
+  <form method="post" class="max-w-lg">
+    {{ form.hidden_tag() }}
+    {{ render_field(form.display_name) }}
+    {{ render_field(form.avatar_url) }}
+    {{ render_field(form.description) }}
+    {{ render_field(form.friend_code) }}
+    {{ render_field(form.discord_handle) }}
+    <div class="mb-3">
+      <label class="block text-sm font-medium text-slate-700">Oshi</label>
+      <select name="oshi_character_id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1">
+        <option value="">— none —</option>
+        {% for c in characters %}
+          <option value="{{ c.id }}" {% if profile.oshi_character_id == c.id %}selected{% endif %}>
+            {{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      {% if form.oshi_character_id.errors %}
+        <ul class="text-sm text-red-600">
+          {% for err in form.oshi_character_id.errors %}<li>{{ err }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+    <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white">Save</button>
+  </form>
+  <p class="mt-4 text-sm">
+    Public view: <a class="underline" href="{{ url_for('profiles.public', username=current_user.username) }}">/profiles/{{ current_user.username }}</a>
+  </p>
+{% endblock %}

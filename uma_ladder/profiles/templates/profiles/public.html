@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
+{% block content %}
+  <article class="max-w-xl">
+    <header class="flex items-center gap-4">
+      {% if profile.avatar_url %}
+        <img src="{{ profile.avatar_url }}" alt="" class="h-16 w-16 rounded-full object-cover" />
+      {% endif %}
+      <div>
+        <h1 class="text-xl font-semibold">{{ profile.display_name or user.username }}</h1>
+        <p class="text-sm text-slate-600">@{{ user.username }}</p>
+      </div>
+    </header>
+    {% if profile.oshi %}
+      <p class="mt-3 text-sm">Oshi: <strong>{{ profile.oshi.name_en }}</strong></p>
+    {% endif %}
+    {% if profile.friend_code %}
+      <p class="mt-1 text-sm">Friend code: <code>{{ profile.friend_code }}</code></p>
+    {% endif %}
+    {% if profile.discord_handle %}
+      <p class="mt-1 text-sm">Discord: {{ profile.discord_handle }}</p>
+    {% endif %}
+    {% if profile.description %}
+      <p class="mt-4 whitespace-pre-line text-slate-800">{{ profile.description }}</p>
+    {% endif %}
+  </article>
+{% endblock %}

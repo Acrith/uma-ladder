@@ -1,0 +1,30 @@
+{
+  "source": "curated_subset_v1",
+  "attribution": "Character names from GameTora (https://gametora.com/umamusume/characters); not affiliated with Cygames.",
+  "characters": [
+    { "slug": "special-week", "name_en": "Special Week", "name_jp": "スペシャルウィーク" },
+    { "slug": "silence-suzuka", "name_en": "Silence Suzuka", "name_jp": "サイレンススズカ" },
+    { "slug": "tokai-teio", "name_en": "Tokai Teio", "name_jp": "トウカイテイオー" },
+    { "slug": "mejiro-mcqueen", "name_en": "Mejiro McQueen", "name_jp": "メジロマックイーン" },
+    { "slug": "gold-ship", "name_en": "Gold Ship", "name_jp": "ゴールドシップ" },
+    { "slug": "vodka", "name_en": "Vodka", "name_jp": "ウオッカ" },
+    { "slug": "daiwa-scarlet", "name_en": "Daiwa Scarlet", "name_jp": "ダイワスカーレット" },
+    { "slug": "taiki-shuttle", "name_en": "Taiki Shuttle", "name_jp": "タイキシャトル" },
+    { "slug": "grass-wonder", "name_en": "Grass Wonder", "name_jp": "グラスワンダー" },
+    { "slug": "el-condor-pasa", "name_en": "El Condor Pasa", "name_jp": "エルコンドルパサー" },
+    { "slug": "rice-shower", "name_en": "Rice Shower", "name_jp": "ライスシャワー" },
+    { "slug": "mihono-bourbon", "name_en": "Mihono Bourbon", "name_jp": "ミホノブルボン" },
+    { "slug": "biwa-hayahide", "name_en": "Biwa Hayahide", "name_jp": "ビワハヤヒデ" },
+    { "slug": "narita-taishin", "name_en": "Narita Taishin", "name_jp": "ナリタタイシン" },
+    { "slug": "winning-ticket", "name_en": "Winning Ticket", "name_jp": "ウイニングチケット" },
+    { "slug": "air-groove", "name_en": "Air Groove", "name_jp": "エアグルーヴ" },
+    { "slug": "agnes-tachyon", "name_en": "Agnes Tachyon", "name_jp": "アグネスタキオン" },
+    { "slug": "manhattan-cafe", "name_en": "Manhattan Cafe", "name_jp": "マンハッタンカフェ" },
+    { "slug": "fine-motion", "name_en": "Fine Motion", "name_jp": "ファインモーション" },
+    { "slug": "king-halo", "name_en": "King Halo", "name_jp": "キングヘイロー" },
+    { "slug": "hishi-amazon", "name_en": "Hishi Amazon", "name_jp": "ヒシアマゾン" },
+    { "slug": "seiun-sky", "name_en": "Seiun Sky", "name_jp": "セイウンスカイ" },
+    { "slug": "symboli-rudolf", "name_en": "Symboli Rudolf", "name_jp": "シンボリルドルフ" },
+    { "slug": "maruzensky", "name_en": "Maruzensky", "name_jp": "マルゼンスキー" }
+  ]
+}
