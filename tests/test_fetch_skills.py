@@ -94,6 +94,20 @@ def test_coerce_inherited_with_parent() -> None:
     assert s.is_unique is False
 
 
+def test_coerce_builds_image_url_from_icon_id() -> None:
+    s = _coerce_skill(_row(iconid=20013))
+    assert s is not None
+    assert s.image_url == (
+        "https://gametora.com/images/umamusume/skill_icons/utx_ico_skill_20013.png"
+    )
+
+
+def test_coerce_no_image_url_when_icon_id_missing() -> None:
+    s = _coerce_skill(_row(iconid=None))
+    assert s is not None
+    assert s.image_url is None
+
+
 def test_coerce_prefers_endesc_over_machine_translated_desc_en() -> None:
     s = _coerce_skill(
         _row(endesc="curated EN copy", desc_en="machine translated")

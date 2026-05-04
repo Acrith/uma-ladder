@@ -36,6 +36,7 @@ class UmaSkill(db.Model):
     description_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     description_jp: Mapped[str | None] = mapped_column(Text, nullable=True)
     icon_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     rarity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_unique: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False

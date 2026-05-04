@@ -634,6 +634,7 @@ class FetchedSkill:
     description_en: str | None
     description_jp: str | None
     icon_id: int | None
+    image_url: str | None
     rarity: int | None
     is_unique: bool
     is_inherited: bool
@@ -654,11 +655,22 @@ class FetchedSkill:
             out["description_jp"] = self.description_jp
         if self.icon_id is not None:
             out["icon_id"] = self.icon_id
+        if self.image_url:
+            out["image_url"] = self.image_url
         if self.rarity is not None:
             out["rarity"] = self.rarity
         if self.parent_gametora_id is not None:
             out["parent_gametora_id"] = self.parent_gametora_id
         return out
+
+
+def _skill_image_url(icon_id: int | None) -> str | None:
+    """GameTora's CDN serves skill icons at a stable URL keyed by the
+    ``iconid`` field. Confirmed working against multiple icon ids during
+    fetcher development."""
+    if icon_id is None:
+        return None
+    return f"{GAMETORA_BASE}/images/umamusume/skill_icons/utx_ico_skill_{icon_id}.png"
 
 
 def _coerce_skill(
@@ -681,13 +693,15 @@ def _coerce_skill(
         return None
     char = raw.get("char")
     is_unique = bool(isinstance(char, list) and char)
+    icon_id = raw.get("iconid") if isinstance(raw.get("iconid"), int) else None
     return FetchedSkill(
         gametora_id=skill_id,
         name_en=name_en,
         name_jp=raw.get("jpname") or raw.get("name_jp"),
         description_en=raw.get("endesc") or raw.get("desc_en"),
         description_jp=raw.get("jpdesc") or raw.get("desc_jp"),
-        icon_id=raw.get("iconid") if isinstance(raw.get("iconid"), int) else None,
+        icon_id=icon_id,
+        image_url=_skill_image_url(icon_id),
         rarity=raw.get("rarity") if isinstance(raw.get("rarity"), int) else None,
         is_unique=is_unique and not is_inherited,
         is_inherited=is_inherited,

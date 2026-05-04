@@ -75,6 +75,7 @@ def seed_skills(
             "description_en": row.get("description_en"),
             "description_jp": row.get("description_jp"),
             "icon_id": row.get("icon_id"),
+            "image_url": row.get("image_url"),
             "rarity": row.get("rarity"),
             "is_unique": bool(row.get("is_unique", False)),
             "is_inherited": bool(row.get("is_inherited", False)),

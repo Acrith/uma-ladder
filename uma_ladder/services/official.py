@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -437,15 +438,35 @@ def submit_result_details(
     return result
 
 
+_SKILL_NAME_NOISE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_skill_name(s: str) -> str:
+    """Aggressive normalization for OCR-tolerant skill matching.
+
+    Lowercases, strips all non-alphanumeric characters (so em-dash
+    vs hyphen, smart quotes vs straight quotes, decorative ☆ stars,
+    spaces, ・ separators, !'s, etc. all collapse to the same key).
+    OCR commonly mis-reads these glyphs and we'd rather match than
+    silently miss a skill that's clearly in the catalogue.
+    """
+    return _SKILL_NAME_NOISE_RE.sub("", s.lower())
+
+
 def _match_skill_names(
     names: Iterable[str],
 ) -> list[tuple[str, int | None]]:
-    """Map raw skill name strings to UmaSkill.id via case-insensitive
-    exact match on name_en. Returns (raw_name, skill_id_or_None) in the
-    input order. Empty / whitespace-only names are dropped."""
+    """Map raw skill name strings to UmaSkill.id.
+
+    Two-stage match per name: first case-insensitive exact on name_en
+    (cheapest, definitive), then a normalized-key fallback that strips
+    typography differences. Returns (raw_name, skill_id_or_None) in the
+    input order. Empty / whitespace-only names are dropped.
+    """
     cleaned = [n.strip() for n in names if n and n.strip()]
     if not cleaned:
         return []
+    # Stage 1: exact case-insensitive match.
     lower_lookup = {n.lower() for n in cleaned}
     rows = db.session.scalars(
         select(UmaSkill)
@@ -453,7 +474,28 @@ def _match_skill_names(
         .where(func.lower(UmaSkill.name_en).in_(lower_lookup))
     ).all()
     by_lower = {s.name_en.lower(): s.id for s in rows}
-    return [(n, by_lower.get(n.lower())) for n in cleaned]
+
+    # Stage 2: build a normalized lookup over ALL enabled skills for
+    # any names that didn't get an exact hit. Only run the second SQL
+    # query if at least one name needs it.
+    needs_fuzzy = [n for n in cleaned if n.lower() not in by_lower]
+    by_normalized: dict[str, int] = {}
+    if needs_fuzzy:
+        # Loading the catalogue once is cheap (≈2k rows); doing this in
+        # SQL would require either FTS or a dedicated normalized column.
+        all_enabled = db.session.scalars(
+            select(UmaSkill).where(UmaSkill.enabled.is_(True))
+        ).all()
+        for s in all_enabled:
+            by_normalized.setdefault(_normalize_skill_name(s.name_en), s.id)
+
+    out: list[tuple[str, int | None]] = []
+    for n in cleaned:
+        sid = by_lower.get(n.lower())
+        if sid is None:
+            sid = by_normalized.get(_normalize_skill_name(n))
+        out.append((n, sid))
+    return out
 
 
 def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:

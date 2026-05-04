@@ -173,8 +173,19 @@
                   {% if r.skills %}
                     <p class="mt-1 flex flex-wrap gap-1.5 text-xs">
                       {% for assoc in r.skills %}
-                        <span class="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/5 px-2 py-0.5 text-cyan-200">
-                          {% if assoc.skill %}{{ assoc.skill.name_en }}{% else %}<span class="text-slate-500" title="raw OCR text — no skill matched">{{ assoc.raw_ocr_text or '?' }}</span>{% endif %}
+                        <span class="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/5 px-1.5 py-0.5 text-cyan-200">
+                          {% if assoc.skill and assoc.skill.image_url %}
+                            <img src="{{ assoc.skill.image_url }}"
+                                 alt=""
+                                 loading="lazy"
+                                 referrerpolicy="no-referrer"
+                                 class="h-4 w-4 rounded" />
+                          {% endif %}
+                          {% if assoc.skill %}
+                            <span>{{ assoc.skill.name_en }}</span>
+                          {% else %}
+                            <span class="text-slate-500" title="raw OCR text — no skill matched">{{ assoc.raw_ocr_text or '?' }}</span>
+                          {% endif %}
                         </span>
                       {% endfor %}
                     </p>

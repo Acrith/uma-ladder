@@ -91,6 +91,27 @@ def test_seed_re_enables_previously_pruned(app: Flask, tmp_path: Path) -> None:
         assert b.enabled is True
 
 
+def test_seed_writes_image_url(app: Flask, tmp_path: Path) -> None:
+    seed_path = tmp_path / "uma_skills.json"
+    _write(
+        seed_path,
+        [
+            _row(
+                110031,
+                "Skill",
+                icon_id=20013,
+                image_url="https://gametora.com/images/umamusume/skill_icons/utx_ico_skill_20013.png",
+            )
+        ],
+    )
+    with app.app_context():
+        seed_skills(seed_path)
+        s = db.session.query(UmaSkill).filter_by(gametora_id=110031).one()
+        assert s.image_url == (
+            "https://gametora.com/images/umamusume/skill_icons/utx_ico_skill_20013.png"
+        )
+
+
 def test_seed_skips_invalid_rows(app: Flask, tmp_path: Path) -> None:
     seed_path = tmp_path / "uma_skills.json"
     _write(

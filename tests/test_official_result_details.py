@@ -112,6 +112,44 @@ def _login(client: FlaskClient, username: str, password: str = "password123") ->
 # ---------- service-level tests ----------
 
 
+def test_match_skill_names_fuzzy_handles_typography_variants(app: Flask) -> None:
+    """OCR commonly mis-reads punctuation and decorative glyphs. The
+    fuzzy fallback strips non-alphanumerics so an em-dash for a hyphen
+    or a missing ☆ doesn't drop the skill on the floor."""
+    with app.app_context():
+        db.session.add_all([
+            UmaSkill(
+                gametora_id=10141,
+                name_en="Hot Blooded ☆ Amigo",
+                is_unique=True,
+                is_inherited=False,
+                enabled=True,
+            ),
+            UmaSkill(
+                gametora_id=10241,
+                name_en="Victory Kiss ☆",
+                is_unique=True,
+                is_inherited=False,
+                enabled=True,
+            ),
+        ])
+        db.session.commit()
+        matches = official_service._match_skill_names(
+            [
+                "hot blooded amigo",  # missing ☆
+                "Hot Blooded — Amigo",  # em-dash instead of ☆
+                "VICTORY KISS",  # missing trailing ☆
+                "totally not a real skill",
+            ]
+        )
+        ids = [sid for _, sid in matches]
+        # First three all resolve to a skill_id; last one falls through.
+        assert ids[0] is not None
+        assert ids[1] is not None
+        assert ids[2] is not None
+        assert ids[3] is None
+
+
 def test_match_skill_names_exact_case_insensitive(app: Flask) -> None:
     _seed_skills(app)
     with app.app_context():
