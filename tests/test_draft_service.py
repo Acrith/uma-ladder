@@ -68,6 +68,22 @@ def _character(slug: str, name: str | None = None) -> UmaCharacter:
     return c
 
 
+def _outfit(char: UmaCharacter, costume_suffix: int = 1):
+    """Helper: create a costume row for a character so it can be banned."""
+    from uma_ladder.models import UmaOutfit
+
+    o = UmaOutfit(
+        uma_character_id=char.id,
+        costume_id=char.id * 100 + costume_suffix,
+        title_en=f"{char.slug} costume {costume_suffix}",
+        released_globally=True,
+        enabled=True,
+    )
+    db.session.add(o)
+    db.session.commit()
+    return o
+
+
 def _match_with_two(host: int, opp: int, *, season_id: int, umas_per_player: int = 2) -> int:
     m = draft_service.create_match(
         draft_service.CreateMatchRequest(
@@ -265,9 +281,11 @@ def test_uma_ban_advances_to_room_code_pending(app: Flask) -> None:
             )
         draft_service.randomize_preset(m_id)
         c1 = _character("special-week")
+        o1 = _outfit(c1)
         c2 = _character("gold-ship")
-        draft_service.submit_uma_ban(m_id, host, c1.id)
-        draft_service.submit_uma_ban(m_id, opp, c2.id)
+        o2 = _outfit(c2)
+        draft_service.submit_uma_ban(m_id, host, c1.id, uma_outfit_id=o1.id)
+        draft_service.submit_uma_ban(m_id, opp, c2.id, uma_outfit_id=o2.id)
         m = draft_service.get_match(m_id)
         assert m.status == DraftMatchStatus.ROOM_CODE_PENDING
 
@@ -289,10 +307,16 @@ def test_full_happy_path_with_elo(app: Flask) -> None:
         )
         draft_service.randomize_preset(m_id, rng=random.Random(1))
         c_banned_by_host = _character("banned-by-host")
+        o_banned_by_host = _outfit(c_banned_by_host)
         c_banned_by_opp = _character("banned-by-opp")
+        o_banned_by_opp = _outfit(c_banned_by_opp)
         c_used = _character("used-uma")
-        draft_service.submit_uma_ban(m_id, host, c_banned_by_host.id)
-        draft_service.submit_uma_ban(m_id, opp, c_banned_by_opp.id)
+        draft_service.submit_uma_ban(
+            m_id, host, c_banned_by_host.id, uma_outfit_id=o_banned_by_host.id
+        )
+        draft_service.submit_uma_ban(
+            m_id, opp, c_banned_by_opp.id, uma_outfit_id=o_banned_by_opp.id
+        )
 
         draft_service.set_room_code(m_id, "RC-1")
         m = draft_service.submit_results(
@@ -328,20 +352,29 @@ def test_results_reject_banned_character(app: Flask) -> None:
             )
         draft_service.randomize_preset(m_id)
         forbidden = _character("forbidden")
+        forbidden_outfit = _outfit(forbidden)
         whatever = _character("whatever")
-        draft_service.submit_uma_ban(m_id, host, forbidden.id)
-        draft_service.submit_uma_ban(m_id, opp, whatever.id)
+        whatever_outfit = _outfit(whatever)
+        draft_service.submit_uma_ban(
+            m_id, host, forbidden.id, uma_outfit_id=forbidden_outfit.id
+        )
+        draft_service.submit_uma_ban(
+            m_id, opp, whatever.id, uma_outfit_id=whatever_outfit.id
+        )
         draft_service.set_room_code(m_id, "RC-1")
         with pytest.raises(draft_service.BannedCharacterUsedError):
             draft_service.submit_results(
                 m_id,
                 [
-                    # opp tries to use the character host banned
+                    # opp tries to use the exact costume host banned
                     draft_service.DraftResultLine(
                         user_id=host, placement=1
                     ),
                     draft_service.DraftResultLine(
-                        user_id=opp, placement=2, uma_character_id=forbidden.id
+                        user_id=opp,
+                        placement=2,
+                        uma_character_id=forbidden.id,
+                        uma_outfit_id=forbidden_outfit.id,
                     ),
                 ],
                 confirmed_by_user_id=host,

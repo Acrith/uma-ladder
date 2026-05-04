@@ -1,0 +1,8 @@
+<select id="result-outfit-{{ participant }}" name="uma_outfit_id_{{ participant }}" class="input-base">
+  <option value="">— default / any outfit —</option>
+  {% for o in outfits %}
+    <option value="{{ o.id }}">
+      {{ o.display_title }}{% if o.rarity %} · {{ '★' * o.rarity }}{% endif %}
+    </option>
+  {% endfor %}
+</select>

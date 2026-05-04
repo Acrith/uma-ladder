@@ -3,10 +3,11 @@
 {% block title %}Draft match #{{ match.id }} · Uma Ladder{% endblock %}
 {% block content %}
 
-  {# Whole detail body lives in this container; live phases poll the page partial. #}
-  {% set live_phases = ('waiting_for_opponent', 'ready_check', 'track_ban_phase', 'uma_ban_phase') %}
+  {# Polling is now gated by `should_poll` (computed server-side): only when
+     the user has no pending action this phase, so the swap doesn't nuke a
+     half-typed form. After they submit, polling resumes. #}
   <div
-    {% if match.status in live_phases %}
+    {% if should_poll %}
       hx-get="{{ url_for('draft.detail', match_id=match.id) }}"
       hx-trigger="every 5s"
       hx-select="#draft-detail-body"
@@ -24,7 +25,7 @@
           {{ draft_status_chip(match.status) }}
           {{ chip("Pool · " + match.preset_pool, "violet") }}
           {{ chip(match.umas_per_player|string + " Umas/player") }}
-          {% if match.status in live_phases %}{{ live_dot("live · 5s") }}{% endif %}
+          {% if should_poll %}{{ live_dot("waiting · 5s") }}{% endif %}
         </div>
       </div>
       <div class="flex flex-col items-end text-right">
@@ -58,7 +59,7 @@
       {% endfor %}
     </div>
 
-    {# Phase-specific actions #}
+    {# Phase: ready check #}
     {% if match.status == 'ready_check' %}
       {% set me_ready = (current_user.id == match.host_user_id and match.host_ready) or (current_user.id == match.opponent_user_id and match.opponent_ready) %}
       <section class="mt-6">
@@ -77,6 +78,7 @@
       </section>
     {% endif %}
 
+    {# Phase: track ban — typed input replaced with per-type selects, toggled via tiny JS. #}
     {% if match.status == 'track_ban_phase' %}
       {% set my_track_ban = bans|selectattr('user_id', 'equalto', current_user.id)|selectattr('ban_type', 'in', ['venue', 'direction', 'distance_category', 'surface'])|first %}
       <section class="mt-6">
@@ -88,7 +90,8 @@
               {{ csrf_form.hidden_tag() }}
               <div>
                 <label class="text-sm text-slate-300">Ban type</label>
-                <select name="ban_type" class="input-base mt-1">
+                <select id="track-ban-type" name="ban_type" class="input-base mt-1"
+                        onchange="document.querySelectorAll('[data-ban-options]').forEach(el => { el.hidden = el.dataset.banOptions !== this.value; el.disabled = el.dataset.banOptions !== this.value; });">
                   <option value="venue">Venue</option>
                   <option value="direction">Direction</option>
                   <option value="distance_category">Distance category</option>
@@ -97,16 +100,25 @@
               </div>
               <div>
                 <label class="text-sm text-slate-300">Value</label>
-                <input name="condition_key" class="input-base mt-1" placeholder="Tokyo / Left / Sprint / Turf" />
+                {% for type, options in track_ban_options.items() %}
+                  <select name="condition_key_{{ type }}"
+                          data-ban-options="{{ type }}"
+                          class="input-base mt-1"
+                          {% if type != 'venue' %}hidden disabled{% endif %}>
+                    {% for opt in options %}
+                      <option value="{{ opt }}">{{ opt }}</option>
+                    {% endfor %}
+                  </select>
+                {% endfor %}
               </div>
-              <div class="md:col-span-2 flex gap-2">
+              <div class="md:col-span-2 flex items-center gap-2">
                 <button class="btn-primary">Submit ban</button>
                 <span class="grow"></span>
-                <form method="post" action="{{ url_for('draft.skip_track_ban', match_id=match.id) }}" class="inline">
-                  {{ csrf_form.hidden_tag() }}
-                  <button type="submit" class="btn-ghost">Skip my ban</button>
-                </form>
               </div>
+            </form>
+            <form method="post" action="{{ url_for('draft.skip_track_ban', match_id=match.id) }}" class="mt-2">
+              {{ csrf_form.hidden_tag() }}
+              <button type="submit" class="btn-ghost">Skip my ban</button>
             </form>
           {% else %}
             <p class="mt-2 text-sm">
@@ -122,6 +134,7 @@
       </section>
     {% endif %}
 
+    {# Phase: uma ban — character first, then outfit (HTMX-loaded). #}
     {% if match.status == 'uma_ban_phase' %}
       {% set my_uma_ban = bans|selectattr('user_id', 'equalto', current_user.id)|selectattr('ban_type', 'equalto', 'uma')|first %}
       <section class="mt-6">
@@ -129,20 +142,36 @@
           <p class="label-eyebrow">Phase</p>
           <h2 class="mt-1 text-lg font-semibold text-slate-100">Uma ban (blind)</h2>
           {% if not my_uma_ban %}
-            <form method="post" action="{{ url_for('draft.uma_ban', match_id=match.id) }}" class="mt-3 max-w-md">
+            <form method="post" action="{{ url_for('draft.uma_ban', match_id=match.id) }}" class="mt-3 grid gap-3 max-w-md">
               {{ csrf_form.hidden_tag() }}
-              <label class="text-sm text-slate-300">Ban a character — opponent cannot use them</label>
-              <select name="uma_character_id" class="input-base mt-1">
-                <option value="">— choose —</option>
-                {% for c in characters %}
-                  <option value="{{ c.id }}">{{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}</option>
-                {% endfor %}
-              </select>
-              <button class="btn-primary mt-3">Submit Uma ban</button>
+              <div>
+                <label class="text-sm text-slate-300">Character</label>
+                <select id="uma-ban-char"
+                        name="uma_character_id"
+                        class="input-base mt-1"
+                        hx-get="{{ url_for('draft.partial_uma_ban_outfits', match_id=match.id) }}"
+                        hx-target="#uma-ban-outfit"
+                        hx-swap="outerHTML"
+                        hx-trigger="change"
+                        hx-include="this">
+                  <option value="">— choose character —</option>
+                  {% for c in characters %}
+                    <option value="{{ c.id }}">{{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="text-sm text-slate-300">Costume</label>
+                {% include "draft/_partial_uma_ban_outfits.html" with context %}
+                <p class="mt-1 text-xs text-slate-500">Bans target a specific costume — opponent can still race the same character in another costume.</p>
+              </div>
+              <button class="btn-primary">Submit Uma ban</button>
             </form>
           {% else %}
             <p class="mt-2 text-sm">
-              You banned <span class="font-medium text-fuchsia-300">{{ my_uma_ban.uma_character.name_en if my_uma_ban.uma_character else '?' }}</span>.
+              You banned
+              <span class="font-medium text-fuchsia-300">{{ my_uma_ban.uma_character.name_en if my_uma_ban.uma_character else '?' }}</span>
+              {% if my_uma_ban.uma_outfit %}<span class="text-fuchsia-200/80">· {{ my_uma_ban.uma_outfit.display_title }}</span>{% endif %}.
             </p>
             <p class="mt-1 text-xs text-slate-500">Waiting for opponent…</p>
           {% endif %}
@@ -175,6 +204,7 @@
                 <span class="text-slate-200">
                   {% if b.ban_type == 'uma' %}
                     {{ b.uma_character.name_en if b.uma_character else '?' }}
+                    {% if b.uma_outfit %}<span class="text-slate-500">· {{ b.uma_outfit.display_title }}</span>{% endif %}
                   {% else %}
                     {{ b.ban_type }} = {{ b.condition_key }}
                   {% endif %}
@@ -207,31 +237,41 @@
         {% endcall %}
 
         {% if match.status in ('room_code_available', 'room_code_expired') %}
+          {% set banned_uma_bans = bans|selectattr('ban_type', 'equalto', 'uma')|list %}
+          {% set whole_char_banned_ids = banned_uma_bans|selectattr('uma_outfit_id', 'none')|map(attribute='uma_character_id')|select|list %}
           {% call card(class="p-5") %}
             <p class="label-eyebrow">Results</p>
             <p class="mt-1 text-xs text-slate-500">
-              Banned characters cannot be selected:
-              {% set banned_uma_bans = bans|selectattr('ban_type', 'equalto', 'uma')|list %}
+              Bans:
               {% if banned_uma_bans %}
-                {% for b in banned_uma_bans %}<span class="text-fuchsia-300">{{ b.uma_character.name_en if b.uma_character else '?' }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+                {% for b in banned_uma_bans %}<span class="text-fuchsia-300">{{ b.uma_character.name_en if b.uma_character else '?' }}{% if b.uma_outfit %} · {{ b.uma_outfit.display_title }}{% endif %}</span>{% if not loop.last %}, {% endif %}{% endfor %}
               {% else %}(none){% endif %}
             </p>
             <form method="post" action="{{ url_for('draft.submit_results', match_id=match.id) }}" class="mt-3 space-y-3">
               {{ csrf_form.hidden_tag() }}
-              {% set banned_ids = banned_uma_bans|map(attribute='uma_character_id')|select|list %}
               {% for uid_label, uid in [(match.host.username, match.host_user_id), (match.opponent.username if match.opponent else 'opp', match.opponent_user_id)] %}
                 {% if uid is not none %}
                   <fieldset class="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
                     <legend class="px-1 text-xs font-medium uppercase tracking-wider text-slate-400">{{ uid_label }}</legend>
                     <div class="grid gap-2 md:grid-cols-3">
                       <input type="number" min="1" name="placement_{{ uid }}" class="input-base" placeholder="place" />
-                      <select name="uma_character_id_{{ uid }}" class="input-base md:col-span-2">
+                      <select id="result-char-{{ uid }}"
+                              name="uma_character_id_{{ uid }}"
+                              class="input-base md:col-span-2"
+                              hx-get="{{ url_for('draft.partial_result_outfits', match_id=match.id) }}?participant={{ uid }}"
+                              hx-target="#result-outfit-{{ uid }}"
+                              hx-swap="outerHTML"
+                              hx-trigger="change"
+                              hx-include="this">
                         <option value="">— custom name —</option>
                         {% for c in characters %}
-                          {% if c.id not in banned_ids %}
+                          {% if c.id not in whole_char_banned_ids %}
                             <option value="{{ c.id }}">{{ c.name_en }}</option>
                           {% endif %}
                         {% endfor %}
+                      </select>
+                      <select id="result-outfit-{{ uid }}" name="uma_outfit_id_{{ uid }}" class="input-base md:col-span-2">
+                        <option value="">— default / any outfit —</option>
                       </select>
                       <input name="custom_uma_name_{{ uid }}" class="input-base md:col-span-3" placeholder="custom Uma name (if not in list)" />
                     </div>

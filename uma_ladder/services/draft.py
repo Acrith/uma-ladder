@@ -223,7 +223,13 @@ def submit_track_ban(
     return ban
 
 
-def submit_uma_ban(match_id: int, user_id: int, uma_character_id: int) -> DraftMatchBan:
+def submit_uma_ban(
+    match_id: int,
+    user_id: int,
+    uma_character_id: int,
+    *,
+    uma_outfit_id: int | None = None,
+) -> DraftMatchBan:
     match = get_match(match_id)
     _require_participant(match, user_id)
     if match.status != DraftMatchStatus.UMA_BAN_PHASE:
@@ -232,6 +238,22 @@ def submit_uma_ban(match_id: int, user_id: int, uma_character_id: int) -> DraftM
     char = db.session.get(UmaCharacter, uma_character_id)
     if char is None or not char.enabled:
         raise UnknownBanTargetError(f"unknown character {uma_character_id}")
+
+    # Bans must always target a specific costume — banning an entire
+    # character would block all of its costumes including ones the
+    # opponent might otherwise have legitimately picked.
+    if uma_outfit_id is None:
+        raise UnknownBanTargetError("ban must target a specific costume")
+
+    from ..models import UmaOutfit
+
+    outfit = db.session.get(UmaOutfit, uma_outfit_id)
+    if outfit is None or not outfit.enabled:
+        raise UnknownBanTargetError(f"unknown outfit {uma_outfit_id}")
+    if outfit.uma_character_id != uma_character_id:
+        raise UnknownBanTargetError(
+            "outfit does not belong to the chosen character"
+        )
 
     existing = db.session.scalars(
         select(DraftMatchBan)
@@ -247,6 +269,7 @@ def submit_uma_ban(match_id: int, user_id: int, uma_character_id: int) -> DraftM
         user_id=user_id,
         ban_type=DraftBanType.UMA,
         uma_character_id=uma_character_id,
+        uma_outfit_id=uma_outfit_id,
         locked_at=_utcnow(),
     )
     db.session.add(ban)
@@ -383,16 +406,32 @@ class DraftResultLine:
     user_id: int
     placement: int
     uma_character_id: int | None = None
+    uma_outfit_id: int | None = None
     custom_uma_name: str | None = None
 
 
 def banned_uma_character_ids(match_id: int) -> set[int]:
+    """Character ids that are banned with no specific outfit (whole-character bans)."""
     rows = db.session.scalars(
         select(DraftMatchBan)
         .where(DraftMatchBan.draft_match_id == match_id)
         .where(DraftMatchBan.ban_type == DraftBanType.UMA)
     ).all()
-    return {b.uma_character_id for b in rows if b.uma_character_id is not None}
+    return {
+        b.uma_character_id
+        for b in rows
+        if b.uma_character_id is not None and b.uma_outfit_id is None
+    }
+
+
+def banned_uma_outfit_ids(match_id: int) -> set[int]:
+    """Outfit ids that are banned (specific-outfit bans)."""
+    rows = db.session.scalars(
+        select(DraftMatchBan)
+        .where(DraftMatchBan.draft_match_id == match_id)
+        .where(DraftMatchBan.ban_type == DraftBanType.UMA)
+    ).all()
+    return {b.uma_outfit_id for b in rows if b.uma_outfit_id is not None}
 
 
 def submit_results(
@@ -417,11 +456,16 @@ def submit_results(
     if len(set(placements)) != len(placements):
         raise DraftError("duplicate placements")
 
-    banned_ids = banned_uma_character_ids(match_id)
+    banned_chars = banned_uma_character_ids(match_id)
+    banned_outfits = banned_uma_outfit_ids(match_id)
     for line in lines:
-        if line.uma_character_id is not None and line.uma_character_id in banned_ids:
+        if line.uma_character_id is not None and line.uma_character_id in banned_chars:
             raise BannedCharacterUsedError(
                 f"character {line.uma_character_id} was banned"
+            )
+        if line.uma_outfit_id is not None and line.uma_outfit_id in banned_outfits:
+            raise BannedCharacterUsedError(
+                f"outfit {line.uma_outfit_id} was banned"
             )
 
     by_user_best: dict[int, int] = {}
@@ -452,6 +496,7 @@ def submit_results(
                 draft_match_id=match_id,
                 user_id=line.user_id,
                 uma_character_id=line.uma_character_id,
+                uma_outfit_id=line.uma_outfit_id,
                 custom_uma_name=line.custom_uma_name,
                 placement=line.placement,
                 confirmed_by_user_id=confirmed_by_user_id,

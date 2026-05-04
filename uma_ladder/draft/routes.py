@@ -11,13 +11,30 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
+from ..models import DraftBanType, DraftMatchStatus
+from ..models.enums import VENUES, Direction, DistanceCategory, Surface
 from ..services import draft as draft_service
 from ..services import seasons as seasons_service
-from ..services.profiles import list_enabled_characters
+from ..services.profiles import (
+    list_enabled_characters,
+    list_outfits_for_character,
+)
 from ..services.randomizer import RandomizerError
 from .forms import CreateDraftForm, CsrfOnlyForm, JoinDraftForm, RoomCodeForm
 
 bp = Blueprint("draft", __name__, template_folder="templates")
+
+
+# Static option lists for track-ban "Value" select. Direction intentionally
+# restricts to Left/Right — these are the values that affect skill aptitudes.
+# Straight and Stretch exist in the enum so existing race presets parse, but
+# the lone Stretch course (Niigata 1000m) isn't a useful ban target.
+TRACK_BAN_OPTIONS: dict[str, list[str]] = {
+    "venue": list(VENUES),
+    "direction": [Direction.LEFT.value, Direction.RIGHT.value],
+    "distance_category": [d.value for d in DistanceCategory],
+    "surface": [s.value for s in Surface],
+}
 
 
 @bp.get("/")
@@ -85,6 +102,7 @@ def detail(match_id: int) -> object:
     except draft_service.DraftNotFoundError:
         abort(404)
     bans = draft_service.list_bans(match_id)
+    should_poll = _should_poll(match, bans)
     return render_template(
         "draft/detail.html",
         match=match,
@@ -93,7 +111,77 @@ def detail(match_id: int) -> object:
         csrf_form=CsrfOnlyForm(),
         room_code_expired=draft_service.is_room_code_expired(match),
         characters=list_enabled_characters(),
+        track_ban_options=TRACK_BAN_OPTIONS,
+        should_poll=should_poll,
     )
+
+
+def _should_poll(match, bans) -> bool:
+    """Only poll when the user has nothing to fill out — otherwise the swap
+    nukes mid-typing values. After the user submits their pending action,
+    polling resumes so they see the opponent's action land."""
+    status = match.status
+    if status == DraftMatchStatus.WAITING_FOR_OPPONENT:
+        return True
+    me = current_user.id
+    if status == DraftMatchStatus.READY_CHECK:
+        if me == match.host_user_id:
+            return bool(match.host_ready)
+        if me == match.opponent_user_id:
+            return bool(match.opponent_ready)
+        return False
+    if status == DraftMatchStatus.TRACK_BAN_PHASE:
+        return any(
+            b.user_id == me and b.ban_type in {
+                DraftBanType.VENUE,
+                DraftBanType.DIRECTION,
+                DraftBanType.DISTANCE_CATEGORY,
+                DraftBanType.SURFACE,
+            }
+            for b in bans
+        )
+    if status == DraftMatchStatus.UMA_BAN_PHASE:
+        return any(
+            b.user_id == me and b.ban_type == DraftBanType.UMA for b in bans
+        )
+    return False
+
+
+# ---------- HTMX partials ----------
+
+
+@bp.get("/<int:match_id>/_partials/uma-ban-outfits")
+@login_required
+def partial_uma_ban_outfits(match_id: int) -> object:
+    """Outfit dropdown for a chosen character on the uma-ban form.
+
+    Includes an "(any outfit)" option that records uma_outfit_id=null on
+    the ban — the result-validation treats that as a whole-character ban.
+    """
+    raw = (request.args.get("uma_character_id") or "").strip()
+    char_id = int(raw) if raw.isdigit() else None
+    outfits = list_outfits_for_character(char_id) if char_id else []
+    return render_template(
+        "draft/_partial_uma_ban_outfits.html", outfits=outfits
+    )
+
+
+@bp.get("/<int:match_id>/_partials/result-outfits")
+@login_required
+def partial_result_outfits(match_id: int) -> object:
+    """Outfit dropdown on the result-submission form, scoped to one player."""
+    participant = (request.args.get("participant") or "").strip()
+    raw = (request.args.get("uma_character_id_" + participant) or "").strip()
+    char_id = int(raw) if raw.isdigit() else None
+    outfits = list_outfits_for_character(char_id) if char_id else []
+    return render_template(
+        "draft/_partial_result_outfits.html",
+        outfits=outfits,
+        participant=participant,
+    )
+
+
+# ---------- Action handlers ----------
 
 
 @bp.post("/<int:match_id>/ready")
@@ -117,12 +205,17 @@ def track_ban(match_id: int) -> object:
     form = CsrfOnlyForm()
     if not form.validate_on_submit():
         abort(400)
+    ban_type = (request.form.get("ban_type") or "").strip()
+    raw_condition = (request.form.get("condition_key") or "").strip()
+    # The form posts every per-type select; pick the one matching ban_type.
+    typed_value = (request.form.get(f"condition_key_{ban_type}") or "").strip()
+    condition = typed_value or raw_condition
     try:
         draft_service.submit_track_ban(
             match_id,
             current_user.id,
-            ban_type=(request.form.get("ban_type") or "").strip(),
-            condition_key=(request.form.get("condition_key") or "").strip(),
+            ban_type=ban_type,
+            condition_key=condition,
         )
     except draft_service.DraftNotFoundError:
         abort(404)
@@ -156,7 +249,6 @@ def skip_track_ban(match_id: int) -> object:
     if not form.validate_on_submit():
         abort(400)
     try:
-        # Record an empty venue ban as a placeholder so the gating works.
         draft_service.submit_track_ban(
             match_id,
             current_user.id,
@@ -174,12 +266,19 @@ def uma_ban(match_id: int) -> object:
     form = CsrfOnlyForm()
     if not form.validate_on_submit():
         abort(400)
-    raw = request.form.get("uma_character_id", "").strip()
-    if not raw.isdigit():
+    char_raw = request.form.get("uma_character_id", "").strip()
+    outfit_raw = request.form.get("uma_outfit_id", "").strip()
+    if not char_raw.isdigit():
         flash("Pick a character.")
         return redirect(url_for("draft.detail", match_id=match_id))
+    outfit_id = int(outfit_raw) if outfit_raw.isdigit() else None
     try:
-        draft_service.submit_uma_ban(match_id, current_user.id, int(raw))
+        draft_service.submit_uma_ban(
+            match_id,
+            current_user.id,
+            int(char_raw),
+            uma_outfit_id=outfit_id,
+        )
     except draft_service.DraftNotFoundError:
         abort(404)
     except draft_service.DraftError as exc:
@@ -223,13 +322,18 @@ def submit_results(match_id: int) -> object:
             flash("Enter a placement for every player.")
             return redirect(url_for("draft.detail", match_id=match_id))
         char_raw = request.form.get(f"uma_character_id_{participant}", "").strip()
+        outfit_raw = request.form.get(f"uma_outfit_id_{participant}", "").strip()
         char_id = int(char_raw) if char_raw.isdigit() else None
-        custom = request.form.get(f"custom_uma_name_{participant}", "").strip() or None
+        outfit_id = int(outfit_raw) if outfit_raw.isdigit() else None
+        custom = (
+            request.form.get(f"custom_uma_name_{participant}", "").strip() or None
+        )
         lines.append(
             draft_service.DraftResultLine(
                 user_id=participant,
                 placement=int(placement_raw),
                 uma_character_id=char_id,
+                uma_outfit_id=outfit_id,
                 custom_uma_name=custom,
             )
         )

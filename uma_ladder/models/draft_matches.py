@@ -80,6 +80,9 @@ class DraftMatchBan(db.Model):
     uma_character_id: Mapped[int | None] = mapped_column(
         ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True
     )
+    uma_outfit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("uma_outfits.id", ondelete="SET NULL"), nullable=True
+    )
     condition_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -89,6 +92,7 @@ class DraftMatchBan(db.Model):
     )
 
     uma_character = relationship("UmaCharacter", lazy="joined")
+    uma_outfit = relationship("UmaOutfit", lazy="joined")
 
 
 class DraftRaceResult(db.Model):
@@ -103,6 +107,9 @@ class DraftRaceResult(db.Model):
     )
     uma_character_id: Mapped[int | None] = mapped_column(
         ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True
+    )
+    uma_outfit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("uma_outfits.id", ondelete="SET NULL"), nullable=True
     )
     custom_uma_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     placement: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -121,6 +128,7 @@ class DraftRaceResult(db.Model):
 
     user = relationship("User", lazy="joined", foreign_keys=[user_id])
     uma_character = relationship("UmaCharacter", lazy="joined")
+    uma_outfit = relationship("UmaOutfit", lazy="joined")
 
 
 class DraftEloChange(db.Model):

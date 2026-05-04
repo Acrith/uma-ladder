@@ -60,6 +60,26 @@ def _add_characters(app: Flask) -> tuple[int, int, int]:
         return chars[0].id, chars[1].id, chars[2].id
 
 
+def _add_outfits(app: Flask, *char_ids: int) -> dict[int, int]:
+    """Give each character a single default costume so it can be banned."""
+    from uma_ladder.models import UmaOutfit
+
+    with app.app_context():
+        out = {}
+        for cid in char_ids:
+            o = UmaOutfit(
+                uma_character_id=cid,
+                costume_id=cid * 100 + 1,
+                title_en=f"costume {cid}",
+                released_globally=True,
+                enabled=True,
+            )
+            db.session.add(o)
+            db.session.commit()
+            out[cid] = o.id
+        return out
+
+
 def _login(client: FlaskClient, username: str, password: str) -> None:
     resp = client.post(
         "/auth/login",
@@ -94,6 +114,7 @@ def test_full_match_flow_via_routes(client: FlaskClient, app: Flask, make_user) 
     _season(app)
     _add_preset(app)
     char_a, char_b, char_c = _add_characters(app)
+    outfits = _add_outfits(app, char_a, char_b, char_c)
     make_user(username="alice", password="password123")
     make_user(username="bob", password="password123")
 
@@ -152,10 +173,13 @@ def test_full_match_flow_via_routes(client: FlaskClient, app: Flask, make_user) 
         host_uid = match.host_user_id
         opp_uid = match.opponent_user_id
 
-    # uma bans (currently logged in as bob)
+    # uma bans (currently logged in as bob); each ban targets a specific costume
     resp = client.post(
         f"/draft/{match_id}/uma-ban",
-        data={"uma_character_id": str(char_a)},
+        data={
+            "uma_character_id": str(char_a),
+            "uma_outfit_id": str(outfits[char_a]),
+        },
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -163,7 +187,10 @@ def test_full_match_flow_via_routes(client: FlaskClient, app: Flask, make_user) 
     _login(client, "alice", "password123")
     resp = client.post(
         f"/draft/{match_id}/uma-ban",
-        data={"uma_character_id": str(char_b)},
+        data={
+            "uma_character_id": str(char_b),
+            "uma_outfit_id": str(outfits[char_b]),
+        },
         follow_redirects=False,
     )
     assert resp.status_code == 302
