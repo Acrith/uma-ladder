@@ -10,9 +10,11 @@ from .services.fetch_gametora import (
     fetch_characters,
     fetch_g1_races,
     fetch_outfits,
+    fetch_skills,
     write_characters_snapshot,
     write_g1_races_snapshot,
     write_outfits_snapshot,
+    write_skills_snapshot,
 )
 from .services.seed_characters import DEFAULT_SEED_PATH as DEFAULT_CHARACTER_SEED_PATH
 from .services.seed_characters import seed_characters
@@ -20,6 +22,8 @@ from .services.seed_g1 import import_g1_races
 from .services.seed_outfits import DEFAULT_SEED_PATH as DEFAULT_OUTFIT_SEED_PATH
 from .services.seed_outfits import seed_outfits
 from .services.seed_presets import seed_custom_presets
+from .services.seed_skills import DEFAULT_SEED_PATH as DEFAULT_SKILL_SEED_PATH
+from .services.seed_skills import seed_skills
 
 uma_cli = AppGroup("uma", help="Uma Ladder maintenance commands.")
 
@@ -218,6 +222,52 @@ def cmd_fetch_gametora_g1_races(out_path: Path | None) -> None:
     rows = fetch_g1_races()
     write_g1_races_snapshot(rows, target)
     click.echo(f"fetch-gametora-g1-races: wrote {len(rows)} G1 races")
+
+
+@uma_cli.command("fetch-gametora-skills")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output JSON path. Defaults to data/seeds/uma_skills.json.",
+)
+def cmd_fetch_gametora_skills(out_path: Path | None) -> None:
+    """One-off: fetch the skills snapshot from GameTora.
+
+    Polite single-request fetch via the public manifest. Writes a JSON
+    file in the shape `seed-skills` consumes. Includes inherited
+    (gene_version) variants as separate rows.
+    """
+    target = out_path or DEFAULT_SKILL_SEED_PATH
+    click.echo(f"fetch-gametora-skills: writing to {target}")
+    rows = fetch_skills()
+    write_skills_snapshot(rows, target)
+    click.echo(f"fetch-gametora-skills: wrote {len(rows)} skills")
+
+
+@uma_cli.command("seed-skills")
+@click.option(
+    "--file",
+    "file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the default seed JSON path.",
+)
+@click.option(
+    "--prune-missing",
+    is_flag=True,
+    default=False,
+    help="Disable any skill not in the snapshot.",
+)
+def cmd_seed_skills(file_path: Path | None, prune_missing: bool) -> None:
+    """Idempotent upsert of UmaSkill rows by gametora_id."""
+    report = seed_skills(file_path, prune_missing=prune_missing)
+    click.echo(
+        f"seed-skills: inserted={report.inserted} "
+        f"updated={report.updated} skipped={report.skipped} "
+        f"pruned={report.pruned} total={report.total}"
+    )
 
 
 def register_cli(app: Flask) -> None:

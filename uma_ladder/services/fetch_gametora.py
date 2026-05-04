@@ -621,3 +621,147 @@ def write_outfits_snapshot(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+# ---------- Skill fetcher ----------
+
+
+@dataclass(frozen=True)
+class FetchedSkill:
+    gametora_id: int
+    name_en: str
+    name_jp: str | None
+    description_en: str | None
+    description_jp: str | None
+    icon_id: int | None
+    rarity: int | None
+    is_unique: bool
+    is_inherited: bool
+    parent_gametora_id: int | None
+
+    def to_seed_row(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "gametora_id": self.gametora_id,
+            "name_en": self.name_en,
+            "is_unique": self.is_unique,
+            "is_inherited": self.is_inherited,
+        }
+        if self.name_jp:
+            out["name_jp"] = self.name_jp
+        if self.description_en:
+            out["description_en"] = self.description_en
+        if self.description_jp:
+            out["description_jp"] = self.description_jp
+        if self.icon_id is not None:
+            out["icon_id"] = self.icon_id
+        if self.rarity is not None:
+            out["rarity"] = self.rarity
+        if self.parent_gametora_id is not None:
+            out["parent_gametora_id"] = self.parent_gametora_id
+        return out
+
+
+def _coerce_skill(
+    raw: dict[str, Any], *, parent_id: int | None = None, is_inherited: bool = False
+) -> FetchedSkill | None:
+    """Map one GameTora skill row to our internal shape.
+
+    Each upstream row describes the canonical skill plus an optional
+    ``gene_version`` sub-row for the inherited variant. We call
+    `_coerce_skill` once for the main row (parent_id=None,
+    is_inherited=False), then once per gene_version (parent_id=main.id,
+    is_inherited=True).
+
+    The ``endesc`` field is GameTora's curated EN copy; ``desc_en`` is
+    machine-translated and noisier, so prefer endesc for display.
+    """
+    skill_id = raw.get("id")
+    name_en = raw.get("enname") or raw.get("name_en")
+    if not isinstance(skill_id, int) or not name_en:
+        return None
+    char = raw.get("char")
+    is_unique = bool(isinstance(char, list) and char)
+    return FetchedSkill(
+        gametora_id=skill_id,
+        name_en=name_en,
+        name_jp=raw.get("jpname") or raw.get("name_jp"),
+        description_en=raw.get("endesc") or raw.get("desc_en"),
+        description_jp=raw.get("jpdesc") or raw.get("desc_jp"),
+        icon_id=raw.get("iconid") if isinstance(raw.get("iconid"), int) else None,
+        rarity=raw.get("rarity") if isinstance(raw.get("rarity"), int) else None,
+        is_unique=is_unique and not is_inherited,
+        is_inherited=is_inherited,
+        parent_gametora_id=parent_id,
+    )
+
+
+def fetch_skills(
+    transport: GameToraTransport | None = None,
+    *,
+    delay_seconds: float = DELAY_SECONDS,
+) -> list[FetchedSkill]:
+    """Fetch the upstream skills list, including inherited (gene_version)
+    variants as separate rows.
+
+    Returns rows sorted by gametora_id for deterministic output.
+    """
+    t = transport or UrllibGameToraTransport()
+    manifest = _get_json(t, f"{GAMETORA_BASE}/data/manifests/umamusume.json")
+    version = manifest.get("skills")
+    if not isinstance(version, str) or not version:
+        raise GameToraError(
+            "manifest missing 'skills' key — upstream layout may have changed"
+        )
+
+    if delay_seconds:
+        time.sleep(delay_seconds)
+
+    raw = _get_json(t, f"{GAMETORA_BASE}/data/umamusume/skills.{version}.json")
+    if not isinstance(raw, list):
+        raise GameToraError("skills payload is not a list")
+
+    skills: list[FetchedSkill] = []
+    seen_ids: set[int] = set()
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        main = _coerce_skill(row)
+        if main is None or main.gametora_id in seen_ids:
+            continue
+        skills.append(main)
+        seen_ids.add(main.gametora_id)
+
+        gene = row.get("gene_version")
+        if isinstance(gene, dict):
+            inherited = _coerce_skill(
+                gene, parent_id=main.gametora_id, is_inherited=True
+            )
+            if inherited is not None and inherited.gametora_id not in seen_ids:
+                skills.append(inherited)
+                seen_ids.add(inherited.gametora_id)
+
+    skills.sort(key=lambda s: s.gametora_id)
+    return skills
+
+
+def write_skills_snapshot(
+    skills: Sequence[FetchedSkill],
+    out_path: Path,
+    *,
+    source_label: str = "gametora_v1",
+) -> None:
+    payload: dict[str, Any] = {
+        "source": source_label,
+        "attribution": (
+            "Skill data sourced from GameTora "
+            "(https://gametora.com/umamusume/skills); not affiliated with "
+            "Cygames. Maintain attribution when redistributing."
+        ),
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "skills": [s.to_seed_row() for s in skills],
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )

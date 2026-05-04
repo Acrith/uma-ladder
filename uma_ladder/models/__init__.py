@@ -32,6 +32,7 @@ from .profiles import UserProfile
 from .seasons import Season
 from .uma_character import UmaCharacter
 from .uma_outfit import UmaOutfit
+from .uma_skill import UmaSkill
 from .uploads import OcrParseAttempt, UploadedImage
 from .users import Role, User
 
@@ -64,6 +65,7 @@ __all__ = [
     "Surface",
     "UmaCharacter",
     "UmaOutfit",
+    "UmaSkill",
     "UploadPurpose",
     "UploadedImage",
     "User",
