@@ -815,6 +815,23 @@ def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLa
     return out
 
 
+def cancel_match(match_id: int, *, by_user_id: int) -> DraftMatch:
+    """Organiser action — wipes a match short of completion. Refuses to
+    touch already-completed matches (those represent applied Elo and need
+    a separate rollback path). Caller is responsible for verifying the
+    organiser role; this layer only guards state."""
+    match = get_match(match_id)
+    if match.status == DraftMatchStatus.COMPLETED:
+        raise InvalidMatchStateError("cannot cancel a completed match")
+    if match.status == DraftMatchStatus.CANCELLED:
+        raise InvalidMatchStateError("match is already cancelled")
+    match.status = DraftMatchStatus.CANCELLED
+    match.cancelled_at = _utcnow()
+    match.cancelled_by_user_id = by_user_id
+    db.session.commit()
+    return match
+
+
 def list_matches_for_user(user_id: int) -> Sequence[DraftMatch]:
     return list(
         db.session.scalars(

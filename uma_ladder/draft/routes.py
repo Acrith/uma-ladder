@@ -17,6 +17,7 @@ from ..models.enums import VENUES, Direction, DistanceCategory, Surface
 from ..services import draft as draft_service
 from ..services import profiles as profiles_service
 from ..services import seasons as seasons_service
+from ..services.permissions import min_role_required
 from ..services.profiles import (
     list_enabled_characters,
     list_outfits_for_character,
@@ -398,6 +399,23 @@ def submit_results(match_id: int) -> object:
         draft_service.submit_results(
             match_id, lines, confirmed_by_user_id=current_user.id
         )
+    except draft_service.DraftError as exc:
+        flash(str(exc))
+    return redirect(url_for("draft.detail", match_id=match_id))
+
+
+@bp.post("/<int:match_id>/cancel")
+@login_required
+@min_role_required("organizer")
+def cancel(match_id: int) -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        draft_service.cancel_match(match_id, by_user_id=current_user.id)
+        flash(f"Match #{match_id} cancelled.")
+    except draft_service.DraftNotFoundError:
+        abort(404)
     except draft_service.DraftError as exc:
         flash(str(exc))
     return redirect(url_for("draft.detail", match_id=match_id))

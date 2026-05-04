@@ -37,8 +37,28 @@
       <div class="flex flex-col items-end text-right">
         <span class="label-eyebrow">Join code</span>
         <span class="mt-1 text-mono-pill text-sm">{{ match.join_code }}</span>
+        {# Organiser-only: kill the match (test-match cleanup). Hidden once
+           the match is already cancelled or completed. #}
+        {% if current_user.is_authenticated and current_user.has_at_least('organizer') and match.status not in ('cancelled', 'completed') %}
+          <form method="post"
+                action="{{ url_for('draft.cancel', match_id=match.id) }}"
+                class="mt-2"
+                onsubmit="return confirm('Cancel match #{{ match.id }}? This is irreversible.');">
+            {{ csrf_form.hidden_tag() }}
+            <button type="submit" class="text-xs text-rose-400 hover:text-rose-300">Cancel match</button>
+          </form>
+        {% endif %}
       </div>
     </header>
+
+    {% if match.status == 'cancelled' %}
+      {% call card(class="p-5 border-rose-500/30") %}
+        <p class="label-eyebrow text-rose-300">Cancelled</p>
+        <p class="mt-2 text-sm text-slate-300">
+          This match was cancelled by an organiser{% if match.cancelled_at %} on {{ match.cancelled_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}. No Elo was applied.
+        </p>
+      {% endcall %}
+    {% endif %}
 
     {# Selected track sits prominently up top once rolled. #}
     {% if match.selected_preset %}
