@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, chip, draft_status_chip, live_dot %}
 {% block title %}Draft match #{{ match.id }} · Uma Ladder{% endblock %}
+{# Wider container — gives the center action column room to host an
+   Uma-tile picker and prevents Oshi-pill text from wrapping in the
+   side panels. Nav bar stays at max-w-6xl. #}
+{% block main_max_width %}max-w-[84rem]{% endblock %}
 {% block content %}
 
   <div
@@ -49,7 +53,10 @@
 
     {# ─── DUEL LAYOUT ─────────────────────────────────────────────── #}
     {# Mobile: stack P1 → actions → P2. lg+: 3 columns side-by-side. #}
-    <div class="grid gap-4 lg:grid-cols-[1fr_2fr_1fr]">
+    {# Center column gets ~2.5x the side widths so it can host the wider
+       phase forms and (next PR) the Uma-ban tile grid. Side panels grow
+       just slightly relative to the old max-w-6xl layout. #}
+    <div class="grid gap-4 lg:grid-cols-[1fr_2.5fr_1fr]">
 
       {% macro player_panel(side) %}
         <article class="surface-card relative overflow-hidden min-h-[26rem]">
