@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+import os
+
+
+class ConfigError(RuntimeError):
+    pass
+
+
+class BaseConfig:
+    SECRET_KEY: str = ""
+    SQLALCHEMY_DATABASE_URI: str = ""
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    WTF_CSRF_ENABLED = True
+    TESTING = False
+    DEBUG = False
+
+
+class DevConfig(BaseConfig):
+    DEBUG = True
+    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-production")
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "DATABASE_URL", "sqlite:///uma_ladder.dev.sqlite"
+    )
+
+
+class TestConfig(BaseConfig):
+    TESTING = True
+    SECRET_KEY = "test-secret"
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    WTF_CSRF_ENABLED = False
+
+
+class ProdConfig(BaseConfig):
+    @classmethod
+    def _load(cls) -> type[BaseConfig]:
+        secret = os.environ.get("SECRET_KEY")
+        if not secret:
+            raise ConfigError("SECRET_KEY is required in production")
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            raise ConfigError("DATABASE_URL is required in production")
+        cls.SECRET_KEY = secret
+        cls.SQLALCHEMY_DATABASE_URI = db_url
+        return cls
+
+
+_REGISTRY: dict[str, type[BaseConfig]] = {
+    "development": DevConfig,
+    "dev": DevConfig,
+    "testing": TestConfig,
+    "test": TestConfig,
+    "production": ProdConfig,
+    "prod": ProdConfig,
+}
+
+
+def get_config(name: str | None) -> type[BaseConfig]:
+    key = (name or "development").lower()
+    try:
+        cfg = _REGISTRY[key]
+    except KeyError as exc:
+        raise ConfigError(f"Unknown FLASK_CONFIG value: {name!r}") from exc
+    if cfg is ProdConfig:
+        return ProdConfig._load()
+    return cfg
