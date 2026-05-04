@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileAllowed, FileField, FileRequired
 from wtforms import IntegerField, StringField, TextAreaField
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
@@ -30,3 +31,15 @@ class ResultsForm(FlaskForm):
 
 class CsrfOnlyForm(FlaskForm):
     """Empty form used to gate state-changing POSTs (cancel, remove)."""
+
+
+class ResultsScreenshotForm(FlaskForm):
+    image = FileField(
+        "Result screenshot",
+        validators=[
+            FileRequired(),
+            FileAllowed(
+                ("png", "jpg", "jpeg", "webp"), "Use a PNG / JPG / WEBP image."
+            ),
+        ],
+    )

@@ -11,12 +11,20 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from ..models import Role
+from ..extensions import db
+from ..models import OcrParseAttempt, Role
+from ..services import ocr as ocr_service
 from ..services import official as official_service
 from ..services import presets as presets_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
-from .forms import CreateOfficialRaceForm, CsrfOnlyForm, ResultsForm, RoomCodeForm
+from .forms import (
+    CreateOfficialRaceForm,
+    CsrfOnlyForm,
+    ResultsForm,
+    ResultsScreenshotForm,
+    RoomCodeForm,
+)
 
 bp = Blueprint("official", __name__, template_folder="templates")
 
@@ -172,6 +180,99 @@ def submit_results(race_id: int) -> object:
     except official_service.DuplicatePlacementError:
         flash("Two players cannot share the same placement.")
     return redirect(url_for("official.detail", race_id=race.id))
+
+
+@bp.post("/<int:race_id>/results-screenshot")
+@min_role_required(Role.ORGANIZER)
+def upload_result_screenshot(race_id: int) -> object:
+    """Step 1 of the OCR-driven results flow: organiser uploads a result
+    screenshot. We save the image, run the configured OCR provider, and
+    redirect to a confirmation page where the parsed rows can be edited
+    and assigned to specific registrations before submission."""
+    try:
+        official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    form = ResultsScreenshotForm()
+    if not form.validate_on_submit():
+        for errs in form.errors.values():
+            for err in errs:
+                flash(err)
+        return redirect(url_for("official.detail", race_id=race_id))
+    try:
+        image = ocr_service.save_uploaded_image(
+            form.image.data, uploader_user_id=current_user.id
+        )
+    except ocr_service.OcrError as exc:
+        flash(str(exc))
+        return redirect(url_for("official.detail", race_id=race_id))
+    attempt = ocr_service.run_parse(image)
+    return redirect(
+        url_for(
+            "official.results_from_ocr",
+            race_id=race_id,
+            attempt_id=attempt.id,
+        )
+    )
+
+
+@bp.get("/<int:race_id>/results-from-ocr/<int:attempt_id>")
+@min_role_required(Role.ORGANIZER)
+def results_from_ocr(race_id: int, attempt_id: int) -> object:
+    """Step 2: render the OCR-parsed rows alongside registrations so the
+    organiser can assign each row to a player, edit the uma name, and
+    submit through the standard /results endpoint."""
+    try:
+        race = official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    attempt = db.session.get(OcrParseAttempt, attempt_id)
+    if attempt is None:
+        abort(404)
+    registrations = official_service.list_registrations(race_id)
+
+    parsed_rows = (attempt.parsed_json or {}).get("rows", []) or []
+    # Best-effort pre-match: case-insensitive substring match between the
+    # OCR uma_name and registered usernames. Falls through cleanly when
+    # there's no signal — organiser picks from the dropdown.
+    suggestions = _match_ocr_to_registrations(parsed_rows, registrations)
+
+    return render_template(
+        "official/results_from_ocr.html",
+        race=race,
+        attempt=attempt,
+        parsed_rows=parsed_rows,
+        registrations=registrations,
+        suggestions=suggestions,
+        results_form=ResultsForm(),
+    )
+
+
+def _match_ocr_to_registrations(
+    parsed_rows: list[dict], registrations
+) -> dict[int, int]:
+    """Return {parsed_row_index: registration_id} for confident matches."""
+    by_username = {r.user.username.lower(): r.id for r in registrations}
+    suggestions: dict[int, int] = {}
+    used: set[int] = set()
+    for i, row in enumerate(parsed_rows):
+        name = (row.get("uma_name") or "").strip().lower()
+        if not name:
+            continue
+        # exact match first
+        if name in by_username and by_username[name] not in used:
+            suggestions[i] = by_username[name]
+            used.add(by_username[name])
+            continue
+        # substring fallback
+        for uname, rid in by_username.items():
+            if rid in used:
+                continue
+            if name in uname or uname in name:
+                suggestions[i] = rid
+                used.add(rid)
+                break
+    return suggestions
 
 
 @bp.post("/<int:race_id>/cancel")

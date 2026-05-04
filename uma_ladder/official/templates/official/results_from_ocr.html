@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Results from OCR · {{ race.name }} · Uma Ladder{% endblock %}
+{% block content %}
+  <p class="label-eyebrow">
+    <a class="hover:text-cyan-300" href="{{ url_for('official.detail', race_id=race.id) }}">{{ race.name }}</a> · OCR
+  </p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Confirm parsed results</h1>
+  <p class="mt-1 text-sm text-slate-400">
+    Each parsed row was matched to a registered player when names looked similar — fix any wrong assignments and edit Uma names before saving. The standard placements form below applies the changes.
+  </p>
+
+  <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
+    {% call card(class="p-3") %}
+      <p class="label-eyebrow">Source screenshot</p>
+      <img src="{{ url_for('ocr.serve_image', image_id=attempt.image.id) }}"
+           alt="result screenshot"
+           class="mt-2 w-full rounded border border-slate-800" />
+      <p class="mt-2 text-xs text-slate-500">
+        Provider: <span class="text-slate-300">{{ attempt.provider }}</span>
+        {% if attempt.confidence_json and attempt.confidence_json.get('overall') is not none %}
+          · confidence
+          <span class="text-slate-300">{{ '%.0f' % (attempt.confidence_json['overall'] * 100) }}%</span>
+        {% endif %}
+      </p>
+    {% endcall %}
+
+    {% call card(class="p-5") %}
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Parsed rows</h2>
+
+      {% if not parsed_rows %}
+        <p class="mt-3 text-sm text-slate-500">
+          OCR returned no rows. You can still enter results manually below.
+        </p>
+      {% endif %}
+
+      <form method="post"
+            action="{{ url_for('official.submit_results', race_id=race.id) }}"
+            class="mt-4">
+        {{ results_form.hidden_tag() }}
+        <table class="w-full text-sm">
+          <thead class="text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="pr-3 py-1 text-left">Place</th>
+              <th class="pr-3 py-1 text-left">Detected</th>
+              <th class="pr-3 py-1 text-left">Assign to player</th>
+              <th class="text-left">Uma name</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for i in range(parsed_rows|length) %}
+              {% set row = parsed_rows[i] %}
+              {% set placement = row.get('placement', i + 1) %}
+              {% set ocr_uma = row.get('uma_name', '') %}
+              {% set suggested_reg_id = suggestions.get(i) %}
+              <tr class="border-t border-slate-800 align-top">
+                <td class="pr-3 py-2">
+                  <input type="number" min="1"
+                         data-ocr-placement
+                         class="input-base w-20"
+                         value="{{ placement }}"
+                         data-row-index="{{ i }}"
+                         disabled />
+                </td>
+                <td class="pr-3 py-2 text-slate-400">
+                  {{ ocr_uma or '—' }}
+                </td>
+                <td class="pr-3 py-2">
+                  <select name="ocr_assign_{{ i }}"
+                          class="input-base"
+                          onchange="syncAssignment({{ i }}, {{ placement }}, '{{ ocr_uma|e }}')">
+                    <option value="">— skip this row —</option>
+                    {% for r in registrations %}
+                      <option value="{{ r.id }}"
+                              {% if suggested_reg_id == r.id %}selected{% endif %}>
+                        @{{ r.user.username }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="py-2">
+                  <input type="text"
+                         name="ocr_uma_name_{{ i }}"
+                         class="input-base"
+                         value="{{ ocr_uma }}" />
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {# Hidden placement_<reg_id> + uma_name_<reg_id> fields populated
+           from the visible OCR rows. The existing /results endpoint reads
+           these — no service-side changes needed. JS keeps them in sync. #}
+        <div id="ocr-hidden-fields" class="hidden">
+          {% for r in registrations %}
+            <input type="hidden" name="placement_{{ r.id }}" data-reg-placement="{{ r.id }}" value="" />
+            <input type="hidden" name="uma_name_{{ r.id }}" data-reg-uma-name="{{ r.id }}" value="" />
+          {% endfor %}
+        </div>
+
+        <h3 class="mt-6 text-sm font-semibold uppercase tracking-wider text-slate-300">Unmatched registrations</h3>
+        <p class="mt-1 text-xs text-slate-500">Players the OCR didn't pick up — fill manually if they raced.</p>
+        <table class="mt-3 w-full text-sm">
+          <tbody>
+            {% for r in registrations %}
+              <tr class="border-t border-slate-800" data-manual-row="{{ r.id }}">
+                <td class="pr-3 py-2 text-slate-200 w-1/3">@{{ r.user.username }}</td>
+                <td class="pr-3 py-2 w-32">
+                  <input type="number" min="1"
+                         class="input-base w-20"
+                         data-manual-placement="{{ r.id }}" />
+                </td>
+                <td class="py-2">
+                  <input type="text"
+                         class="input-base"
+                         data-manual-uma-name="{{ r.id }}" />
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div class="mt-5 flex items-center justify-between">
+          <a href="{{ url_for('official.detail', race_id=race.id) }}"
+             class="text-xs text-slate-400 hover:text-slate-200">
+            ← back to race detail
+          </a>
+          <button class="btn-primary">Save results</button>
+        </div>
+      </form>
+    {% endcall %}
+  </section>
+
+  <script>
+    (function() {
+      // Pre-compute the assignment table from the initial select values.
+      const assignments = {};  // ocr row index → reg_id (or null)
+      const ocrRowPlacements = {};  // ocr row index → placement
+      const ocrRowNames = {};  // ocr row index → uma name
+      {% for i in range(parsed_rows|length) %}
+      assignments[{{ i }}] = document.querySelector('[name="ocr_assign_{{ i }}"]').value || null;
+      ocrRowPlacements[{{ i }}] = {{ parsed_rows[i].get('placement', i + 1) }};
+      ocrRowNames[{{ i }}] = {{ parsed_rows[i].get('uma_name', '') | tojson }};
+      {% endfor %}
+
+      function refreshHiddenFromOcr() {
+        // Reset all hidden placement/uma_name fields, then write whatever
+        // the OCR rows currently say. Manual rows below override.
+        document.querySelectorAll('[data-reg-placement]').forEach(el => el.value = '');
+        document.querySelectorAll('[data-reg-uma-name]').forEach(el => el.value = '');
+        for (const [idxStr, regId] of Object.entries(assignments)) {
+          if (!regId) continue;
+          const i = parseInt(idxStr, 10);
+          const placeInput = document.querySelector('[name="ocr_assign_' + i + '"]');
+          const umaInput = document.querySelector('[name="ocr_uma_name_' + i + '"]');
+          // pull edited uma name from the visible input
+          const uma = umaInput ? umaInput.value : ocrRowNames[i];
+          const place = ocrRowPlacements[i];
+          const ph = document.querySelector('[data-reg-placement="' + regId + '"]');
+          const nh = document.querySelector('[data-reg-uma-name="' + regId + '"]');
+          if (ph) ph.value = place;
+          if (nh) nh.value = uma;
+        }
+      }
+
+      window.syncAssignment = function(rowIdx, _placement, _ocrUma) {
+        const sel = document.querySelector('[name="ocr_assign_' + rowIdx + '"]');
+        assignments[rowIdx] = sel.value || null;
+        // Prevent the same registration from being assigned twice — reset
+        // any other row's select that points at this reg.
+        if (sel.value) {
+          for (const [otherIdxStr, otherReg] of Object.entries(assignments)) {
+            const otherIdx = parseInt(otherIdxStr, 10);
+            if (otherIdx === rowIdx) continue;
+            if (otherReg === sel.value) {
+              const otherSel = document.querySelector('[name="ocr_assign_' + otherIdx + '"]');
+              if (otherSel) otherSel.value = '';
+              assignments[otherIdx] = null;
+            }
+          }
+        }
+        refreshHiddenFromOcr();
+      };
+
+      // Wire uma_name edits + manual rows to keep hidden fields fresh on submit.
+      document.querySelectorAll('[name^="ocr_uma_name_"]').forEach(inp => {
+        inp.addEventListener('input', refreshHiddenFromOcr);
+      });
+
+      // Manual rows: when filled, override the OCR-derived hidden fields
+      // for that registration on submit.
+      const form = document.querySelector('form');
+      form.addEventListener('submit', function() {
+        // Apply OCR rows first.
+        refreshHiddenFromOcr();
+        // Then layer manual rows on top so an explicit manual entry wins.
+        document.querySelectorAll('[data-manual-row]').forEach(row => {
+          const regId = row.dataset.manualRow;
+          const place = row.querySelector('[data-manual-placement="' + regId + '"]').value.trim();
+          const uma = row.querySelector('[data-manual-uma-name="' + regId + '"]').value.trim();
+          if (place) {
+            const ph = document.querySelector('[data-reg-placement="' + regId + '"]');
+            if (ph) ph.value = place;
+          }
+          if (uma) {
+            const nh = document.querySelector('[data-reg-uma-name="' + regId + '"]');
+            if (nh) nh.value = uma;
+          }
+        });
+      });
+
+      // Initial sync so submitting without changing anything still posts
+      // the suggested assignments.
+      refreshHiddenFromOcr();
+    })();
+  </script>
+{% endblock %}
