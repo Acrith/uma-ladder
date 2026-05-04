@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask import Blueprint, render_template
+from flask_login import current_user
 
 from ..services import draft as draft_service
 from ..services import official as official_service
@@ -18,9 +19,39 @@ def index() -> object:
     draft_top5 = (
         draft_service.season_elo_ladder(season.id, limit=5) if season is not None else []
     )
+    my_matches = []
+    if current_user.is_authenticated:
+        my_matches = list(draft_service.list_matches_for_user(current_user.id))[:5]
     return render_template(
         "dashboard/index.html",
         active_season=season,
         ladder_top5=official_top5,
         elo_top5=draft_top5,
+        my_matches=my_matches,
+    )
+
+
+@bp.get("/_partials/official-top5")
+def partial_official_top5() -> object:
+    season = seasons_service.get_active_season()
+    rows = (
+        official_service.season_ladder(season.id, limit=5) if season is not None else []
+    )
+    return render_template(
+        "dashboard/_partial_official_top5.html",
+        active_season=season,
+        ladder_top5=rows,
+    )
+
+
+@bp.get("/_partials/draft-top5")
+def partial_draft_top5() -> object:
+    season = seasons_service.get_active_season()
+    rows = (
+        draft_service.season_elo_ladder(season.id, limit=5) if season is not None else []
+    )
+    return render_template(
+        "dashboard/_partial_draft_top5.html",
+        active_season=season,
+        elo_top5=rows,
     )

@@ -1,13 +1,22 @@
 {% extends "base.html" %}
 {% from "auth/_form.html" import render_field %}
+{% from "_components.html" import card %}
 {% block title %}Log in · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">Log in</h1>
-  <form method="post" class="max-w-sm">
-    {{ form.hidden_tag() }}
-    {{ render_field(form.username) }}
-    {{ render_field(form.password) }}
-    <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white">Log in</button>
-  </form>
-  <p class="mt-3 text-sm"><a href="{{ url_for('auth.request_reset') }}" class="underline">Forgot password?</a></p>
+  <div class="mx-auto max-w-sm">
+    {% call card(class="p-6") %}
+      <p class="label-eyebrow">Welcome back</p>
+      <h1 class="mt-1 text-xl font-semibold text-slate-100">Log in</h1>
+      <form method="post" class="mt-4">
+        {{ form.hidden_tag() }}
+        {{ render_field(form.username) }}
+        {{ render_field(form.password) }}
+        <button type="submit" class="btn-primary mt-2 w-full justify-center">Log in</button>
+      </form>
+      <p class="mt-4 text-center text-xs text-slate-500">
+        <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('auth.request_reset') }}">Forgot password?</a>
+        · <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('auth.register') }}">Register</a>
+      </p>
+    {% endcall %}
+  </div>
 {% endblock %}

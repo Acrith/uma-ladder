@@ -1,55 +1,52 @@
 {% extends "base.html" %}
+{% from "_components.html" import card, chip %}
 {% block title %}Discord notifications · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">Discord notifications</h1>
-  {% with messages = get_flashed_messages() %}
-    {% for m in messages %}<p class="mb-3 text-sm text-slate-700">{{ m }}</p>{% endfor %}
-  {% endwith %}
+  <p class="label-eyebrow">Admin · Discord</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Notification attempts</h1>
+
   {% if not attempts %}
-    <p class="text-sm text-slate-600">No attempts yet.</p>
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">No attempts yet.</div>
   {% else %}
-    <table class="text-sm">
-      <thead>
-        <tr class="text-left">
-          <th class="pr-4">#</th>
-          <th class="pr-4">Created</th>
-          <th class="pr-4">Event</th>
-          <th class="pr-4">Target</th>
-          <th class="pr-4">Status</th>
-          <th class="pr-4">HTTP</th>
-          <th class="pr-4">Error</th>
-          <th class="pr-4"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for a in attempts %}
-          <tr class="border-t border-slate-200 align-top">
-            <td class="pr-4 py-1">{{ a.id }}</td>
-            <td class="pr-4 py-1">{{ a.created_at.isoformat() }}</td>
-            <td class="pr-4 py-1">{{ a.event_type }}</td>
-            <td class="pr-4 py-1">{{ a.target_name }}</td>
-            <td class="pr-4 py-1">
-              <span class="rounded px-2 py-0.5
-                {% if a.status == 'sent' %}bg-emerald-100 text-emerald-800
-                {% elif a.status == 'failed' %}bg-red-100 text-red-800
-                {% elif a.status == 'skipped' %}bg-slate-200 text-slate-700
-                {% else %}bg-amber-100 text-amber-800{% endif %}">
-                {{ a.status }}
-              </span>
-            </td>
-            <td class="pr-4 py-1">{{ a.response_code or '—' }}</td>
-            <td class="pr-4 py-1 text-red-700">{{ a.error_message or '' }}</td>
-            <td class="pr-4 py-1">
-              {% if a.status in retryable_statuses %}
-                <form method="post" action="{{ url_for('notifications.retry', attempt_id=a.id) }}">
-                  {{ csrf_form.hidden_tag() }}
-                  <button class="rounded bg-slate-200 px-2 py-0.5 text-xs">Retry</button>
-                </form>
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% call card(class="mt-6 overflow-hidden") %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-900/50 text-xs uppercase tracking-wider text-slate-500">
+            <tr class="text-left">
+              <th class="px-4 py-3">#</th>
+              <th class="px-4 py-3">Created</th>
+              <th class="px-4 py-3">Event</th>
+              <th class="px-4 py-3">Target</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">HTTP</th>
+              <th class="px-4 py-3">Error</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in attempts %}
+              {% set tone = {"pending": "amber", "sent": "emerald", "failed": "rose", "skipped": "slate"}[a.status] | default("slate") %}
+              <tr class="border-t border-slate-800 align-top">
+                <td class="px-4 py-2 text-slate-400">{{ a.id }}</td>
+                <td class="px-4 py-2 text-slate-400">{{ a.created_at.isoformat() }}</td>
+                <td class="px-4 py-2 text-slate-300">{{ a.event_type }}</td>
+                <td class="px-4 py-2 text-slate-400">{{ a.target_name }}</td>
+                <td class="px-4 py-2">{{ chip(a.status, tone) }}</td>
+                <td class="px-4 py-2 text-slate-400">{{ a.response_code or '—' }}</td>
+                <td class="px-4 py-2 text-rose-300">{{ a.error_message or '' }}</td>
+                <td class="px-4 py-2">
+                  {% if a.status in retryable_statuses %}
+                    <form method="post" action="{{ url_for('notifications.retry', attempt_id=a.id) }}">
+                      {{ csrf_form.hidden_tag() }}
+                      <button class="btn-ghost">Retry</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endcall %}
   {% endif %}
 {% endblock %}

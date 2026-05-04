@@ -1,27 +1,52 @@
 {% extends "base.html" %}
-{% from "auth/_form.html" import render_field %}
+{% from "_components.html" import card %}
 {% block title %}New official race · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">New official race</h1>
+  <p class="label-eyebrow">Official</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Create race</h1>
+
   {% if not seasons %}
-    <p class="mb-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+    <div class="surface-card mt-4 border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
       No seasons exist. Create one via the CLI or shell before adding races.
-    </p>
-  {% endif %}
-  <form method="post" class="max-w-lg">
-    {{ form.hidden_tag() }}
-    <div class="mb-3">
-      <label class="block text-sm font-medium text-slate-700">Season</label>
-      <select name="season_id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1">
-        {% for s in seasons %}
-          <option value="{{ s.id }}">{{ s.name }} ({{ s.status }})</option>
-        {% endfor %}
-      </select>
     </div>
-    {{ render_field(form.name) }}
-    {{ render_field(form.preset_id) }}
-    {{ render_field(form.max_players) }}
-    {{ render_field(form.notes) }}
-    <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white">Create</button>
-  </form>
+  {% endif %}
+
+  {% call card(class="mt-6 p-6 max-w-xl") %}
+    <form method="post" class="space-y-4">
+      {{ form.hidden_tag() }}
+
+      <div>
+        <label class="text-sm text-slate-300">Season</label>
+        <select name="season_id" class="input-base mt-1">
+          {% for s in seasons %}
+            <option value="{{ s.id }}">{{ s.name }} ({{ s.status }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="text-sm text-slate-300">{{ form.name.label.text }}</label>
+        {{ form.name(class="input-base mt-1") }}
+        {% for err in form.name.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="text-sm text-slate-300">{{ form.preset_id.label.text }}</label>
+          {{ form.preset_id(class="input-base mt-1") }}
+        </div>
+        <div>
+          <label class="text-sm text-slate-300">{{ form.max_players.label.text }}</label>
+          {{ form.max_players(class="input-base mt-1") }}
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-slate-300">{{ form.notes.label.text }}</label>
+        {{ form.notes(class="input-base mt-1", rows=3) }}
+      </div>
+
+      <button class="btn-primary">Create race</button>
+    </form>
+  {% endcall %}
 {% endblock %}

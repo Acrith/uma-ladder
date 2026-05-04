@@ -7,6 +7,13 @@ PYTEST = $(VENV)/bin/pytest
 RUFF = $(VENV)/bin/ruff
 FLASK = $(VENV)/bin/flask
 
+# Use bash so the nvm-aware tailwind target works.
+SHELL := /bin/bash
+
+# Wrap npx so nvm-installed Node is reachable from `make` (which doesn't run
+# an interactive shell). Override TAILWIND_NPX if you have npx on PATH already.
+TAILWIND_NPX ?= bash -c 'export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh"; npx --yes tailwindcss@3.4.13 "$$@"' bash
+
 install:
 	python3 -m venv $(VENV)
 	$(PIP) install --upgrade pip
@@ -20,18 +27,10 @@ lint:
 
 # Build Tailwind CSS using a one-shot npx (no node_modules persisted).
 tailwind:
-	npx --yes tailwindcss@3.4.13 \
-		-c tailwind.config.js \
-		-i ./uma_ladder/static/css/input.css \
-		-o ./uma_ladder/static/css/output.css \
-		--minify
+	$(TAILWIND_NPX) -c tailwind.config.js -i ./uma_ladder/static/css/input.css -o ./uma_ladder/static/css/output.css --minify
 
 tailwind-watch:
-	npx --yes tailwindcss@3.4.13 \
-		-c tailwind.config.js \
-		-i ./uma_ladder/static/css/input.css \
-		-o ./uma_ladder/static/css/output.css \
-		--watch
+	$(TAILWIND_NPX) -c tailwind.config.js -i ./uma_ladder/static/css/input.css -o ./uma_ladder/static/css/output.css --watch
 
 run:
 	FLASK_APP=uma_ladder FLASK_CONFIG=development $(FLASK) run

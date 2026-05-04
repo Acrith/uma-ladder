@@ -1,40 +1,113 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="bg-ink-950">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}Uma Ladder{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     {% if config.DEBUG and not config.TAILWIND_BUILT %}
-      {# Dev fallback: CDN Tailwind so reloads don't require a rebuild. #}
       <script src="https://cdn.tailwindcss.com"></script>
+      <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              fontFamily: {
+                sans: ['"Inter"', "ui-sans-serif", "system-ui", "sans-serif"],
+                mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
+              },
+              colors: {
+                ink: { 950: "#070912", 900: "#0d111c", 800: "#171c2c", 700: "#222942" },
+              },
+              boxShadow: {
+                "glow-cyan": "0 0 20px rgba(34, 211, 238, 0.25)",
+                "glow-cyan-strong": "0 0 30px rgba(34, 211, 238, 0.45)",
+                "glow-fuchsia": "0 0 20px rgba(232, 121, 249, 0.3)",
+                "glow-amber": "0 0 18px rgba(251, 191, 36, 0.25)",
+              },
+              keyframes: {
+                "live-pulse": {
+                  "0%, 100%": { opacity: "1", transform: "scale(1)" },
+                  "50%": { opacity: "0.55", transform: "scale(0.92)" },
+                },
+              },
+              animation: { "live-pulse": "live-pulse 1.6s ease-in-out infinite" },
+            },
+          },
+        };
+      </script>
     {% else %}
       <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}" />
     {% endif %}
   </head>
-  <body class="min-h-screen bg-slate-50 text-slate-900">
-    <header class="border-b bg-white">
-      <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-        <a href="{{ url_for('dashboard.index') }}" class="text-lg font-semibold">Uma Ladder</a>
-        <nav class="flex items-center gap-4 text-sm">
-          <a href="{{ url_for('official.index') }}" class="hover:underline">Official</a>
-          <a href="{{ url_for('draft.index') }}" class="hover:underline">Draft</a>
-          <a href="{{ url_for('presets.index') }}" class="hover:underline">Presets</a>
+  <body class="min-h-screen bg-ink-950 font-sans text-slate-200 antialiased">
+    <div class="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div class="absolute -top-40 left-1/2 h-96 w-[60rem] -translate-x-1/2 rounded-full bg-cyan-500/10 blur-3xl"></div>
+      <div class="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-fuchsia-500/10 blur-3xl"></div>
+    </div>
+
+    <header class="sticky top-0 z-30 border-b border-slate-800/70 bg-ink-950/70 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <a href="{{ url_for('dashboard.index') }}" class="flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <span class="inline-block h-2 w-2 rounded-full bg-cyan-400 shadow-glow-cyan"></span>
+          <span class="bg-gradient-to-r from-cyan-300 via-cyan-200 to-fuchsia-300 bg-clip-text text-transparent">Uma Ladder</span>
+        </a>
+        <nav class="flex items-center gap-1 text-sm">
+          {% set nav_links = [
+            ("dashboard.index", "Home"),
+            ("official.index", "Official"),
+            ("draft.index", "Draft"),
+            ("presets.index", "Presets"),
+            ("ocr.index", "OCR"),
+          ] %}
+          {% for endpoint, label in nav_links %}
+            {% set active = request.endpoint == endpoint %}
+            <a href="{{ url_for(endpoint) }}"
+               class="rounded-lg px-3 py-1.5 transition {% if active %}bg-slate-800/80 text-cyan-300 shadow-glow-cyan{% else %}text-slate-300 hover:bg-slate-800/50 hover:text-slate-100{% endif %}">
+              {{ label }}
+            </a>
+          {% endfor %}
+          <span class="mx-1 h-6 w-px bg-slate-800"></span>
           {% if current_user.is_authenticated %}
-            <a href="{{ url_for('profiles.me') }}" class="hover:underline">{{ current_user.username }}</a>
+            <a href="{{ url_for('profiles.me') }}" class="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300">
+              {{ current_user.username }}
+            </a>
+            {% if current_user.has_at_least('admin') %}
+              <a href="{{ url_for('notifications.index') }}" class="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Discord notifications">
+                ⌬
+              </a>
+            {% endif %}
             <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-              <button type="submit" class="rounded bg-slate-200 px-2 py-1 text-xs hover:bg-slate-300">Log out</button>
+              <button type="submit" class="btn-ghost">Log out</button>
             </form>
           {% else %}
-            <a href="{{ url_for('auth.login') }}" class="hover:underline">Log in</a>
-            <a href="{{ url_for('auth.register') }}" class="rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-700">Register</a>
+            <a href="{{ url_for('auth.login') }}" class="btn-ghost">Log in</a>
+            <a href="{{ url_for('auth.register') }}" class="btn-primary">Register</a>
           {% endif %}
         </nav>
       </div>
     </header>
-    <main class="mx-auto max-w-5xl px-4 py-6">
+
+    <main class="mx-auto max-w-6xl px-4 py-8">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="mb-6 space-y-2">
+            {% for m in messages %}
+              <div class="surface-card border-fuchsia-500/30 bg-fuchsia-500/5 px-4 py-2 text-sm text-fuchsia-200">{{ m }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
       {% block content %}{% endblock %}
     </main>
+
+    <footer class="mx-auto mt-12 max-w-6xl px-4 pb-8 text-xs text-slate-500">
+      Uma Ladder · race data attribution:
+      <a href="https://gametora.com/umamusume/races" class="text-slate-400 hover:text-cyan-300">GameTora</a>;
+      not affiliated with Cygames.
+    </footer>
   </body>
 </html>

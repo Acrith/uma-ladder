@@ -1,45 +1,66 @@
 {% extends "base.html" %}
+{% from "_components.html" import card, chip %}
 {% block title %}Race presets · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">Race presets</h1>
-  <p class="mb-4 text-sm text-slate-600">
-    {{ presets|length }} preset{{ '' if presets|length == 1 else 's' }} loaded.
-  </p>
-  <table class="min-w-full text-sm">
-    <thead class="text-left">
-      <tr>
-        <th class="py-1 pr-4">Name</th>
-        <th class="py-1 pr-4">Surface</th>
-        <th class="py-1 pr-4">Distance</th>
-        <th class="py-1 pr-4">Direction</th>
-        <th class="py-1 pr-4">Variant</th>
-        <th class="py-1 pr-4">Max</th>
-        <th class="py-1 pr-4">Enabled</th>
-        {% if current_user.is_authenticated and current_user.has_at_least('admin') %}
-          <th class="py-1 pr-4"></th>
-        {% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for p in presets %}
-        <tr class="border-t border-slate-200">
-          <td class="py-1 pr-4">{{ p.name }}</td>
-          <td class="py-1 pr-4">{{ p.surface }}</td>
-          <td class="py-1 pr-4">{{ p.distance_meters }}m ({{ p.distance_category }})</td>
-          <td class="py-1 pr-4">{{ p.direction }}</td>
-          <td class="py-1 pr-4">{{ p.course_variant or '—' }}</td>
-          <td class="py-1 pr-4">{{ p.max_runners }}</td>
-          <td class="py-1 pr-4">{{ 'yes' if p.enabled else 'no' }}</td>
-          {% if current_user.is_authenticated and current_user.has_at_least('admin') %}
-            <td class="py-1 pr-4">
-              <form method="post" action="{{ url_for('presets.toggle', preset_id=p.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                <button type="submit" class="rounded bg-slate-200 px-2 py-0.5">Toggle</button>
-              </form>
-            </td>
-          {% endif %}
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <p class="label-eyebrow">Library</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Race presets</h1>
+  <p class="mt-1 text-sm text-slate-400">{{ presets|length }} preset{{ '' if presets|length == 1 else 's' }} loaded.</p>
+
+  {% call card(class="mt-6 overflow-hidden") %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-900/50 text-xs uppercase tracking-wider text-slate-500">
+          <tr class="text-left">
+            <th class="px-4 py-3">Name</th>
+            <th class="px-4 py-3">Surface</th>
+            <th class="px-4 py-3">Distance</th>
+            <th class="px-4 py-3">Direction</th>
+            <th class="px-4 py-3">Variant</th>
+            <th class="px-4 py-3">Max</th>
+            <th class="px-4 py-3">Source</th>
+            <th class="px-4 py-3">Enabled</th>
+            {% if current_user.is_authenticated and current_user.has_at_least('admin') %}
+              <th class="px-4 py-3"></th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in presets %}
+            <tr class="border-t border-slate-800/70">
+              <td class="px-4 py-2 text-slate-100">{{ p.name }}</td>
+              <td class="px-4 py-2">{{ chip(p.surface, "violet" if p.surface == "Turf" else "amber") }}</td>
+              <td class="px-4 py-2 text-slate-300">{{ p.distance_meters }}m <span class="text-slate-500">({{ p.distance_category }})</span></td>
+              <td class="px-4 py-2 text-slate-300">{{ p.direction }}</td>
+              <td class="px-4 py-2 text-slate-400">{{ p.course_variant or '—' }}</td>
+              <td class="px-4 py-2 text-slate-300">{{ p.max_runners }}</td>
+              <td class="px-4 py-2 text-slate-400">
+                {% if p.source == 'g1_import' %}{{ chip("G1", "amber") }}
+                {% elif p.source == 'custom_builtin' %}{{ chip("custom", "cyan") }}
+                {% else %}{{ chip(p.source) }}{% endif %}
+              </td>
+              <td class="px-4 py-2">
+                {% if p.enabled %}
+                  <span class="inline-flex items-center gap-1.5 text-xs text-emerald-300">
+                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> on
+                  </span>
+                {% else %}
+                  <span class="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                    <span class="h-1.5 w-1.5 rounded-full bg-slate-600"></span> off
+                  </span>
+                {% endif %}
+              </td>
+              {% if current_user.is_authenticated and current_user.has_at_least('admin') %}
+                <td class="px-4 py-2">
+                  <form method="post" action="{{ url_for('presets.toggle', preset_id=p.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button class="btn-ghost">Toggle</button>
+                  </form>
+                </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endcall %}
 {% endblock %}

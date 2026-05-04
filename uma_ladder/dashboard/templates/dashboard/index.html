@@ -1,73 +1,121 @@
 {% extends "base.html" %}
+{% from "_components.html" import card, chip, stat_tile, live_dot, draft_status_chip %}
 {% block title %}Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-2xl font-semibold mb-4">Uma Ladder</h1>
 
-  <section class="mb-6">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold">Official ladder · top 5</h2>
-      {% if active_season %}
-        <a class="text-sm underline" href="{{ url_for('official.ladder', season_id=active_season.id) }}">
-          See full ladder
-        </a>
-      {% endif %}
+  {# Hero #}
+  <section class="surface-card relative overflow-hidden p-6 md:p-8">
+    <div class="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-cyan-500/15 blur-3xl"></div>
+    <div class="pointer-events-none absolute -bottom-16 -left-10 h-56 w-56 rounded-full bg-fuchsia-500/15 blur-3xl"></div>
+    <div class="relative">
+      <p class="label-eyebrow">Community ladder</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-50 md:text-4xl">
+        <span class="bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-cyan-200 bg-clip-text text-transparent">Race. Rank. Repeat.</span>
+      </h1>
+      <p class="mt-2 max-w-xl text-sm text-slate-300">
+        Organize Uma Musume races, run draft 1v1s, and track who actually shows up on the podium —
+        all in one place.
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-2">
+        {% if active_season %}
+          {{ chip("Season · " + active_season.name, "cyan") }}
+        {% else %}
+          {{ chip("No active season", "rose") }}
+        {% endif %}
+        {{ live_dot() }}
+        <span class="ml-auto flex gap-2">
+          {% if current_user.is_authenticated %}
+            <a href="{{ url_for('draft.new') }}" class="btn-primary">+ New draft match</a>
+            <a href="{{ url_for('official.index') }}" class="btn-ghost">Browse races</a>
+          {% else %}
+            <a href="{{ url_for('auth.register') }}" class="btn-primary">Get started</a>
+            <a href="{{ url_for('auth.login') }}" class="btn-ghost">Log in</a>
+          {% endif %}
+        </span>
+      </div>
     </div>
-    {% if not active_season %}
-      <p class="text-slate-600 text-sm">No active season.</p>
-    {% elif not ladder_top5 %}
-      <p class="text-slate-600 text-sm">No results yet for {{ active_season.name }}.</p>
-    {% else %}
-      <table class="mt-2 text-sm">
-        <thead><tr class="text-left"><th class="pr-4">#</th><th class="pr-4">Player</th><th class="pr-4">Points</th></tr></thead>
-        <tbody>
-          {% for row in ladder_top5 %}
-            <tr class="border-t border-slate-200">
-              <td class="pr-4 py-1">{{ loop.index }}</td>
-              <td class="pr-4 py-1">
-                <a class="underline" href="{{ url_for('profiles.public', username=row.username) }}">{{ row.username }}</a>
-              </td>
-              <td class="pr-4 py-1">{{ row.total_points }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endif %}
   </section>
 
-  <section class="mb-6">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold">Draft Elo · top 5</h2>
-      {% if active_season %}
-        <a class="text-sm underline" href="{{ url_for('draft.ladder', season_id=active_season.id) }}">
-          See full ladder
-        </a>
-      {% endif %}
-    </div>
-    {% if not active_season %}
-      <p class="text-slate-600 text-sm">No active season.</p>
-    {% elif not elo_top5 %}
-      <p class="text-slate-600 text-sm">No draft results yet for {{ active_season.name }}.</p>
-    {% else %}
-      <table class="mt-2 text-sm">
-        <thead><tr class="text-left"><th class="pr-4">#</th><th class="pr-4">Player</th><th class="pr-4">Rating</th></tr></thead>
-        <tbody>
-          {% for row in elo_top5 %}
-            <tr class="border-t border-slate-200">
-              <td class="pr-4 py-1">{{ loop.index }}</td>
-              <td class="pr-4 py-1">
-                <a class="underline" href="{{ url_for('profiles.public', username=row.username) }}">{{ row.username }}</a>
-              </td>
-              <td class="pr-4 py-1">{{ row.rating }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endif %}
+  {# Quick stats grid #}
+  <section class="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+    {{ stat_tile("Top points", ladder_top5[0].total_points if ladder_top5 else "—", accent="amber", small=(ladder_top5[0].username if ladder_top5 else None)) }}
+    {{ stat_tile("Top Elo", elo_top5[0].rating if elo_top5 else "—", accent="fuchsia", small=(elo_top5[0].username if elo_top5 else None)) }}
+    {{ stat_tile("Active season", active_season.name if active_season else "—", accent="cyan") }}
+    {{ stat_tile("Your matches", my_matches | length if current_user.is_authenticated else "—", accent="emerald", small="last 5 visible below") }}
   </section>
 
-  <section>
-    <a class="text-sm underline" href="{{ url_for('official.index') }}">All official races</a>
-    · <a class="text-sm underline" href="{{ url_for('draft.index') }}">Draft PvP</a>
-    · <a class="text-sm underline" href="{{ url_for('presets.index') }}">Race presets</a>
+  {# Main content grid #}
+  <section class="mt-6 grid gap-4 lg:grid-cols-2">
+    {# Official top 5 — auto-refresh every 30s #}
+    {% call card(class="p-5") %}
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="label-eyebrow">Official ladder</p>
+          <h2 class="mt-1 text-lg font-semibold text-slate-100">Top 5</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          {{ live_dot("30s") }}
+          {% if active_season %}
+            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('official.ladder', season_id=active_season.id) }}">Full →</a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mt-3" hx-get="{{ url_for('dashboard.partial_official_top5') }}" hx-trigger="every 30s" hx-swap="outerHTML">
+        {% include "dashboard/_partial_official_top5.html" %}
+      </div>
+    {% endcall %}
+
+    {# Draft top 5 — auto-refresh every 30s #}
+    {% call card(class="p-5") %}
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="label-eyebrow">Draft Elo</p>
+          <h2 class="mt-1 text-lg font-semibold text-slate-100">Top 5</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          {{ live_dot("30s") }}
+          {% if active_season %}
+            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.ladder', season_id=active_season.id) }}">Full →</a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mt-3" hx-get="{{ url_for('dashboard.partial_draft_top5') }}" hx-trigger="every 30s" hx-swap="outerHTML">
+        {% include "dashboard/_partial_draft_top5.html" %}
+      </div>
+    {% endcall %}
   </section>
+
+  {# My matches block #}
+  {% if current_user.is_authenticated and my_matches %}
+    <section class="mt-6">
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="label-eyebrow">My drafts</p>
+            <h2 class="mt-1 text-lg font-semibold text-slate-100">Recent &amp; active</h2>
+          </div>
+          <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">All →</a>
+        </div>
+        <ul class="mt-3 grid gap-2 md:grid-cols-2">
+          {% for m in my_matches %}
+            <li class="rounded-lg border border-slate-800 bg-slate-900/40 p-3 transition hover:border-cyan-500/40 hover:bg-slate-900/70">
+              <a href="{{ url_for('draft.detail', match_id=m.id) }}" class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-slate-100">Match #{{ m.id }}</p>
+                  <p class="mt-0.5 text-xs text-slate-400">
+                    {{ m.host.username }} <span class="text-slate-600">vs</span> {{ m.opponent.username if m.opponent else "—" }}
+                  </p>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                  {{ draft_status_chip(m.status) }}
+                  <span class="text-mono-pill">{{ m.join_code }}</span>
+                </div>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    </section>
+  {% endif %}
+
 {% endblock %}

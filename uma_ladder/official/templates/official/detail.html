@@ -1,81 +1,105 @@
 {% extends "base.html" %}
+{% from "_components.html" import card, chip, official_status_chip %}
 {% block title %}{{ race.name }} · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold">{{ race.name }}</h1>
-  <p class="mt-1 text-sm text-slate-600">Status: <strong>{{ race.status }}</strong></p>
 
-  {% with messages = get_flashed_messages() %}
-    {% for m in messages %}<p class="mt-2 text-sm text-red-700">{{ m }}</p>{% endfor %}
-  {% endwith %}
-
-  {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
-    <div class="mt-3 flex gap-2">
-      {% if race.status == 'draft' or race.status == 'registration_closed' %}
-        <form method="post" action="{{ url_for('official.open_registration', race_id=race.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <button class="rounded bg-emerald-700 px-3 py-1 text-sm text-white">Open registration</button>
-        </form>
-      {% endif %}
-      {% if race.status == 'registration_open' %}
-        <form method="post" action="{{ url_for('official.close_registration', race_id=race.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <button class="rounded bg-slate-700 px-3 py-1 text-sm text-white">Close registration</button>
-        </form>
-      {% endif %}
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Official race</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">{{ race.name }}</h1>
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        {{ official_status_chip(race.status) }}
+        {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
+        {% if race.preset %}{{ chip(race.preset.name, "violet") }}{% endif %}
+      </div>
     </div>
-  {% endif %}
-
-  <h2 class="mt-6 font-semibold">Registrations</h2>
-  {% if not registrations %}
-    <p class="text-sm text-slate-600">No-one registered yet.</p>
-  {% else %}
-    <ul class="list-disc pl-5 text-sm">
-      {% for r in registrations %}
-        <li>{{ r.user.username }}</li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-  {% if current_user.is_authenticated and race.status == 'registration_open' %}
-    <form method="post" action="{{ url_for('official.register', race_id=race.id) }}" class="mt-2">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-      <button class="rounded bg-slate-900 px-3 py-1 text-sm text-white">Register me</button>
-    </form>
-  {% endif %}
-
-  {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
-    <h2 class="mt-6 font-semibold">Room code</h2>
-    {% if race.room_code %}
-      <p class="text-sm">
-        Current code: <code>{{ race.room_code }}</code>
-        {% if room_code_expired %}
-          <span class="text-red-700">(expired at {{ race.room_code_expires_at.isoformat() }})</span>
-        {% else %}
-          <span class="text-slate-600">(expires at {{ race.room_code_expires_at.isoformat() }})</span>
+    {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+      <div class="flex gap-2">
+        {% if race.status == 'draft' or race.status == 'registration_closed' %}
+          <form method="post" action="{{ url_for('official.open_registration', race_id=race.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn-primary">Open registration</button>
+          </form>
         {% endif %}
-      </p>
+        {% if race.status == 'registration_open' %}
+          <form method="post" action="{{ url_for('official.close_registration', race_id=race.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn-ghost">Close registration</button>
+          </form>
+        {% endif %}
+      </div>
     {% endif %}
-    <form method="post" action="{{ url_for('official.room_code', race_id=race.id) }}" class="mt-2 flex gap-2">
-      {{ room_code_form.hidden_tag() }}
-      {{ room_code_form.room_code(class="rounded border border-slate-300 px-2 py-1 text-sm") }}
-      <button class="rounded bg-slate-900 px-3 py-1 text-sm text-white">Set code</button>
-    </form>
+  </div>
 
-    <h2 class="mt-6 font-semibold">Submit results</h2>
-    <form method="post" action="{{ url_for('official.submit_results', race_id=race.id) }}">
-      {{ results_form.hidden_tag() }}
-      <table class="text-sm">
-        <thead><tr><th class="pr-3">Player</th><th class="pr-3">Placement</th><th>Uma</th></tr></thead>
-        <tbody>
+  <section class="mt-6 grid gap-4 lg:grid-cols-3">
+
+    {# Registrations #}
+    {% call card(class="p-5 lg:col-span-1") %}
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Registrations</h2>
+        <span class="text-xs text-slate-500">{{ registrations|length }}{% if race.max_players %} / {{ race.max_players }}{% endif %}</span>
+      </div>
+      {% if not registrations %}
+        <p class="mt-3 text-sm text-slate-500">No-one registered yet.</p>
+      {% else %}
+        <ul class="mt-3 space-y-1.5">
           {% for r in registrations %}
-            <tr>
-              <td class="pr-3 py-1">{{ r.user.username }}</td>
-              <td class="pr-3 py-1"><input type="number" min="1" name="placement_{{ r.id }}" class="w-20 rounded border border-slate-300 px-1" /></td>
-              <td class="pr-3 py-1"><input type="text" name="uma_name_{{ r.id }}" class="rounded border border-slate-300 px-1" /></td>
-            </tr>
+            <li class="flex items-center gap-2 text-sm">
+              <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <a class="text-slate-200 hover:text-cyan-300" href="{{ url_for('profiles.public', username=r.user.username) }}">{{ r.user.username }}</a>
+            </li>
           {% endfor %}
-        </tbody>
-      </table>
-      <button class="mt-2 rounded bg-slate-900 px-3 py-1 text-sm text-white">Submit results</button>
-    </form>
-  {% endif %}
+        </ul>
+      {% endif %}
+      {% if current_user.is_authenticated and race.status == 'registration_open' %}
+        <form method="post" action="{{ url_for('official.register', race_id=race.id) }}" class="mt-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button class="btn-primary w-full justify-center">Register me</button>
+        </form>
+      {% endif %}
+    {% endcall %}
+
+    {# Room code + results #}
+    {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+      {% call card(class="p-5 lg:col-span-2") %}
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Room code</h2>
+        {% if race.room_code %}
+          <p class="mt-3 text-sm">
+            <span class="text-mono-pill text-base">{{ race.room_code }}</span>
+            {% if room_code_expired %}
+              <span class="ml-2 text-xs text-rose-300">expired</span>
+            {% else %}
+              <span class="ml-2 text-xs text-slate-500">expires {{ race.room_code_expires_at.isoformat() }}</span>
+            {% endif %}
+          </p>
+        {% endif %}
+        <form method="post" action="{{ url_for('official.room_code', race_id=race.id) }}" class="mt-3 flex gap-2">
+          {{ room_code_form.hidden_tag() }}
+          {{ room_code_form.room_code(class="input-base", placeholder="paste code") }}
+          <button class="btn-primary">Set</button>
+        </form>
+
+        <h2 class="mt-6 text-sm font-semibold uppercase tracking-wider text-slate-300">Submit results</h2>
+        <form method="post" action="{{ url_for('official.submit_results', race_id=race.id) }}" class="mt-3">
+          {{ results_form.hidden_tag() }}
+          <table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wider text-slate-500">
+              <tr><th class="pr-3 py-1 text-left">Player</th><th class="pr-3 py-1 text-left">Place</th><th class="text-left">Uma</th></tr>
+            </thead>
+            <tbody>
+              {% for r in registrations %}
+                <tr class="border-t border-slate-800">
+                  <td class="pr-3 py-2 text-slate-200">{{ r.user.username }}</td>
+                  <td class="pr-3 py-2"><input type="number" min="1" name="placement_{{ r.id }}" class="input-base w-20" /></td>
+                  <td class="py-2"><input type="text" name="uma_name_{{ r.id }}" class="input-base" /></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <button class="btn-primary mt-4">Save results</button>
+        </form>
+      {% endcall %}
+    {% endif %}
+  </section>
+
 {% endblock %}

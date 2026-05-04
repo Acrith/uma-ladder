@@ -1,19 +1,23 @@
 {% extends "base.html" %}
 {% from "auth/_form.html" import render_field %}
+{% from "_components.html" import card %}
 {% block title %}Reset password · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">Reset password</h1>
-  {% with messages = get_flashed_messages() %}
-    {% for m in messages %}<p class="mb-3 text-sm text-slate-700">{{ m }}</p>{% endfor %}
-  {% endwith %}
-  <form method="post" class="max-w-sm">
-    {{ form.hidden_tag() }}
-    {{ render_field(form.username) }}
-    <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white">Request reset link</button>
-  </form>
-  {% if issued_token and config.DEBUG %}
-    <p class="mt-4 text-xs text-slate-600">
-      Dev-only link: <a class="underline" href="{{ url_for('auth.reset_password', token=issued_token) }}">{{ url_for('auth.reset_password', token=issued_token) }}</a>
-    </p>
-  {% endif %}
+  <div class="mx-auto max-w-sm">
+    {% call card(class="p-6") %}
+      <p class="label-eyebrow">Recovery</p>
+      <h1 class="mt-1 text-xl font-semibold text-slate-100">Reset password</h1>
+      <form method="post" class="mt-4">
+        {{ form.hidden_tag() }}
+        {{ render_field(form.username) }}
+        <button type="submit" class="btn-primary mt-2 w-full justify-center">Request reset link</button>
+      </form>
+      {% if issued_token and config.DEBUG %}
+        <p class="mt-4 text-xs text-slate-500">
+          Dev-only link:
+          <a class="text-cyan-300 hover:text-cyan-200 break-all" href="{{ url_for('auth.reset_password', token=issued_token) }}">{{ url_for('auth.reset_password', token=issued_token) }}</a>
+        </p>
+      {% endif %}
+    {% endcall %}
+  </div>
 {% endblock %}

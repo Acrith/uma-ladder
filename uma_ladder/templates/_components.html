@@ -1,0 +1,80 @@
+{# Reusable visual primitives. Keep these dumb — just markup. #}
+
+{% macro card(class="", hover=true) %}
+  <div class="surface-card {% if hover %}surface-card-hover{% endif %} {{ class }}">
+    {{ caller() }}
+  </div>
+{% endmacro %}
+
+{% macro chip(label, tone="slate") %}
+  {% set styles = {
+    "slate":   "bg-slate-800/70 text-slate-300 border-slate-700",
+    "cyan":    "bg-cyan-500/10 text-cyan-300 border-cyan-500/30",
+    "fuchsia": "bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/30",
+    "emerald": "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
+    "amber":   "bg-amber-500/10 text-amber-300 border-amber-500/30",
+    "rose":    "bg-rose-500/10 text-rose-300 border-rose-500/30",
+    "violet":  "bg-violet-500/10 text-violet-300 border-violet-500/30",
+  } %}
+  <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium {{ styles[tone] | default(styles['slate']) }}">
+    {{ label }}
+  </span>
+{% endmacro %}
+
+{% macro stat_tile(label, value, accent="cyan", small=None) %}
+  {% set ring = {"cyan": "ring-cyan-500/20", "fuchsia": "ring-fuchsia-500/20", "amber": "ring-amber-500/20", "emerald": "ring-emerald-500/20"}[accent] %}
+  {% set glow = {"cyan": "shadow-glow-cyan", "fuchsia": "shadow-glow-fuchsia", "amber": "shadow-glow-amber", "emerald": "shadow-glow-cyan"}[accent] %}
+  <div class="surface-card surface-card-hover ring-1 {{ ring }} px-4 py-3">
+    <p class="label-eyebrow">{{ label }}</p>
+    <p class="mt-1 text-2xl font-semibold text-slate-100">{{ value }}</p>
+    {% if small %}<p class="mt-0.5 text-xs text-slate-400">{{ small }}</p>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro live_dot(label="LIVE") %}
+  <span class="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-cyan-300">
+    <span class="h-2 w-2 rounded-full bg-cyan-400 animate-live-pulse"></span>{{ label }}
+  </span>
+{% endmacro %}
+
+{% macro podium_row(rank, body) %}
+  {% set bg = {1: "from-amber-500/15 to-fuchsia-500/5 border-amber-500/30", 2: "from-slate-300/10 to-slate-500/0 border-slate-400/20", 3: "from-orange-500/15 to-orange-700/5 border-orange-500/30"} %}
+  {% set tone = bg.get(rank, "from-slate-900/60 to-slate-900/20 border-slate-800") %}
+  <div class="rounded-lg border bg-gradient-to-r {{ tone }} px-3 py-2">
+    {{ body }}
+  </div>
+{% endmacro %}
+
+{# --- Status helpers --- #}
+
+{% macro draft_status_chip(status) %}
+  {% set tone = {
+    "waiting_for_opponent": "slate",
+    "ready_check": "cyan",
+    "track_ban_phase": "cyan",
+    "uma_ban_phase": "fuchsia",
+    "randomization_failed": "rose",
+    "room_code_pending": "amber",
+    "room_code_available": "emerald",
+    "room_code_expired": "rose",
+    "completed": "slate",
+    "cancelled": "rose",
+  }[status] | default("slate") %}
+  {{ chip(status.replace("_", " "), tone) }}
+{% endmacro %}
+
+{% macro official_status_chip(status) %}
+  {% set tone = {
+    "draft": "slate",
+    "registration_open": "cyan",
+    "registration_closed": "amber",
+    "room_code_pending": "amber",
+    "room_code_available": "emerald",
+    "room_code_expired": "rose",
+    "results_pending": "amber",
+    "results_submitted": "cyan",
+    "completed": "slate",
+    "cancelled": "rose",
+  }[status] | default("slate") %}
+  {{ chip(status.replace("_", " "), tone) }}
+{% endmacro %}

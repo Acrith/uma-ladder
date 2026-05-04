@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  :focus-visible {
+    outline: 2px solid theme("colors.cyan.400");
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3 py-1.5 text-sm font-medium text-ink-950 transition hover:bg-cyan-400 hover:shadow-glow-cyan focus-visible:shadow-glow-cyan-strong;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-1.5 text-sm text-slate-200 transition hover:border-cyan-500/50 hover:text-cyan-300;
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-2 rounded-lg bg-rose-500/90 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-rose-500;
+  }
+  .btn-warning {
+    @apply inline-flex items-center gap-2 rounded-lg bg-amber-500/90 px-3 py-1.5 text-sm font-medium text-ink-950 transition hover:bg-amber-400;
+  }
+  .input-base {
+    @apply w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 transition focus:border-cyan-400/70 focus:bg-slate-900 focus:outline-none;
+  }
+  .surface-card {
+    @apply rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-900/60 backdrop-blur;
+  }
+  .surface-card-hover {
+    @apply transition hover:border-cyan-500/40 hover:shadow-glow-cyan;
+  }
+  .label-eyebrow {
+    @apply text-xs font-medium uppercase tracking-[0.18em] text-slate-500;
+  }
+  .text-mono-pill {
+    @apply inline-flex items-center rounded-md border border-slate-700 bg-ink-900 px-2 py-0.5 font-mono text-xs text-cyan-300;
+  }
+}

@@ -1,31 +1,43 @@
 {% extends "base.html" %}
+{% from "_components.html" import card %}
 {% block title %}Season ladder · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">Season {{ season_id }} — official ladder</h1>
+  <p class="label-eyebrow">Official ladder</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Season {{ season_id }}</h1>
+
   {% if not rows %}
-    <p class="text-slate-600">No results yet for this season.</p>
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">
+      No results yet for this season.
+    </div>
   {% else %}
-    <table class="min-w-full text-sm">
-      <thead>
-        <tr class="text-left">
-          <th class="pr-4">#</th><th class="pr-4">Player</th>
-          <th class="pr-4">Points</th><th class="pr-4">Races</th>
-          <th class="pr-4">1st</th><th class="pr-4">2nd</th><th class="pr-4">3rd</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-          <tr class="border-t border-slate-200">
-            <td class="pr-4 py-1">{{ loop.index }}</td>
-            <td class="pr-4 py-1">{{ row.username }}</td>
-            <td class="pr-4 py-1">{{ row.total_points }}</td>
-            <td class="pr-4 py-1">{{ row.races_entered }}</td>
-            <td class="pr-4 py-1">{{ row.top1 }}</td>
-            <td class="pr-4 py-1">{{ row.top2 }}</td>
-            <td class="pr-4 py-1">{{ row.top3 }}</td>
+    {% call card(class="mt-6 overflow-hidden") %}
+      <table class="w-full text-sm">
+        <thead class="text-xs uppercase tracking-wider text-slate-500">
+          <tr class="text-left">
+            <th class="px-4 py-3">#</th>
+            <th class="px-4 py-3">Player</th>
+            <th class="px-4 py-3">Points</th>
+            <th class="px-4 py-3">Races</th>
+            <th class="px-4 py-3">🥇</th>
+            <th class="px-4 py-3">🥈</th>
+            <th class="px-4 py-3">🥉</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% set rank = loop.index %}
+            <tr class="border-t border-slate-800/70 {% if rank == 1 %}bg-amber-500/5{% elif rank == 2 %}bg-slate-300/5{% elif rank == 3 %}bg-orange-500/5{% endif %}">
+              <td class="px-4 py-2 font-mono {% if rank == 1 %}text-amber-300{% elif rank == 2 %}text-slate-200{% elif rank == 3 %}text-orange-300{% else %}text-slate-400{% endif %}">{{ rank }}</td>
+              <td class="px-4 py-2"><a href="{{ url_for('profiles.public', username=row.username) }}" class="text-slate-100 hover:text-cyan-300">{{ row.username }}</a></td>
+              <td class="px-4 py-2 font-semibold text-cyan-300">{{ row.total_points }}</td>
+              <td class="px-4 py-2 text-slate-400">{{ row.races_entered }}</td>
+              <td class="px-4 py-2 text-slate-400">{{ row.top1 }}</td>
+              <td class="px-4 py-2 text-slate-400">{{ row.top2 }}</td>
+              <td class="px-4 py-2 text-slate-400">{{ row.top3 }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endcall %}
   {% endif %}
 {% endblock %}

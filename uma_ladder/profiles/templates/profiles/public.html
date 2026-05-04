@@ -1,27 +1,42 @@
 {% extends "base.html" %}
+{% from "_components.html" import card %}
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
-  <article class="max-w-xl">
-    <header class="flex items-center gap-4">
-      {% if profile.avatar_url %}
-        <img src="{{ profile.avatar_url }}" alt="" class="h-16 w-16 rounded-full object-cover" />
-      {% endif %}
-      <div>
-        <h1 class="text-xl font-semibold">{{ profile.display_name or user.username }}</h1>
-        <p class="text-sm text-slate-600">@{{ user.username }}</p>
+
+  {% call card(class="p-6") %}
+    <div class="flex items-start gap-5">
+      <div class="relative">
+        {% if profile.avatar_url %}
+          <img src="{{ profile.avatar_url }}" alt="" class="h-20 w-20 rounded-2xl border-2 border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
+        {% else %}
+          <div class="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-slate-800 bg-slate-800 text-2xl font-semibold text-slate-300 {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
+            {{ user.username[:1] | upper }}
+          </div>
+        {% endif %}
       </div>
-    </header>
-    {% if profile.oshi %}
-      <p class="mt-3 text-sm">Oshi: <strong>{{ profile.oshi.name_en }}</strong></p>
-    {% endif %}
-    {% if profile.friend_code %}
-      <p class="mt-1 text-sm">Friend code: <code>{{ profile.friend_code }}</code></p>
-    {% endif %}
-    {% if profile.discord_handle %}
-      <p class="mt-1 text-sm">Discord: {{ profile.discord_handle }}</p>
-    {% endif %}
+      <div class="min-w-0 flex-1">
+        <p class="label-eyebrow">Trainer</p>
+        <h1 class="mt-1 truncate text-2xl font-semibold text-slate-100">{{ profile.display_name or user.username }}</h1>
+        <p class="mt-1 text-sm text-slate-400">@{{ user.username }}</p>
+        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          {% if profile.oshi %}
+            <span class="text-slate-400">Oshi:</span>
+            <span class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 text-xs font-medium text-fuchsia-200">{{ profile.oshi.name_en }}</span>
+          {% endif %}
+          {% if profile.friend_code %}
+            <span class="text-slate-400">Friend code:</span>
+            <span class="text-mono-pill">{{ profile.friend_code }}</span>
+          {% endif %}
+          {% if profile.discord_handle %}
+            <span class="text-slate-400">Discord:</span>
+            <span class="text-slate-200">{{ profile.discord_handle }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
     {% if profile.description %}
-      <p class="mt-4 whitespace-pre-line text-slate-800">{{ profile.description }}</p>
+      <p class="mt-5 whitespace-pre-line text-sm leading-relaxed text-slate-300">{{ profile.description }}</p>
     {% endif %}
-  </article>
+  {% endcall %}
+
 {% endblock %}

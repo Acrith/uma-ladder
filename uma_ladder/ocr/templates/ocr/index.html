@@ -1,18 +1,22 @@
 {% extends "base.html" %}
+{% from "_components.html" import card %}
 {% block title %}OCR · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">OCR result helper</h1>
-  <p class="text-sm text-slate-600">
-    Upload a race result screenshot. The configured OCR provider produces
-    a draft parse you can edit and confirm; the confirmed values are
-    metadata and do not write race results automatically. Type or copy the
-    confirmed placements into the appropriate official or draft result form.
+  <p class="label-eyebrow">OCR</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Result helper</h1>
+  <p class="mt-2 max-w-2xl text-sm text-slate-400">
+    Upload a race result screenshot. The configured OCR provider produces a draft parse you can edit and confirm;
+    the confirmed values are metadata and do not write race results automatically. Type or copy the confirmed
+    placements into the appropriate official or draft result form.
   </p>
+
   {% if current_user.is_authenticated %}
-    <p class="mt-4">
-      <a class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" href="{{ url_for('ocr.upload') }}">Upload screenshot</a>
-    </p>
+    <div class="mt-6">
+      <a href="{{ url_for('ocr.upload') }}" class="btn-primary">+ Upload screenshot</a>
+    </div>
   {% else %}
-    <p class="mt-4 text-sm">Log in to upload.</p>
+    <div class="mt-6">
+      <a href="{{ url_for('auth.login') }}" class="btn-ghost">Log in to upload</a>
+    </div>
   {% endif %}
 {% endblock %}

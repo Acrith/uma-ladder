@@ -1,15 +1,23 @@
 {% extends "base.html" %}
-{% from "auth/_form.html" import render_field %}
+{% from "_components.html" import card %}
 {% block title %}New draft match · Uma Ladder{% endblock %}
 {% block content %}
-  <h1 class="text-xl font-semibold mb-4">New draft match</h1>
-  <form method="post" class="max-w-sm">
-    {{ form.hidden_tag() }}
-    {{ render_field(form.umas_per_player) }}
-    <div class="mb-3">
-      <label class="block text-sm font-medium text-slate-700">Preset pool</label>
-      {{ form.preset_pool(class="mt-1 w-full rounded border border-slate-300 px-2 py-1") }}
-    </div>
-    <button class="rounded bg-slate-900 px-3 py-1.5 text-white">Create</button>
-  </form>
+  <p class="label-eyebrow">Draft PvP</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Create 1v1 match</h1>
+
+  {% call card(class="mt-6 p-6 max-w-md") %}
+    <form method="post" class="space-y-4">
+      {{ form.hidden_tag() }}
+      <div>
+        <label class="text-sm text-slate-300">Umas per player</label>
+        {{ form.umas_per_player(class="input-base mt-1") }}
+        <p class="mt-1 text-xs text-slate-500">2 or 3.</p>
+      </div>
+      <div>
+        <label class="text-sm text-slate-300">Preset pool</label>
+        {{ form.preset_pool(class="input-base mt-1") }}
+      </div>
+      <button class="btn-primary">Create match</button>
+    </form>
+  {% endcall %}
 {% endblock %}
