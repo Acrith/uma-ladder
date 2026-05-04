@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
@@ -247,6 +248,133 @@ def test_dashboard_shows_upcoming_official_races(
     assert "Tonight 8pm" in body
     # Registration count rendered "0 / 12".
     assert "/ 12" in body
+
+
+def test_organizer_can_cancel_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "Cancel me", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    resp = client.post(f"/official/{race_id}/cancel", follow_redirects=False)
+    assert resp.status_code == 302
+
+    from uma_ladder.models import OfficialRace
+    with app.app_context():
+        race = db.session.get(OfficialRace, race_id)
+        assert race.status == OfficialRaceStatus.CANCELLED
+        assert race.cancelled_at is not None
+        assert race.cancelled_by_user_id is not None
+
+    # Cancelled banner renders + cancel button is gone.
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Cancelled" in body
+    assert ">Cancel race<" not in body
+
+
+def test_non_organizer_cannot_cancel_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="alice", password="password123", role=Role.USER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    resp = client.post(f"/official/{race_id}/cancel", follow_redirects=False)
+    assert resp.status_code == 403
+
+
+def test_completed_race_cannot_be_cancelled(app: Flask, make_user) -> None:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+
+    from uma_ladder.models import OfficialRace
+    from uma_ladder.services import official as official_service
+
+    with app.app_context():
+        r = OfficialRace(
+            season_id=sid,
+            organizer_user_id=org["id"],
+            name="done",
+            preset_id=pid,
+            status=OfficialRaceStatus.COMPLETED,
+        )
+        db.session.add(r)
+        db.session.commit()
+        with pytest.raises(official_service.InvalidRaceStateError):
+            official_service.cancel_race(r.id, by_user_id=org["id"])
+
+
+def test_organizer_can_remove_registration(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="alice", password="password123", role=Role.USER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(f"/official/{race_id}/register")
+
+    # alice now appears in registrations list.
+    from uma_ladder.models import OfficialRaceRegistration, RegistrationStatus
+    with app.app_context():
+        reg = (
+            db.session.query(OfficialRaceRegistration)
+            .filter_by(official_race_id=race_id)
+            .first()
+        )
+        assert reg is not None
+        assert reg.status == RegistrationStatus.REGISTERED
+        reg_id = reg.id
+
+    # Organiser removes alice.
+    client.post("/auth/logout")
+    _login(client, "org", "password123")
+    resp = client.post(
+        f"/official/{race_id}/registrations/{reg_id}/remove",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        reg = db.session.get(OfficialRaceRegistration, reg_id)
+        assert reg.status == RegistrationStatus.CANCELLED
+
+    # Detail page no longer lists alice (list_registrations filters
+    # to REGISTERED only).
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # username shouldn't appear in the registrations table now.
+    # (Could appear in flash; check the count line specifically.)
+    assert ">0" in body or "0 /" in body  # zero registrations
 
 
 def test_list_upcoming_races_filters_correctly(app: Flask, make_user) -> None:

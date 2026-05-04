@@ -14,7 +14,7 @@
       </div>
     </div>
     {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         {% if race.status == 'draft' or race.status == 'registration_closed' %}
           <form method="post" action="{{ url_for('official.open_registration', race_id=race.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -27,9 +27,27 @@
             <button class="btn-ghost">Close registration</button>
           </form>
         {% endif %}
+        {# Cancel race — organiser+. Hidden once cancelled or completed. #}
+        {% if race.status not in ('cancelled', 'completed') %}
+          <form method="post"
+                action="{{ url_for('official.cancel', race_id=race.id) }}"
+                onsubmit="return confirm('Cancel race \'{{ race.name }}\'? This is irreversible.');">
+            {{ csrf_form.hidden_tag() }}
+            <button type="submit" class="text-xs text-rose-400 hover:text-rose-300">Cancel race</button>
+          </form>
+        {% endif %}
       </div>
     {% endif %}
   </div>
+
+  {% if race.status == 'cancelled' %}
+    {% call card(class="mt-4 p-5 border-rose-500/30") %}
+      <p class="label-eyebrow text-rose-300">Cancelled</p>
+      <p class="mt-2 text-sm text-slate-300">
+        This race was cancelled by an organiser{% if race.cancelled_at %} on {{ race.cancelled_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}. Registrations are frozen and no points were awarded.
+      </p>
+    {% endcall %}
+  {% endif %}
 
   <section class="mt-6 grid gap-4 lg:grid-cols-3">
 
@@ -46,7 +64,15 @@
           {% for r in registrations %}
             <li class="flex items-center gap-2 text-sm">
               <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
-              <a class="text-slate-200 hover:text-cyan-300" href="{{ url_for('profiles.public', username=r.user.username) }}">{{ r.user.username }}</a>
+              <a class="flex-1 text-slate-200 hover:text-cyan-300" href="{{ url_for('profiles.public', username=r.user.username) }}">{{ r.user.username }}</a>
+              {% if current_user.is_authenticated and current_user.has_at_least('organizer') and race.status not in ('cancelled', 'completed') %}
+                <form method="post"
+                      action="{{ url_for('official.remove_registration', race_id=race.id, registration_id=r.id) }}"
+                      onsubmit="return confirm('Remove @{{ r.user.username }} from this race?');">
+                  {{ csrf_form.hidden_tag() }}
+                  <button type="submit" class="text-xs text-rose-400 hover:text-rose-300" title="Remove registration">×</button>
+                </form>
+              {% endif %}
             </li>
           {% endfor %}
         </ul>

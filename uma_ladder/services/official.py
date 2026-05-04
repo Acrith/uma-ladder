@@ -364,6 +364,41 @@ def get_race(race_id: int) -> OfficialRace:
     return _get_race(race_id)
 
 
+def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
+    """Organiser-or-higher action — wipes a race short of completion.
+    Refuses to touch already-completed or already-cancelled races.
+    Caller is responsible for verifying the organiser role; this layer
+    only guards state."""
+    race = _get_race(race_id)
+    if race.status == OfficialRaceStatus.COMPLETED:
+        raise InvalidRaceStateError("cannot cancel a completed race")
+    if race.status == OfficialRaceStatus.CANCELLED:
+        raise InvalidRaceStateError("race is already cancelled")
+    race.status = OfficialRaceStatus.CANCELLED
+    race.cancelled_at = _utcnow()
+    race.cancelled_by_user_id = by_user_id
+    db.session.commit()
+    return race
+
+
+def remove_registration(
+    race_id: int, registration_id: int, *, by_user_id: int
+) -> OfficialRaceRegistration:
+    """Organiser action — soft-cancel a player's registration. Refuses
+    once the race is COMPLETED (results are locked in by then)."""
+    race = _get_race(race_id)
+    if race.status == OfficialRaceStatus.COMPLETED:
+        raise InvalidRaceStateError("cannot remove registration from a completed race")
+    reg = db.session.get(OfficialRaceRegistration, registration_id)
+    if reg is None or reg.official_race_id != race_id:
+        raise InvalidRaceStateError("registration not found on this race")
+    if reg.status == RegistrationStatus.CANCELLED:
+        return reg  # already removed; idempotent
+    reg.status = RegistrationStatus.CANCELLED
+    db.session.commit()
+    return reg
+
+
 def _get_race(race_id: int) -> OfficialRace:
     race = db.session.get(OfficialRace, race_id)
     if race is None:

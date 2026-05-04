@@ -16,7 +16,10 @@
       "Bash(FLASK_APP=uma_ladder FLASK_CONFIG=development .venv/bin/flask uma seed-characters)",
       "Bash(FLASK_APP=uma_ladder FLASK_CONFIG=development .venv/bin/flask uma fetch-gametora-outfits)",
       "Bash(FLASK_APP=uma_ladder FLASK_CONFIG=development .venv/bin/flask uma seed-outfits)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(FLASK_APP=uma_ladder FLASK_CONFIG=development uv run flask db current)",
+      "Bash(python3 -c \"import secrets; print\\(secrets.token_hex\\(6\\)\\)\")",
+      "Bash(FLASK_APP=uma_ladder FLASK_CONFIG=development uv run flask db upgrade)"
     ]
   }
 }

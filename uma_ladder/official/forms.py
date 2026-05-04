@@ -26,3 +26,7 @@ class RoomCodeForm(FlaskForm):
 
 class ResultsForm(FlaskForm):
     """Bare form just for CSRF; result rows are read directly from request.form."""
+
+
+class CsrfOnlyForm(FlaskForm):
+    """Empty form used to gate state-changing POSTs (cancel, remove)."""

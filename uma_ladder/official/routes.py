@@ -16,7 +16,7 @@ from ..services import official as official_service
 from ..services import presets as presets_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
-from .forms import CreateOfficialRaceForm, ResultsForm, RoomCodeForm
+from .forms import CreateOfficialRaceForm, CsrfOnlyForm, ResultsForm, RoomCodeForm
 
 bp = Blueprint("official", __name__, template_folder="templates")
 
@@ -63,6 +63,7 @@ def detail(race_id: int) -> object:
     registrations = official_service.list_registrations(race_id)
     room_code_form = RoomCodeForm()
     results_form = ResultsForm()
+    csrf_form = CsrfOnlyForm()
     expired = official_service.is_room_code_expired(race)
     return render_template(
         "official/detail.html",
@@ -70,6 +71,7 @@ def detail(race_id: int) -> object:
         registrations=registrations,
         room_code_form=room_code_form,
         results_form=results_form,
+        csrf_form=csrf_form,
         room_code_expired=expired,
     )
 
@@ -170,6 +172,40 @@ def submit_results(race_id: int) -> object:
     except official_service.DuplicatePlacementError:
         flash("Two players cannot share the same placement.")
     return redirect(url_for("official.detail", race_id=race.id))
+
+
+@bp.post("/<int:race_id>/cancel")
+@min_role_required(Role.ORGANIZER)
+def cancel(race_id: int) -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        official_service.cancel_race(race_id, by_user_id=current_user.id)
+        flash(f"Race #{race_id} cancelled.")
+    except official_service.RaceNotFoundError:
+        abort(404)
+    except official_service.OfficialError as exc:
+        flash(str(exc))
+    return redirect(url_for("official.detail", race_id=race_id))
+
+
+@bp.post("/<int:race_id>/registrations/<int:registration_id>/remove")
+@min_role_required(Role.ORGANIZER)
+def remove_registration(race_id: int, registration_id: int) -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        official_service.remove_registration(
+            race_id, registration_id, by_user_id=current_user.id
+        )
+        flash("Registration removed.")
+    except official_service.RaceNotFoundError:
+        abort(404)
+    except official_service.OfficialError as exc:
+        flash(str(exc))
+    return redirect(url_for("official.detail", race_id=race_id))
 
 
 @bp.get("/ladder/<int:season_id>")
