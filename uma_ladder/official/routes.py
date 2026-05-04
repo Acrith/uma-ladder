@@ -12,7 +12,7 @@ from flask import (
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from ..models import OcrParseAttempt, Role
+from ..models import OcrParseAttempt, OfficialRaceResult, Role
 from ..services import ocr as ocr_service
 from ..services import official as official_service
 from ..services import presets as presets_service
@@ -69,6 +69,17 @@ def detail(race_id: int) -> object:
     except official_service.RaceNotFoundError:
         abort(404)
     registrations = official_service.list_registrations(race_id)
+    # Pull existing race results so the page can render a per-result
+    # "Add details" upload form (PR19b OCR enrichment).
+    from sqlalchemy import select as _select  # local import to keep top tidy
+
+    results = list(
+        db.session.scalars(
+            _select(OfficialRaceResult)
+            .where(OfficialRaceResult.official_race_id == race_id)
+            .order_by(OfficialRaceResult.placement)
+        )
+    )
     room_code_form = RoomCodeForm()
     results_form = ResultsForm()
     csrf_form = CsrfOnlyForm()
@@ -77,6 +88,7 @@ def detail(race_id: int) -> object:
         "official/detail.html",
         race=race,
         registrations=registrations,
+        results=results,
         room_code_form=room_code_form,
         results_form=results_form,
         csrf_form=csrf_form,
@@ -273,6 +285,133 @@ def _match_ocr_to_registrations(
                 used.add(rid)
                 break
     return suggestions
+
+
+@bp.post("/<int:race_id>/results/<int:result_id>/details-screenshot")
+@min_role_required(Role.ORGANIZER)
+def upload_result_details_screenshot(race_id: int, result_id: int) -> object:
+    """Step 1 of the per-result OCR enrichment flow: upload a stat-screen
+    screenshot for one specific completed result. Saves + parses, then
+    redirects to the confirmation step."""
+    try:
+        official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    result = db.session.get(OfficialRaceResult, result_id)
+    if result is None or result.official_race_id != race_id:
+        abort(404)
+    form = ResultsScreenshotForm()
+    if not form.validate_on_submit():
+        for errs in form.errors.values():
+            for err in errs:
+                flash(err)
+        return redirect(url_for("official.detail", race_id=race_id))
+    try:
+        image = ocr_service.save_uploaded_image(
+            form.image.data, uploader_user_id=current_user.id
+        )
+    except ocr_service.OcrError as exc:
+        flash(str(exc))
+        return redirect(url_for("official.detail", race_id=race_id))
+    attempt = ocr_service.run_parse(image)
+    return redirect(
+        url_for(
+            "official.result_details_from_ocr",
+            race_id=race_id,
+            result_id=result_id,
+            attempt_id=attempt.id,
+        )
+    )
+
+
+@bp.get(
+    "/<int:race_id>/results/<int:result_id>/details-from-ocr/<int:attempt_id>"
+)
+@min_role_required(Role.ORGANIZER)
+def result_details_from_ocr(
+    race_id: int, result_id: int, attempt_id: int
+) -> object:
+    """Step 2: confirmation page showing the screenshot + parsed stats +
+    skill list. Organiser edits whatever's wrong, then submits to
+    /details where the matching against UmaSkill happens."""
+    try:
+        race = official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    result = db.session.get(OfficialRaceResult, result_id)
+    if result is None or result.official_race_id != race_id:
+        abort(404)
+    attempt = db.session.get(OcrParseAttempt, attempt_id)
+    if attempt is None:
+        abort(404)
+
+    parsed = attempt.parsed_json or {}
+    return render_template(
+        "official/result_details_from_ocr.html",
+        race=race,
+        result=result,
+        attempt=attempt,
+        parsed_stats=parsed.get("stats") or {},
+        parsed_skills=parsed.get("skills") or [],
+        csrf_form=CsrfOnlyForm(),
+    )
+
+
+@bp.post("/<int:race_id>/results/<int:result_id>/details")
+@min_role_required(Role.ORGANIZER)
+def submit_result_details(race_id: int, result_id: int) -> object:
+    """Step 3: persist the confirmed stats + skills onto the result row.
+    Skills are passed as one name per ``skill_name_<i>`` field; service
+    matches them against UmaSkill.name_en case-insensitively and
+    preserves raw text when no match is found."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    result = db.session.get(OfficialRaceResult, result_id)
+    if result is None or result.official_race_id != race_id:
+        abort(404)
+
+    def _opt_int(name: str) -> int | None:
+        v = (request.form.get(name) or "").strip()
+        if not v:
+            return None
+        try:
+            return int(v)
+        except ValueError:
+            return None
+
+    skill_names: list[str] = []
+    i = 0
+    while True:
+        key = f"skill_name_{i}"
+        if key not in request.form:
+            break
+        v = request.form.get(key, "").strip()
+        if v:
+            skill_names.append(v)
+        i += 1
+
+    update = official_service.ResultDetailsUpdate(
+        speed=_opt_int("speed"),
+        stamina=_opt_int("stamina"),
+        power=_opt_int("power"),
+        guts=_opt_int("guts"),
+        wisdom=_opt_int("wisdom"),
+        strategy=(request.form.get("strategy") or "").strip() or None,
+        skill_names=tuple(skill_names),
+    )
+    try:
+        official_service.submit_result_details(
+            result_id, update, by_user_id=current_user.id
+        )
+        flash("Result details saved.")
+    except official_service.OfficialError as exc:
+        flash(str(exc))
+    return redirect(url_for("official.detail", race_id=race_id))
 
 
 @bp.post("/<int:race_id>/cancel")

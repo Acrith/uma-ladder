@@ -143,3 +143,35 @@ class OfficialRaceResult(db.Model):
 
     user = relationship("User", lazy="joined", foreign_keys=[user_id])
     uma_character = relationship("UmaCharacter", lazy="joined")
+    skills = relationship(
+        "OfficialRaceResultSkill",
+        cascade="all, delete-orphan",
+        order_by="OfficialRaceResultSkill.position",
+        lazy="joined",
+    )
+
+
+class OfficialRaceResultSkill(db.Model):
+    """Skills observed on a player's Uma in a specific official race
+    result. ``skill_id`` is null when OCR returned a name we couldn't
+    match against the UmaSkill catalogue — ``raw_ocr_text`` is preserved
+    so an organiser can fix the catalogue or correct the spelling later."""
+
+    __tablename__ = "official_race_result_skills"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    official_race_result_id: Mapped[int] = mapped_column(
+        ForeignKey("official_race_results.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    skill_id: Mapped[int | None] = mapped_column(
+        ForeignKey("uma_skills.id", ondelete="SET NULL"), nullable=True
+    )
+    raw_ocr_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    skill = relationship("UmaSkill", lazy="joined")

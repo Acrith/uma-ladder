@@ -26,6 +26,7 @@ from .official_races import (
     OfficialRace,
     OfficialRaceRegistration,
     OfficialRaceResult,
+    OfficialRaceResultSkill,
 )
 from .presets import RacePreset
 from .profiles import UserProfile
@@ -55,6 +56,7 @@ __all__ = [
     "OfficialRace",
     "OfficialRaceRegistration",
     "OfficialRaceResult",
+    "OfficialRaceResultSkill",
     "OfficialRaceStatus",
     "PresetSource",
     "RacePreset",

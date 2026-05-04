@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Result details · #{{ result.placement }} · {{ race.name }}{% endblock %}
+{% block content %}
+  <p class="label-eyebrow">
+    <a class="hover:text-cyan-300" href="{{ url_for('official.detail', race_id=race.id) }}">{{ race.name }}</a>
+    · #{{ result.placement }} {% if result.user %}@{{ result.user.username }}{% endif %}
+  </p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Confirm parsed details</h1>
+  <p class="mt-1 text-sm text-slate-400">
+    Edit anything OCR got wrong, then save. Skill names are matched against the catalogue case-insensitively — anything that doesn't match is still kept as raw text so you can correct the spelling.
+  </p>
+
+  <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
+    {% call card(class="p-3") %}
+      <p class="label-eyebrow">Source screenshot</p>
+      <img src="{{ url_for('ocr.serve_image', image_id=attempt.image.id) }}"
+           alt="stat screenshot"
+           class="mt-2 w-full rounded border border-slate-800" />
+      <p class="mt-2 text-xs text-slate-500">
+        Provider: <span class="text-slate-300">{{ attempt.provider }}</span>
+        {% if attempt.confidence_json and attempt.confidence_json.get('overall') is not none %}
+          · confidence
+          <span class="text-slate-300">{{ '%.0f' % (attempt.confidence_json['overall'] * 100) }}%</span>
+        {% endif %}
+      </p>
+    {% endcall %}
+
+    {% call card(class="p-5") %}
+      <form method="post"
+            action="{{ url_for('official.submit_result_details', race_id=race.id, result_id=result.id) }}"
+            class="space-y-5">
+        {{ csrf_form.hidden_tag() }}
+
+        <div>
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Stats</h2>
+          <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {% for stat in ['speed', 'stamina', 'power', 'guts', 'wisdom'] %}
+              <div>
+                <label class="text-xs uppercase tracking-wider text-slate-400">{{ stat }}</label>
+                <input type="number" min="0" max="9999"
+                       name="{{ stat }}"
+                       value="{{ parsed_stats.get(stat) if parsed_stats.get(stat) is not none else (result|attr(stat) or '') }}"
+                       class="input-base mt-1 w-full" />
+              </div>
+            {% endfor %}
+          </div>
+          <div class="mt-3">
+            <label class="text-xs uppercase tracking-wider text-slate-400">Strategy</label>
+            <input type="text" name="strategy"
+                   value="{{ result.strategy or '' }}"
+                   placeholder="Front / Pace / Late / End"
+                   class="input-base mt-1" />
+          </div>
+        </div>
+
+        <div>
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Skills</h2>
+          <p class="mt-1 text-xs text-slate-500">One per line. Matched against the catalogue on save — unmatched names get stored as raw text.</p>
+          {# Pre-fill from the OCR-detected list, falling back to the
+             skills already on file. Hidden numbered fields make
+             reading on the server a simple while-loop without JSON. #}
+          {% set existing_skill_names = parsed_skills if parsed_skills else (result.skills | map(attribute='skill') | select | map(attribute='name_en') | list) %}
+          <div id="skill-rows" class="mt-2 space-y-2">
+            {% for name in existing_skill_names %}
+              <div class="flex items-center gap-2">
+                <input type="text"
+                       name="skill_name_{{ loop.index0 }}"
+                       value="{{ name }}"
+                       class="input-base w-full" />
+                <button type="button"
+                        class="text-xs text-rose-400 hover:text-rose-300"
+                        onclick="this.parentElement.remove()">×</button>
+              </div>
+            {% endfor %}
+          </div>
+          <button type="button"
+                  class="btn-ghost mt-2 text-xs"
+                  onclick="addSkillRow()">+ Add skill</button>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <a href="{{ url_for('official.detail', race_id=race.id) }}"
+             class="text-xs text-slate-400 hover:text-slate-200">← back to race</a>
+          <button class="btn-primary">Save details</button>
+        </div>
+      </form>
+    {% endcall %}
+  </section>
+
+  <script>
+    (function() {
+      const container = document.getElementById('skill-rows');
+      let nextIdx = container.querySelectorAll('input[name^="skill_name_"]').length;
+      window.addSkillRow = function() {
+        const wrap = document.createElement('div');
+        wrap.className = 'flex items-center gap-2';
+        wrap.innerHTML =
+          '<input type="text" name="skill_name_' + nextIdx + '" class="input-base w-full" autofocus />' +
+          '<button type="button" class="text-xs text-rose-400 hover:text-rose-300" onclick="this.parentElement.remove()">×</button>';
+        container.appendChild(wrap);
+        nextIdx++;
+      };
+    })();
+  </script>
+{% endblock %}

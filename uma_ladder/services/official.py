@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -11,9 +11,11 @@ from ..models import (
     OfficialRace,
     OfficialRaceRegistration,
     OfficialRaceResult,
+    OfficialRaceResultSkill,
     OfficialRaceStatus,
     RegistrationStatus,
     Season,
+    UmaSkill,
     User,
 )
 from .scoring import points_for_placement
@@ -362,6 +364,96 @@ def list_upcoming_races(
 
 def get_race(race_id: int) -> OfficialRace:
     return _get_race(race_id)
+
+
+@dataclass(frozen=True)
+class ResultDetailsUpdate:
+    """Per-result detail enrichment from a stat-screen OCR pass."""
+
+    speed: int | None = None
+    stamina: int | None = None
+    power: int | None = None
+    guts: int | None = None
+    wisdom: int | None = None
+    strategy: str | None = None
+    skill_names: tuple[str, ...] = ()
+
+
+class ResultNotFoundError(OfficialError):
+    pass
+
+
+def submit_result_details(
+    result_id: int, update: ResultDetailsUpdate, *, by_user_id: int
+) -> OfficialRaceResult:
+    """Apply stat + skill enrichment to a single race result.
+
+    Skill names are matched case-insensitively against UmaSkill.name_en.
+    Names that don't match anything in the catalogue are still recorded —
+    raw_ocr_text is preserved with skill_id=NULL so an organiser can
+    correct the spelling or add the skill later. Existing skill rows on
+    the result are replaced atomically (delete-then-insert) so re-running
+    the OCR pass produces the same result regardless of the previous
+    state.
+
+    `by_user_id` is currently used only for audit context; permissions
+    are enforced at the route layer."""
+    del by_user_id  # accepted for symmetry with cancel_race / etc.
+    result = db.session.get(OfficialRaceResult, result_id)
+    if result is None:
+        raise ResultNotFoundError(str(result_id))
+
+    if update.speed is not None:
+        result.speed = update.speed
+    if update.stamina is not None:
+        result.stamina = update.stamina
+    if update.power is not None:
+        result.power = update.power
+    if update.guts is not None:
+        result.guts = update.guts
+    if update.wisdom is not None:
+        result.wisdom = update.wisdom
+    if update.strategy is not None:
+        result.strategy = update.strategy
+
+    # Replace skill associations atomically. ORM-cascade delete via the
+    # `skills` relationship handles the existing rows; we just clear and
+    # rebuild.
+    for existing in list(result.skills):
+        db.session.delete(existing)
+
+    matches = _match_skill_names(update.skill_names)
+    for i, (name, skill_id) in enumerate(matches):
+        db.session.add(
+            OfficialRaceResultSkill(
+                official_race_result_id=result.id,
+                skill_id=skill_id,
+                raw_ocr_text=name,
+                position=i,
+            )
+        )
+
+    db.session.commit()
+    return result
+
+
+def _match_skill_names(
+    names: Iterable[str],
+) -> list[tuple[str, int | None]]:
+    """Map raw skill name strings to UmaSkill.id via case-insensitive
+    exact match on name_en. Returns (raw_name, skill_id_or_None) in the
+    input order. Empty / whitespace-only names are dropped."""
+    cleaned = [n.strip() for n in names if n and n.strip()]
+    if not cleaned:
+        return []
+    lower_lookup = {n.lower() for n in cleaned}
+    rows = db.session.scalars(
+        select(UmaSkill)
+        .where(UmaSkill.enabled.is_(True))
+        .where(func.lower(UmaSkill.name_en).in_(lower_lookup))
+    ).all()
+    by_lower = {s.name_en.lower(): s.id for s in rows}
+    return [(n, by_lower.get(n.lower())) for n in cleaned]
 
 
 def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:

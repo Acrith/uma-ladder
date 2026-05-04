@@ -47,10 +47,19 @@ from ..models.enums import UploadPurpose
 
 @dataclass(frozen=True)
 class OcrParse:
-    """Structured OCR output. All fields optional; routes render what's there."""
+    """Structured OCR output. All fields optional; routes render what's there.
+
+    The provider is screen-agnostic: it returns whatever it can extract.
+    Result-summary screenshots populate ``rows`` (placement + uma_name).
+    Stat-screen screenshots populate ``stats`` (speed/stamina/power/guts/
+    wisdom) and ``skills`` (a flat list of skill names). The same provider
+    can populate both if the input image has both visible.
+    """
 
     raw_text: str | None = None
     rows: list[dict[str, Any]] = field(default_factory=list)
+    stats: dict[str, int] = field(default_factory=dict)
+    skills: list[str] = field(default_factory=list)
     confidence: dict[str, Any] = field(default_factory=dict)
 
 
@@ -92,6 +101,14 @@ class MockOcrProvider(OcrProvider):
                 {"placement": 2, "uma_name": "MockUma B", "strategy": "Pace"},
                 {"placement": 3, "uma_name": "MockUma C", "strategy": "End"},
             ],
+            stats={
+                "speed": 1100,
+                "stamina": 900,
+                "power": 1000,
+                "guts": 600,
+                "wisdom": 800,
+            },
+            skills=["Warning Shot!", "Accelerator X", "Made-up Skill"],
             confidence={"overall": 0.85},
         )
 
@@ -204,7 +221,11 @@ def run_parse(image: UploadedImage, *, provider: OcrProvider | None = None) -> O
         return attempt
 
     attempt.raw_text = parse.raw_text
-    attempt.parsed_json = {"rows": parse.rows}
+    attempt.parsed_json = {
+        "rows": parse.rows,
+        "stats": parse.stats,
+        "skills": parse.skills,
+    }
     attempt.confidence_json = parse.confidence
     attempt.status = OcrParseStatus.PARSED
     db.session.commit()
