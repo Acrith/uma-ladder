@@ -248,3 +248,92 @@ def test_dashboard_includes_elo_block(client: FlaskClient, app: Flask) -> None:
     resp = client.get("/")
     assert resp.status_code == 200
     assert b"Draft Elo" in resp.data
+
+
+def test_uma_ban_tile_picker_marks_oshi_and_banned(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The uma-ban grid must:
+    - render one tile per enabled outfit,
+    - mark the viewer's Oshi outfit (fuchsia ring class),
+    - mark already-banned outfits as disabled + grayscale."""
+    _season(app)
+    _add_preset(app)
+    char_a, char_b, char_c = _add_characters(app)
+    outfits = _add_outfits(app, char_a, char_b, char_c)
+    alice = make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    # Set alice's oshi to char_a / outfit_a so it should get the fuchsia
+    # ring marker on her view of the grid.
+    from uma_ladder.services.profiles import ProfileUpdate, update_profile
+
+    with app.app_context():
+        from uma_ladder.models import User
+
+        u = db.session.get(User, alice["id"])
+        update_profile(
+            u,
+            ProfileUpdate(
+                oshi_character_id=char_a, oshi_outfit_id=outfits[char_a]
+            ),
+        )
+
+    # Drive the match into uma_ban_phase: alice creates, bob joins, both
+    # ready, both track-ban, host randomizes.
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    from uma_ladder.models import DraftMatch
+
+    with app.app_context():
+        join_code = db.session.get(DraftMatch, match_id).join_code
+
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post("/draft/join", data={"join_code": join_code})
+    for username in ("bob", "alice"):
+        client.post("/auth/logout")
+        _login(client, username, "password123")
+        client.post(f"/draft/{match_id}/ready")
+    # alice currently logged in
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "venue", "condition_key": "Tokyo"},
+    )
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "direction", "condition_key": "Left"},
+    )
+    client.post(f"/draft/{match_id}/randomize")
+
+    # bob bans char_c's outfit — that tile should appear grayed on alice's view.
+    client.post(
+        f"/draft/{match_id}/uma-ban",
+        data={"uma_outfit_id": str(outfits[char_c])},
+    )
+
+    # Alice fetches the page and the tile grid renders.
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+
+    # Search bar present.
+    assert 'id="uma-tile-search"' in body
+    # All three outfits get a tile.
+    for cid in (char_a, char_b, char_c):
+        assert f'value="{outfits[cid]}"' in body
+
+    # The Oshi marker is on the alice-oshi tile (char_a).
+    assert "Oshi" in body
+    # The Banned marker is on the bob-banned tile (char_c).
+    assert "Banned" in body

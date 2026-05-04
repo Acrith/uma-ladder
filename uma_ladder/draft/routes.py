@@ -11,7 +11,8 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from ..models import DraftBanType, DraftMatchStatus
+from ..extensions import db
+from ..models import DraftBanType, DraftMatchStatus, UmaOutfit
 from ..models.enums import VENUES, Direction, DistanceCategory, Surface
 from ..services import draft as draft_service
 from ..services import profiles as profiles_service
@@ -150,6 +151,21 @@ def detail(match_id: int) -> object:
             }
         )
 
+    # Tile picker context for the uma-ban phase: every enabled outfit, plus
+    # which ones are someone's Oshi (highlighted) and which are already
+    # banned (grayed out / unselectable).
+    all_outfits = profiles_service.list_all_outfits()
+    oshi_outfit_ids = {
+        s["profile"].oshi_outfit_id
+        for s in sides
+        if s["profile"] and s["profile"].oshi_outfit_id
+    }
+    banned_outfit_ids = {
+        b.uma_outfit_id
+        for b in bans
+        if b.ban_type == DraftBanType.UMA and b.uma_outfit_id is not None
+    }
+
     return render_template(
         "draft/detail.html",
         match=match,
@@ -161,6 +177,9 @@ def detail(match_id: int) -> object:
         characters=list_enabled_characters(),
         track_ban_options=track_ban_options,
         should_poll=should_poll,
+        all_outfits=all_outfits,
+        oshi_outfit_ids=oshi_outfit_ids,
+        banned_outfit_ids=banned_outfit_ids,
     )
 
 
@@ -196,22 +215,6 @@ def _should_poll(match, bans) -> bool:
 
 
 # ---------- HTMX partials ----------
-
-
-@bp.get("/<int:match_id>/_partials/uma-ban-outfits")
-@login_required
-def partial_uma_ban_outfits(match_id: int) -> object:
-    """Outfit dropdown for a chosen character on the uma-ban form.
-
-    Includes an "(any outfit)" option that records uma_outfit_id=null on
-    the ban — the result-validation treats that as a whole-character ban.
-    """
-    raw = (request.args.get("uma_character_id") or "").strip()
-    char_id = int(raw) if raw.isdigit() else None
-    outfits = list_outfits_for_character(char_id) if char_id else []
-    return render_template(
-        "draft/_partial_uma_ban_outfits.html", outfits=outfits
-    )
 
 
 @bp.get("/<int:match_id>/_partials/result-outfits")
@@ -314,17 +317,23 @@ def uma_ban(match_id: int) -> object:
     form = CsrfOnlyForm()
     if not form.validate_on_submit():
         abort(400)
-    char_raw = request.form.get("uma_character_id", "").strip()
+    # Tile picker submits a single uma_outfit_id; derive char_id from the
+    # outfit row so the service layer can keep its outfit-belongs-to-char
+    # validation.
     outfit_raw = request.form.get("uma_outfit_id", "").strip()
-    if not char_raw.isdigit():
-        flash("Pick a character.")
+    if not outfit_raw.isdigit():
+        flash("Pick a costume tile.")
         return redirect(url_for("draft.detail", match_id=match_id))
-    outfit_id = int(outfit_raw) if outfit_raw.isdigit() else None
+    outfit_id = int(outfit_raw)
+    outfit = db.session.get(UmaOutfit, outfit_id)
+    if outfit is None:
+        flash("Unknown costume.")
+        return redirect(url_for("draft.detail", match_id=match_id))
     try:
         draft_service.submit_uma_ban(
             match_id,
             current_user.id,
-            int(char_raw),
+            outfit.uma_character_id,
             uma_outfit_id=outfit_id,
         )
     except draft_service.DraftNotFoundError:

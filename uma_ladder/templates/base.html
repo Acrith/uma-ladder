@@ -93,7 +93,7 @@
 
     {# main_max_width is overridable per page (e.g. draft detail goes wider).
        The header above keeps its own max-w-6xl so the nav is unaffected. #}
-    <main class="mx-auto {% block main_max_width %}max-w-6xl{% endblock %} px-4 py-8">
+    <main class="mx-auto {% block main_max_width %}max-w-6xl{% endblock %} px-4 {% block main_padding_y %}py-8{% endblock %}">
       {% with messages = get_flashed_messages() %}
         {% if messages %}
           <div class="mb-6 space-y-2">
@@ -106,10 +106,12 @@
       {% block content %}{% endblock %}
     </main>
 
+    {% block footer %}
     <footer class="mx-auto mt-12 max-w-6xl px-4 pb-8 text-xs text-slate-500">
       Uma Ladder · race data attribution:
       <a href="https://gametora.com/umamusume/races" class="text-slate-400 hover:text-cyan-300">GameTora</a>;
       not affiliated with Cygames.
     </footer>
+    {% endblock %}
   </body>
 </html>

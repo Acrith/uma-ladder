@@ -5,6 +5,10 @@
    Uma-tile picker and prevents Oshi-pill text from wrapping in the
    side panels. Nav bar stays at max-w-6xl. #}
 {% block main_max_width %}max-w-[84rem]{% endblock %}
+{# Draft is a tight one-screen layout — kill the global footer so the
+   page fits without scrolling. #}
+{% block footer %}{% endblock %}
+{% block main_padding_y %}py-4{% endblock %}
 {% block content %}
 
   <div
@@ -16,7 +20,7 @@
       hx-swap="outerHTML"
     {% endif %}
   >
-  <div id="draft-detail-body" class="space-y-6">
+  <div id="draft-detail-body" class="space-y-4">
 
     {# ─── TOP INFORMATION LAYER ────────────────────────────────────── #}
     <header class="flex flex-wrap items-start justify-between gap-3">
@@ -65,7 +69,7 @@
         {% set row_dir = "flex-row-reverse" if mirrored else "" %}
         {% set grad_dir = "bg-gradient-to-l" if mirrored else "bg-gradient-to-r" %}
 
-        <article class="surface-card relative overflow-hidden min-h-[26rem]">
+        <article class="surface-card relative overflow-hidden h-[16rem] self-start">
           {% if side.oshi_image %}
             <img src="{{ side.oshi_image }}"
                  alt=""
@@ -73,7 +77,7 @@
                  referrerpolicy="no-referrer"
                  width="512"
                  height="512"
-                 class="pointer-events-none absolute bottom-0 {{ img_pos }} h-auto max-h-[20rem] w-auto max-w-[20rem] object-contain opacity-40"
+                 class="pointer-events-none absolute bottom-0 {{ img_pos }} h-auto max-h-[12rem] w-auto max-w-[12rem] object-contain opacity-40"
                  style="object-position: {{ obj_pos }}; mask-image: linear-gradient(to top, rgba(0,0,0,1) 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0) 100%); -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,1) 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0) 100%);" />
             {# Dark sweep behind the text side keeps copy readable on top of the Oshi image. #}
             <div class="pointer-events-none absolute inset-0 {{ grad_dir }} from-slate-950/75 via-slate-950/40 to-transparent"></div>
@@ -133,26 +137,46 @@
 
               {% if track_ban %}
                 {% if track_ban.condition_key == "__skip__" %}
-                  <p class="flex items-center gap-2 {{ row_dir }}"><span class="h-1.5 w-1.5 rounded-full bg-slate-500"></span><span class="text-slate-500">skipped track ban</span></p>
+                  <div class="flex items-center gap-2.5 {{ row_dir }} rounded-full border border-slate-700 bg-slate-800/40 px-2 py-1">
+                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-slate-500 ring-1 ring-slate-700">—</div>
+                    <div class="min-w-0 flex-1 {{ text_align }}">
+                      <p class="label-eyebrow text-slate-500">Track ban</p>
+                      <p class="truncate text-[11px] font-semibold leading-tight text-slate-400">skipped</p>
+                    </div>
+                  </div>
                 {% else %}
-                  <p class="flex items-center gap-2 {{ row_dir }}">
-                    <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
-                    <span class="text-slate-400">Banned</span>
-                    <span class="font-medium text-cyan-200">{{ track_ban.ban_type }} · {{ track_ban.condition_key }}</span>
-                  </p>
+                  {% set type_glyph = {'venue': 'V', 'direction': 'D', 'distance_category': 'DC', 'surface': 'S'}.get(track_ban.ban_type, '?') %}
+                  <div class="flex items-center gap-2.5 {{ row_dir }} rounded-full border border-cyan-500/40 bg-cyan-500/5 px-2 py-1 shadow-glow-cyan">
+                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950/60 text-[11px] font-bold uppercase text-cyan-200 ring-1 ring-cyan-400/40">{{ type_glyph }}</div>
+                    <div class="min-w-0 flex-1 {{ text_align }}">
+                      <p class="label-eyebrow text-cyan-300/80">Banned · {{ track_ban.ban_type.replace('_', ' ') }}</p>
+                      <p class="truncate text-[11px] font-semibold leading-tight text-cyan-100">{{ track_ban.condition_key }}</p>
+                    </div>
+                  </div>
                 {% endif %}
               {% elif match.status == 'track_ban_phase' and side.user %}
                 <p class="text-slate-500 italic">picking track ban…</p>
               {% endif %}
 
               {% if uma_ban %}
-                <p class="flex items-center gap-2 {{ row_dir }}">
-                  <span class="h-1.5 w-1.5 rounded-full bg-fuchsia-400"></span>
-                  <span class="text-slate-400">Banned</span>
-                  <span class="font-medium text-fuchsia-200">
-                    {{ uma_ban.uma_character.name_en if uma_ban.uma_character else '?' }}{% if uma_ban.uma_outfit %} · {{ uma_ban.uma_outfit.display_title }}{% endif %}
-                  </span>
-                </p>
+                {% set ban_img = uma_ban.uma_outfit.image_url if uma_ban.uma_outfit else (uma_ban.uma_character.image_url if uma_ban.uma_character else None) %}
+                <div class="flex items-center gap-2.5 {{ row_dir }} rounded-full border border-fuchsia-500/40 bg-fuchsia-500/5 px-2 py-1 shadow-glow-fuchsia">
+                  <div class="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-slate-950/60 ring-1 ring-fuchsia-400/40">
+                    {% if ban_img %}
+                      <img src="{{ ban_img }}"
+                           alt=""
+                           loading="lazy"
+                           referrerpolicy="no-referrer"
+                           class="h-full w-full object-cover object-top grayscale" />
+                    {% endif %}
+                  </div>
+                  <div class="min-w-0 flex-1 {{ text_align }}">
+                    <p class="label-eyebrow text-fuchsia-300/80">Banned</p>
+                    <p class="truncate text-[11px] font-semibold text-fuchsia-100 leading-tight">
+                      {{ uma_ban.uma_character.name_en if uma_ban.uma_character else '?' }}{% if uma_ban.uma_outfit %} · {{ uma_ban.uma_outfit.display_title }}{% endif %}
+                    </p>
+                  </div>
+                </div>
               {% elif match.status == 'uma_ban_phase' and side.user %}
                 <p class="text-slate-500 italic">picking Uma ban…</p>
               {% endif %}
@@ -249,30 +273,67 @@
             <p class="label-eyebrow">Phase</p>
             <h2 class="mt-1 text-lg font-semibold text-slate-100">Uma ban (blind)</h2>
             {% if not my_uma_ban %}
-              <form method="post" action="{{ url_for('draft.uma_ban', match_id=match.id) }}" class="mt-3 grid gap-3">
+              <p class="mt-1 text-xs text-slate-500">
+                Pick one costume to ban — opponent can still race the same character in another outfit.
+                <span class="text-fuchsia-300">Fuchsia ring</span> = someone's Oshi.
+                Grayed = already banned.
+              </p>
+              <form method="post" action="{{ url_for('draft.uma_ban', match_id=match.id) }}" class="mt-3 space-y-3">
                 {{ csrf_form.hidden_tag() }}
-                <div>
-                  <label class="text-sm text-slate-300">Character</label>
-                  <select id="uma-ban-char"
-                          name="uma_character_id"
-                          class="input-base mt-1"
-                          hx-get="{{ url_for('draft.partial_uma_ban_outfits', match_id=match.id) }}"
-                          hx-target="#uma-ban-outfit"
-                          hx-swap="outerHTML"
-                          hx-trigger="change"
-                          hx-include="this">
-                    <option value="">— choose character —</option>
-                    {% for c in characters %}
-                      <option value="{{ c.id }}">{{ c.name_en }}{% if c.name_jp %} ({{ c.name_jp }}){% endif %}</option>
-                    {% endfor %}
-                  </select>
+
+                <input type="search"
+                       id="uma-tile-search"
+                       placeholder="Search character or costume…"
+                       autocomplete="off"
+                       class="input-base w-full"
+                       oninput="(function(q){
+                         q = q.trim().toLowerCase();
+                         document.querySelectorAll('[data-uma-tile]').forEach(function(t){
+                           var hit = !q || t.dataset.searchText.indexOf(q) !== -1;
+                           t.style.display = hit ? '' : 'none';
+                         });
+                       })(this.value)" />
+
+                <div class="grid h-[20rem] auto-rows-min grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/40 p-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                  {% for outfit in all_outfits %}
+                    {% set is_oshi = outfit.id in oshi_outfit_ids %}
+                    {% set is_banned = outfit.id in banned_outfit_ids %}
+                    {% set search_text = (outfit.character.name_en ~ ' ' ~ outfit.display_title)|lower %}
+                    <label data-uma-tile
+                           data-search-text="{{ search_text }}"
+                           title="{{ outfit.character.name_en }} · {{ outfit.display_title }}"
+                           class="relative block cursor-pointer rounded-md border border-slate-800 bg-slate-900/60 p-1.5 transition
+                                  {% if is_banned %}cursor-not-allowed opacity-40 grayscale{% else %}hover:border-cyan-500/50 hover:bg-slate-900{% endif %}
+                                  {% if is_oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}
+                                  has-[:checked]:border-cyan-400 has-[:checked]:bg-cyan-500/10 has-[:checked]:shadow-glow-cyan">
+                      <input type="radio"
+                             name="uma_outfit_id"
+                             value="{{ outfit.id }}"
+                             class="peer sr-only"
+                             {% if is_banned %}disabled{% endif %}
+                             required />
+                      <div class="aspect-square overflow-hidden rounded bg-slate-950/60">
+                        {% if outfit.image_url %}
+                          <img src="{{ outfit.image_url }}"
+                               alt=""
+                               loading="lazy"
+                               referrerpolicy="no-referrer"
+                               class="h-full w-full object-cover object-top" />
+                        {% endif %}
+                      </div>
+                      <p class="mt-1 truncate text-[11px] font-medium leading-tight text-slate-200">{{ outfit.character.name_en }}</p>
+                      <p class="truncate text-[10px] leading-tight text-slate-500">{{ outfit.display_title }}</p>
+                      {% if is_oshi %}
+                        <span class="absolute right-0.5 top-0.5 rounded-full bg-fuchsia-500/90 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-fuchsia-50">Oshi</span>
+                      {% endif %}
+                      {% if is_banned %}
+                        <span class="absolute left-0.5 top-0.5 rounded-full bg-slate-800/90 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-slate-300">Banned</span>
+                      {% endif %}
+                    </label>
+                  {% endfor %}
                 </div>
-                <div>
-                  <label class="text-sm text-slate-300">Costume</label>
-                  {% include "draft/_partial_uma_ban_outfits.html" with context %}
-                  <p class="mt-1 text-xs text-slate-500">Bans target a specific costume — opponent can still race the same character in another costume.</p>
-                </div>
-                <button class="btn-primary">Submit Uma ban</button>
+
+                <button class="btn-primary w-full justify-center">Submit Uma ban</button>
               </form>
             {% else %}
               <p class="mt-2 text-sm text-slate-400">Waiting for opponent…</p>

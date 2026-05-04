@@ -107,6 +107,20 @@ def list_outfits_for_character(character_id: int) -> Sequence[UmaOutfit]:
     )
 
 
+def list_all_outfits() -> Sequence[UmaOutfit]:
+    """Every enabled outfit joined to its character, sorted by character
+    name then costume id. Used by the draft uma-ban tile picker."""
+    return list(
+        db.session.scalars(
+            select(UmaOutfit)
+            .join(UmaCharacter, UmaCharacter.id == UmaOutfit.uma_character_id)
+            .where(UmaOutfit.enabled.is_(True))
+            .where(UmaCharacter.enabled.is_(True))
+            .order_by(UmaCharacter.name_en, UmaOutfit.costume_id)
+        )
+    )
+
+
 def resolve_oshi_image(profile: UserProfile) -> str | None:
     """Pick the best Oshi image: chosen outfit > character default > none."""
     if profile.oshi_outfit and profile.oshi_outfit.image_url:
