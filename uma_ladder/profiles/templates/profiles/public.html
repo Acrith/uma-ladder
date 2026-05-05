@@ -207,16 +207,68 @@
       {{ empty_card("Recent · Draft", "No draft matches yet", "Draft Elo and recent matches will appear here after your first completed match.") }}
     {% endif %}
 
-    {# Most Used Umas, Track Strengths, etc. are deferred until their
-       backing services exist (services.draft.most_used_umas_for_user,
-       services.draft.track_strengths_for_user, and the corresponding
-       official-side helpers). Empty placeholder cards were visible in
-       Stage 1 to validate the layout density; Stage 2 hides them so
-       every visible card carries real content.
+    {# Most Used Umas — Official. Real data via
+       profiles_service.most_used_umas_for_user. Renders only when the
+       user has at least one Uma above the min_races sample-size guard;
+       otherwise the slot is hidden (the empty state would just say
+       "not enough data" which is noise). #}
+    {% if most_used_official %}
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Most used · Official</p>
+        <h2 class="mt-1 text-base font-semibold text-slate-100">Top {{ most_used_official|length }} by races</h2>
+        <ul class="mt-3 divide-y divide-slate-800">
+          {% for u in most_used_official %}
+            <li class="flex items-center gap-3 py-2 text-sm">
+              {% if u.image_url %}
+                <img src="{{ u.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-9 w-9 shrink-0 rounded border border-slate-800 object-cover" />
+              {% else %}
+                <div class="h-9 w-9 shrink-0 rounded border border-slate-800 bg-slate-900"></div>
+              {% endif %}
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-slate-100">{{ u.name }}</p>
+                <p class="text-[11px] text-slate-500">{{ u.races }} race{{ '' if u.races == 1 else 's' }} · avg #{{ u.avg_placement }}</p>
+              </div>
+              <div class="shrink-0 text-right text-[11px] text-slate-400">
+                <p><span class="text-emerald-300">{{ '%.0f' % (u.win_rate * 100) }}%</span> WR</p>
+                <p><span class="text-amber-300">{{ '%.0f' % (u.podium_rate * 100) }}%</span> podium</p>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    {% endif %}
 
-       In-game Stats keeps its empty state because it has a clear user
-       action ("set your friend code in profile editor") — the others
-       require us to ship code, not the user to fill in data. #}
+    {# Most Used Umas — Draft. Same shape; "win" = placement 1 in
+       the recorded result row. #}
+    {% if most_used_draft %}
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Most used · Draft</p>
+        <h2 class="mt-1 text-base font-semibold text-slate-100">Top {{ most_used_draft|length }} by races</h2>
+        <ul class="mt-3 divide-y divide-slate-800">
+          {% for u in most_used_draft %}
+            <li class="flex items-center gap-3 py-2 text-sm">
+              {% if u.image_url %}
+                <img src="{{ u.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-9 w-9 shrink-0 rounded border border-slate-800 object-cover" />
+              {% else %}
+                <div class="h-9 w-9 shrink-0 rounded border border-slate-800 bg-slate-900"></div>
+              {% endif %}
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-slate-100">{{ u.name }}</p>
+                <p class="text-[11px] text-slate-500">{{ u.races }} match{{ '' if u.races == 1 else 'es' }} · avg #{{ u.avg_placement }}</p>
+              </div>
+              <div class="shrink-0 text-right text-[11px] text-slate-400">
+                <p><span class="text-emerald-300">{{ '%.0f' % (u.win_rate * 100) }}%</span> WR</p>
+                <p><span class="text-amber-300">{{ '%.0f' % (u.podium_rate * 100) }}%</span> podium</p>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    {% endif %}
+
+    {# Track Strengths card still deferred until track_strengths_for_user
+       lands. In-game Stats keeps its empty state because the user can
+       fix it themselves by setting a friend code. #}
 
     {# In-game Stats — real (uma.moe), compact metric tiles #}
     {% if trainer %}

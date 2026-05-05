@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..extensions import db
 from ..models import UmaCharacter, UmaOutfit, User, UserProfile
@@ -327,6 +327,124 @@ def _all_history_for_user(
 
     entries.sort(key=lambda e: e.when, reverse=True)
     return entries
+
+
+@dataclass(frozen=True)
+class UmaUsage:
+    """One row in the 'most used Umas' card. `wins` is placement==1,
+    `podiums` is placement<=3, `avg_placement` is mean placement
+    (rounded to 1 decimal). Counted across the chosen kind only —
+    official and draft are separate cards."""
+
+    character_id: int | None
+    name: str
+    image_url: str | None
+    races: int
+    wins: int
+    podiums: int
+    avg_placement: float
+
+    @property
+    def win_rate(self) -> float:
+        return self.wins / self.races if self.races else 0.0
+
+    @property
+    def podium_rate(self) -> float:
+        return self.podiums / self.races if self.races else 0.0
+
+
+def most_used_umas_for_user(
+    user_id: int,
+    *,
+    kind: str,
+    limit: int = 5,
+    min_races: int = 3,
+) -> list[UmaUsage]:
+    """Top Umas by race count for the given kind ('official' | 'draft').
+
+    Filters to characters with at least `min_races` races so a single
+    accidental pick doesn't dominate the card. Custom-name results
+    (no uma_character_id) are skipped — without a stable id we'd be
+    counting free-text typos as separate Umas.
+    """
+    from sqlalchemy import case
+
+    from ..models import (
+        DraftMatch,
+        DraftRaceResult,
+        OfficialRace,
+        OfficialRaceResult,
+        UmaCharacter,
+    )
+
+    if kind not in ("official", "draft"):
+        return []
+
+    if kind == "official":
+        result_cls = OfficialRaceResult
+        # OfficialRaceResult has no winner_user_id concept — placement
+        # alone tells us the outcome. winner = placement 1, podium <= 3.
+        race_id_col = OfficialRaceResult.official_race_id
+        race_cls = OfficialRace
+    else:
+        result_cls = DraftRaceResult
+        race_id_col = DraftRaceResult.draft_match_id
+        race_cls = DraftMatch
+
+    # Aggregate in SQL, then resolve UmaCharacter once per group.
+    races_count = func.count(result_cls.id).label("races")
+    wins = func.sum(case((result_cls.placement == 1, 1), else_=0)).label("wins")
+    podiums = func.sum(case((result_cls.placement <= 3, 1), else_=0)).label(
+        "podiums"
+    )
+    avg_place = func.avg(result_cls.placement).label("avg_place")
+
+    stmt = (
+        select(
+            result_cls.uma_character_id,
+            races_count,
+            wins,
+            podiums,
+            avg_place,
+        )
+        .where(result_cls.user_id == user_id)
+        .where(result_cls.uma_character_id.is_not(None))
+        .group_by(result_cls.uma_character_id)
+        .having(races_count >= min_races)
+        .order_by(races_count.desc(), avg_place.asc())
+        .limit(limit)
+    )
+    # Reference race_cls so static checkers don't drop the import — and
+    # so future per-season filtering has the join target available.
+    del race_id_col, race_cls  # noqa: F841
+
+    rows = db.session.execute(stmt).all()
+    if not rows:
+        return []
+
+    char_ids = [r.uma_character_id for r in rows]
+    chars = {
+        c.id: c
+        for c in db.session.scalars(
+            select(UmaCharacter).where(UmaCharacter.id.in_(char_ids))
+        )
+    }
+
+    out: list[UmaUsage] = []
+    for r in rows:
+        c = chars.get(r.uma_character_id)
+        out.append(
+            UmaUsage(
+                character_id=r.uma_character_id,
+                name=c.name_en if c else "?",
+                image_url=c.image_url if c else None,
+                races=int(r.races or 0),
+                wins=int(r.wins or 0),
+                podiums=int(r.podiums or 0),
+                avg_placement=round(float(r.avg_place or 0), 1),
+            )
+        )
+    return out
 
 
 def list_recent_history_for_user(

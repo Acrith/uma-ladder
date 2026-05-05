@@ -159,6 +159,12 @@ def public(username: str) -> object:
     recent_draft = profiles_service.list_recent_history_for_user(
         user.id, page=1, page_size=5, kind="draft"
     )
+    most_used_official = profiles_service.most_used_umas_for_user(
+        user.id, kind="official", limit=5
+    )
+    most_used_draft = profiles_service.most_used_umas_for_user(
+        user.id, kind="draft", limit=5
+    )
     elo = draft_service.elo_summary_for_user(user.id)
     # Best-effort uma.moe enrichment when friend_code is set. Returns
     # None for missing code / 404 / network error / malformed JSON —
@@ -172,6 +178,8 @@ def public(username: str) -> object:
         history=history,
         recent_official=recent_official,
         recent_draft=recent_draft,
+        most_used_official=most_used_official,
+        most_used_draft=most_used_draft,
         elo=elo,
         trainer=trainer,
     )
