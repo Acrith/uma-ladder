@@ -399,6 +399,44 @@ def submit_results(match_id: int) -> object:
         draft_service.submit_results(
             match_id, lines, confirmed_by_user_id=current_user.id
         )
+    except draft_service.BannedCharacterUsedError as exc:
+        # Hint at the forfeit path. The standard /results route can't
+        # silently apply forfeit because we don't know which player
+        # picked the banned uma — leave it to the organiser to confirm.
+        flash(
+            f"{exc}. An organiser can mark the offending player as "
+            "forfeit using the Forfeit form."
+        )
+    except draft_service.DraftError as exc:
+        flash(str(exc))
+    return redirect(url_for("draft.detail", match_id=match_id))
+
+
+@bp.post("/<int:match_id>/forfeit")
+@login_required
+@min_role_required("organizer")
+def forfeit(match_id: int) -> object:
+    """Organiser closes a match by forfeit — the *other* player wins
+    and Elo is applied. Used for ban violations + ghosting. The
+    forfeiter id and the reason are persisted on the match."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    raw = (request.form.get("forfeiter_user_id") or "").strip()
+    if not raw.isdigit():
+        flash("Pick which player forfeits.")
+        return redirect(url_for("draft.detail", match_id=match_id))
+    reason = (request.form.get("reason") or "").strip() or None
+    try:
+        draft_service.submit_forfeit(
+            match_id,
+            forfeiter_user_id=int(raw),
+            by_user_id=current_user.id,
+            reason=reason,
+        )
+        flash("Forfeit recorded.")
+    except draft_service.DraftNotFoundError:
+        abort(404)
     except draft_service.DraftError as exc:
         flash(str(exc))
     return redirect(url_for("draft.detail", match_id=match_id))

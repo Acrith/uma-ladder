@@ -56,6 +56,15 @@ class DraftMatch(db.Model):
     cancelled_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Set when a match is closed via submit_forfeit instead of normal
+    # placements (e.g. a player used a banned uma in the room). Coexists
+    # with winner_user_id / loser_user_id — those still record the Elo
+    # outcome; these columns explain *why* a match completed without
+    # placements.
+    forfeit_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    forfeit_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

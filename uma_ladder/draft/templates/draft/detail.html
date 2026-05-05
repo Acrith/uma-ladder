@@ -425,6 +425,28 @@
                 {% endfor %}
                 <button class="btn-primary">Submit results</button>
               </form>
+
+              {# Organiser-only forfeit path. Used when a player put a
+                 banned uma in the room (or ghosted). Awards the match
+                 to the *other* player with full Elo. #}
+              {% if current_user.has_at_least('organizer') %}
+                <details class="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-sm">
+                  <summary class="cursor-pointer text-rose-300 hover:text-rose-200">⚠ Mark as forfeit (rule violation / no-show)</summary>
+                  <form method="post" action="{{ url_for('draft.forfeit', match_id=match.id) }}" class="mt-3 grid gap-2">
+                    {{ csrf_form.hidden_tag() }}
+                    <label class="text-xs text-slate-400">Forfeiting player</label>
+                    <select name="forfeiter_user_id" class="input-base" required>
+                      <option value="">— pick player —</option>
+                      {% if match.host %}<option value="{{ match.host_user_id }}">@{{ match.host.username }} (host)</option>{% endif %}
+                      {% if match.opponent %}<option value="{{ match.opponent_user_id }}">@{{ match.opponent.username }} (opponent)</option>{% endif %}
+                    </select>
+                    <label class="text-xs text-slate-400">Reason (optional)</label>
+                    <input type="text" name="reason" class="input-base" placeholder="e.g. ban_violation, no_show" maxlength="64" />
+                    <p class="text-xs text-slate-500">The other player wins the match. Full Elo applied.</p>
+                    <button class="text-xs text-rose-400 hover:text-rose-300 self-start">Confirm forfeit</button>
+                  </form>
+                </details>
+              {% endif %}
             {% endcall %}
           {% endif %}
         {% endif %}
@@ -437,6 +459,13 @@
                 {% if match.winner_user_id == match.host_user_id %}{{ match.host.username }}{% elif match.opponent and match.winner_user_id == match.opponent_user_id %}{{ match.opponent.username }}{% else %}user_id {{ match.winner_user_id }}{% endif %}
               </span>
             </p>
+            {% if match.forfeit_user_id %}
+              <p class="mt-2 text-xs text-rose-300">
+                ⚠ Forfeit by
+                {% if match.forfeit_user_id == match.host_user_id %}@{{ match.host.username }}{% elif match.opponent and match.forfeit_user_id == match.opponent_user_id %}@{{ match.opponent.username }}{% else %}user {{ match.forfeit_user_id }}{% endif %}
+                {% if match.forfeit_reason %}<span class="text-slate-400">· {{ match.forfeit_reason }}</span>{% endif %}
+              </p>
+            {% endif %}
           {% endcall %}
         {% endif %}
 

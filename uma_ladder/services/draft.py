@@ -815,6 +815,114 @@ def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLa
     return out
 
 
+class NotAParticipantOfMatchError(DraftError):
+    pass
+
+
+def submit_forfeit(
+    match_id: int,
+    *,
+    forfeiter_user_id: int,
+    by_user_id: int,
+    reason: str | None = None,
+) -> DraftMatch:
+    """Close a match by forfeit — the *other* player wins. Used for
+    rule violations (banned uma in the room) and ghosting. Skips the
+    placement validation and the banned-uma check that submit_results
+    enforces; that's the whole point of this path.
+
+    Records:
+    - DraftRaceResult is NOT written (no in-game placements to capture).
+    - winner_user_id / loser_user_id are set normally so the ladder
+      treats this as a played match.
+    - forfeit_user_id + forfeit_reason explain *why* there are no
+      placement rows.
+    - Elo applied with K=DEFAULT_K just like a normal loss; this is a
+      deliberate choice — using a banned uma in the room is a real
+      loss, not a no-result.
+
+    Permissions are enforced at the route layer.
+    """
+    match = get_match(match_id)
+    if match.status == DraftMatchStatus.COMPLETED:
+        raise InvalidMatchStateError("match is already completed")
+    if match.status == DraftMatchStatus.CANCELLED:
+        raise InvalidMatchStateError("cannot forfeit a cancelled match")
+    if match.opponent_user_id is None:
+        raise InvalidMatchStateError("match has no opponent")
+    if forfeiter_user_id not in (match.host_user_id, match.opponent_user_id):
+        raise NotAParticipantOfMatchError(
+            f"user {forfeiter_user_id} is not in match {match_id}"
+        )
+
+    winner_id = (
+        match.opponent_user_id
+        if forfeiter_user_id == match.host_user_id
+        else match.host_user_id
+    )
+    loser_id = forfeiter_user_id
+
+    winner_rating = current_rating(winner_id, match.season_id)
+    loser_rating = current_rating(loser_id, match.season_id)
+    winner_change, loser_change = apply_match(
+        winner_rating, loser_rating, outcome_a=1.0, k=DEFAULT_K
+    )
+    db.session.add(
+        DraftEloChange(
+            draft_match_id=match_id,
+            season_id=match.season_id,
+            user_id=winner_id,
+            opponent_user_id=loser_id,
+            rating_before=winner_change.rating_before,
+            rating_after=winner_change.rating_after,
+            delta=winner_change.delta,
+            outcome=winner_change.outcome,
+        )
+    )
+    db.session.add(
+        DraftEloChange(
+            draft_match_id=match_id,
+            season_id=match.season_id,
+            user_id=loser_id,
+            opponent_user_id=winner_id,
+            rating_before=loser_change.rating_before,
+            rating_after=loser_change.rating_after,
+            delta=loser_change.delta,
+            outcome=loser_change.outcome,
+        )
+    )
+
+    match.winner_user_id = winner_id
+    match.loser_user_id = loser_id
+    match.forfeit_user_id = forfeiter_user_id
+    match.forfeit_reason = (reason or "").strip() or None
+    match.completed_at = _utcnow()
+    match.status = DraftMatchStatus.COMPLETED
+    db.session.commit()
+
+    # Reuse the standard DRAFT_RESULTS notification — a forfeit IS a
+    # result, the embed copy just happens to mention forfeit reason.
+    try:
+        from ..notifications import services as notif_services
+
+        notif_services.notify_draft_results(
+            match,
+            winner_username=match.host.username
+            if winner_id == match.host_user_id
+            else (match.opponent.username if match.opponent else "?"),
+            loser_username=match.host.username
+            if loser_id == match.host_user_id
+            else (match.opponent.username if match.opponent else "?"),
+            winner_delta=winner_change.delta,
+            loser_delta=loser_change.delta,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+    del by_user_id  # accepted for symmetry / audit context
+    return match
+
+
 def cancel_match(match_id: int, *, by_user_id: int) -> DraftMatch:
     """Organiser action — wipes a match short of completion. Refuses to
     touch already-completed matches (those represent applied Elo and need
