@@ -93,10 +93,11 @@ def test_rejects_unknown_surface(app: Flask, tmp_path: Path) -> None:
         import_g1_races(src)
 
 
-def test_g1_and_custom_can_coexist(app: Flask, tmp_path: Path) -> None:
-    """A G1 import does not collide with a same-natural-key custom preset."""
+def test_g1_and_custom_coexist_after_pr_g2(app: Flask, tmp_path: Path) -> None:
+    """A G1 import keeps a same-track-config custom preset intact —
+    the row identity is (name, venue), so a custom row with a
+    different name survives the G1 import alongside the new row."""
     with app.app_context():
-        # custom preset at the same natural key
         db.session.add(
             RacePreset(
                 source=PresetSource.CUSTOM_BUILTIN,
@@ -113,11 +114,51 @@ def test_g1_and_custom_can_coexist(app: Flask, tmp_path: Path) -> None:
         )
         db.session.commit()
         src = _seed(tmp_path, [_row()])
-        # Same natural key → updates the existing row in place; we accept this
-        # for MVP because the unique constraint makes coexistence impossible.
-        # The G1 import wins (overwrites name + grade + source).
         report = import_g1_races(src)
+        assert report.inserted == 1
+        rows = db.session.query(RacePreset).order_by(RacePreset.name).all()
+        assert {r.source for r in rows} == {
+            PresetSource.G1_IMPORT,
+            PresetSource.CUSTOM_BUILTIN,
+        }
+        # Both at the same physical track config — that's allowed now.
+        assert all(r.venue == "Tokyo" and r.distance_meters == 2400 for r in rows)
+
+
+def test_distinct_g1_names_at_same_track_each_get_a_row(
+    app: Flask, tmp_path: Path
+) -> None:
+    """The headline PR-G2 case: Tokyo Yushun and Japanese Oaks share
+    Tokyo 2400m turf left, and the seeder must keep both rows."""
+    src = _seed(
+        tmp_path,
+        [
+            _row(name="Tokyo Yushun"),
+            _row(name="Japanese Oaks"),
+            _row(name="Japan Cup"),
+        ],
+    )
+    with app.app_context():
+        report = import_g1_races(src)
+        assert report.inserted == 3
+        names = sorted(
+            r.name for r in db.session.query(RacePreset).all()
+        )
+        assert names == ["Japan Cup", "Japanese Oaks", "Tokyo Yushun"]
+
+
+def test_existing_row_updates_on_track_drift(
+    app: Flask, tmp_path: Path
+) -> None:
+    """If GameTora corrects a track configuration upstream (rare),
+    re-importing should rewrite the affected columns rather than
+    creating a phantom second row."""
+    a = _seed(tmp_path, [_row(distance_meters=2400)], name="a.json")
+    b = _seed(tmp_path, [_row(distance_meters=2300, distance_category="Medium")], name="b.json")
+    with app.app_context():
+        import_g1_races(a)
+        report = import_g1_races(b)
         assert report.updated == 1
-        row = db.session.query(RacePreset).one()
-        assert row.source == PresetSource.G1_IMPORT
-        assert row.grade == "G1"
+        rows = db.session.query(RacePreset).all()
+        assert len(rows) == 1
+        assert rows[0].distance_meters == 2300

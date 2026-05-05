@@ -444,24 +444,23 @@ def fetch_g1_races(
         raise GameToraError("races payload is not a list")
 
     out: list[FetchedG1Race] = []
-    seen: set[tuple[str, str, int, str]] = set()  # natural-key dedupe
+    # Keep the same race name from showing up twice (the upstream payload
+    # occasionally lists a race once per server / season variant — those
+    # *are* the same race and shouldn't double-seed). Distinct race names
+    # are kept even when they share track conditions: Tokyo Yushun and
+    # Japanese Oaks both run Tokyo 2400m turf left and both deserve a
+    # row.
+    seen_names: set[tuple[str, str]] = set()  # (name_en, venue)
     for row in raw:
         if not isinstance(row, dict):
             continue
         coerced = _coerce_g1(row)
         if coerced is None:
             continue
-        # Some races have multiple instances per year (Sprinters Stakes
-        # at Nakayama + Niigata) — dedupe by natural key.
-        key = (
-            coerced.venue,
-            coerced.surface,
-            coerced.distance_meters,
-            coerced.direction,
-        )
-        if key in seen:
+        key = (coerced.name_en, coerced.venue)
+        if key in seen_names:
             continue
-        seen.add(key)
+        seen_names.add(key)
         out.append(coerced)
 
     out.sort(key=lambda g: (g.venue, g.distance_meters, g.name_en))

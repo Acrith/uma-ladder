@@ -89,7 +89,11 @@ def test_coerce_g1_right_direction() -> None:
     assert g.venue == "Nakayama"
 
 
-def test_fetch_g1_races_dedupes_by_natural_key() -> None:
+def test_fetch_g1_races_keeps_distinct_names_at_same_track() -> None:
+    """Different G1s sharing one physical configuration both survive
+    the fetcher (e.g. Tokyo Yushun + Japanese Oaks at Tokyo 2400m turf
+    left). Repeating the *same* race name (region / season variants
+    upstream) still collapses to one row."""
     transport = FakeGameToraTransport(
         responses={
             "https://gametora.com/data/manifests/umamusume.json": _ok(
@@ -97,12 +101,12 @@ def test_fetch_g1_races_dedupes_by_natural_key() -> None:
             ),
             "https://gametora.com/data/umamusume/races.v.json": _ok(
                 [
-                    _race(name_en="Sprinters Stakes A", track=10005, distance=1200, direction=1),
-                    # Same natural key (Nakayama Turf 1200 Right) — should dedupe.
-                    _race(name_en="Sprinters Stakes B", track=10005, distance=1200, direction=1),
-                    # Different venue → kept.
-                    _race(name_en="Other", track=10006, distance=2000, direction=2),
-                    # G2 → filtered.
+                    _race(name_en="Tokyo Yushun", track=10006, distance=2400, direction=2),
+                    # Same physical track config as Yushun, different race.
+                    _race(name_en="Japanese Oaks", track=10006, distance=2400, direction=2),
+                    # Same race name as Yushun → genuine duplicate, drop.
+                    _race(name_en="Tokyo Yushun", track=10006, distance=2400, direction=2),
+                    _race(name_en="Other", track=10009, distance=2000, direction=1),
                     _race(name_en="G2 race", grade=200),
                 ]
             ),
@@ -110,10 +114,7 @@ def test_fetch_g1_races_dedupes_by_natural_key() -> None:
     )
     rows = fetch_g1_races(transport, delay_seconds=0)
     names = sorted(r.name_en for r in rows)
-    # Only one of the duplicate Nakayama Sprinters survives, plus the Tokyo race.
-    assert len(rows) == 2
-    assert "Sprinters Stakes A" in names
-    assert "Other" in names
+    assert names == ["Japanese Oaks", "Other", "Tokyo Yushun"]
 
 
 def test_fetch_g1_manifest_missing_key_raises() -> None:

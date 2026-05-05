@@ -104,15 +104,13 @@ def import_g1_races(path: Path | None = None) -> SeedReport:
         _validate(row, idx)
         course_variant = row.get("course_variant")
 
+        # Match on (name, venue) — race name is unique within a venue
+        # for JRA G1s, and this is what lets Tokyo Yushun + Japanese
+        # Oaks coexist (same track config, different races). PR-G2.
         existing = db.session.scalars(
             select(RacePreset).where(
+                RacePreset.name == row["name"],
                 RacePreset.venue == row["venue"],
-                RacePreset.surface == row["surface"],
-                RacePreset.distance_meters == row["distance_meters"],
-                RacePreset.direction == row["direction"],
-                RacePreset.course_variant.is_(course_variant)
-                if course_variant is None
-                else RacePreset.course_variant == course_variant,
             )
         ).first()
 
@@ -138,16 +136,22 @@ def import_g1_races(path: Path | None = None) -> SeedReport:
             continue
 
         changed = (
-            existing.name != row["name"]
-            or existing.grade != row["grade"]
+            existing.grade != row["grade"]
+            or existing.surface != row["surface"]
+            or existing.distance_meters != row["distance_meters"]
             or existing.distance_category != row["distance_category"]
+            or existing.direction != row["direction"]
+            or existing.course_variant != course_variant
             or existing.max_runners != row["max_runners"]
             or existing.external_source_url != row.get("external_source_url")
         )
         if changed:
-            existing.name = row["name"]
             existing.grade = row["grade"]
+            existing.surface = row["surface"]
+            existing.distance_meters = row["distance_meters"]
             existing.distance_category = row["distance_category"]
+            existing.direction = row["direction"]
+            existing.course_variant = course_variant
             existing.max_runners = row["max_runners"]
             existing.external_source_url = row.get("external_source_url")
             existing.source = PresetSource.G1_IMPORT
