@@ -27,7 +27,7 @@
             {% if profile.avatar_url %}
               <div class="flex items-center gap-2 text-xs text-slate-400">
                 <img src="{{ profile.avatar_url }}" alt="" class="h-8 w-8 rounded border border-slate-800 object-cover" />
-                <span class="truncate">Current: {{ profile.avatar_url }}</span>
+                <span class="flex-1 truncate">Current: {{ profile.avatar_url }}</span>
               </div>
             {% endif %}
             <div>
@@ -40,9 +40,21 @@
               {{ form.avatar_url(class="input-base mt-1", placeholder="https://…") }}
               {% for err in form.avatar_url.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
             </div>
-            <p class="text-[11px] text-slate-500">Uploaded image wins over the URL field on save.</p>
+            <p class="text-[11px] text-slate-500">Uploaded image wins over the URL field on save. Uploads are downscaled to 256×256.</p>
           </div>
         </div>
+
+        {% if profile.avatar_url %}
+          {# Sits outside the main form so submitting "Remove" doesn't try
+             to also save the rest of the (possibly empty) inputs. #}
+          <div class="-mt-2">
+            <button type="button"
+                    class="text-xs text-rose-400 hover:text-rose-300"
+                    onclick="document.getElementById('remove-avatar-form').submit()">
+              Remove avatar
+            </button>
+          </div>
+        {% endif %}
 
         <div>
           <label class="text-sm text-slate-300">{{ form.description.label.text }}</label>
@@ -126,4 +138,15 @@
       </div>
     </article>
   </div>
+
+  {# Stand-alone POST so the Remove button doesn't trigger validation /
+     update of the main profile form. CSRF token only. #}
+  {% if profile.avatar_url %}
+    <form id="remove-avatar-form"
+          method="post"
+          action="{{ url_for('profiles.remove_avatar') }}"
+          class="hidden">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    </form>
+  {% endif %}
 {% endblock %}

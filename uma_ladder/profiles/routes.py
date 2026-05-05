@@ -107,6 +107,17 @@ def partial_outfits() -> object:
     )
 
 
+@bp.post("/me/avatar/remove")
+@login_required
+def remove_avatar() -> object:
+    """Clear the user's avatar_url. The underlying UploadedImage row is
+    kept so storage usage stays small enough that we don't need a GC
+    pass — restorable by pasting a previous /profiles/avatars/<id> URL."""
+    profiles_service.clear_avatar(current_user)
+    flash("Avatar removed.")
+    return redirect(url_for("profiles.me"))
+
+
 @bp.get("/avatars/<int:image_id>")
 def serve_avatar(image_id: int) -> object:
     """Public serve endpoint for user-uploaded avatars. No auth — avatars

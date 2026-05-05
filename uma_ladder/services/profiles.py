@@ -121,24 +121,56 @@ def list_all_outfits() -> Sequence[UmaOutfit]:
     )
 
 
-def save_avatar_upload(file, *, user: User) -> str:
-    """Save an uploaded avatar image and return the served URL.
+AVATAR_MAX_DIMENSION = 256
 
-    Wraps services.ocr.save_uploaded_image (which already handles the
-    file storage path + size + extension validation) with
-    purpose=AVATAR. The returned URL is suitable for writing into
-    UserProfile.avatar_url — it points at the public avatar serving
-    route, not at the OCR-protected serve endpoint.
+
+def save_avatar_upload(file, *, user: User) -> str:
+    """Save an uploaded avatar image (downscaled to ≤256x256) and return
+    the served URL.
+
+    Wraps services.ocr.save_uploaded_image with purpose=AVATAR, then
+    rewrites the saved file in-place via Pillow with a max-side cap so a
+    full-resolution phone photo doesn't bloat every page that shows the
+    avatar. The returned URL points at the public avatar serving route.
     """
     from flask import url_for
+    from PIL import Image, ImageOps
 
     from ..models.enums import UploadPurpose
     from . import ocr as ocr_service
 
-    image = ocr_service.save_uploaded_image(
+    image_row = ocr_service.save_uploaded_image(
         file, uploader_user_id=user.id, purpose=UploadPurpose.AVATAR
     )
-    return url_for("profiles.serve_avatar", image_id=image.id)
+    # Downscale on disk. Image.thumbnail preserves aspect ratio and
+    # short-circuits if the input is already small. ImageOps.exif_transpose
+    # picks up phone-camera orientation tags so portrait shots don't end up
+    # sideways.
+    path = ocr_service.image_path(image_row)
+    try:
+        with Image.open(path) as img:
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail(
+                (AVATAR_MAX_DIMENSION, AVATAR_MAX_DIMENSION),
+                Image.Resampling.LANCZOS,
+            )
+            img.save(path)
+    except Exception:  # noqa: BLE001
+        # Resize is best-effort; the original upload is still on disk
+        # and serviceable. Don't fail the upload over a Pillow quirk.
+        pass
+
+    return url_for("profiles.serve_avatar", image_id=image_row.id)
+
+
+def clear_avatar(user: User) -> UserProfile:
+    """Remove the avatar reference from the profile. Doesn't delete the
+    UploadedImage row — keeping the file lets the user revert by pasting
+    the URL back, and storage is cheap."""
+    profile = get_or_create_profile(user)
+    profile.avatar_url = None
+    db.session.commit()
+    return profile
 
 
 def resolve_oshi_image(profile: UserProfile) -> str | None:

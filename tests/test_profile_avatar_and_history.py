@@ -117,6 +117,61 @@ def test_serve_avatar_serves_uploaded_image(
     assert resp.data.startswith(b"\x89PNG")
 
 
+def test_avatar_upload_resizes_large_image(
+    client: FlaskClient, app: Flask, make_user, tmp_path
+) -> None:
+    """A 2048x2048 input should land on disk at ≤256 on the longer side."""
+    from PIL import Image
+
+    big_path = tmp_path / "big.png"
+    Image.new("RGB", (2048, 2048), color=(0, 200, 200)).save(big_path)
+    make_user(username="alice", role=Role.USER)
+    _login(client, "alice")
+    with open(big_path, "rb") as fh:
+        client.post(
+            "/profiles/me",
+            data={"avatar_image": (fh, "big.png")},
+            content_type="multipart/form-data",
+        )
+    with app.app_context():
+        image = (
+            db.session.query(UploadedImage)
+            .filter_by(purpose=UploadPurpose.AVATAR)
+            .first()
+        )
+        from uma_ladder.services import ocr as ocr_service
+        path = ocr_service.image_path(image)
+        with Image.open(path) as resized:
+            assert max(resized.size) <= 256
+
+
+def test_remove_avatar_clears_url(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="alice", role=Role.USER)
+    _login(client, "alice")
+    client.post(
+        "/profiles/me",
+        data={"avatar_image": (io.BytesIO(_png_bytes()), "me.png")},
+        content_type="multipart/form-data",
+    )
+    with app.app_context():
+        profile = db.session.query(UserProfile).first()
+        assert profile.avatar_url is not None
+
+    resp = client.post("/profiles/me/avatar/remove", follow_redirects=False)
+    assert resp.status_code == 302
+    with app.app_context():
+        profile = db.session.query(UserProfile).first()
+        assert profile.avatar_url is None
+
+
+def test_remove_avatar_requires_login(client: FlaskClient) -> None:
+    resp = client.post("/profiles/me/avatar/remove", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers["Location"]
+
+
 def test_serve_avatar_refuses_non_avatar_uploads(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
