@@ -579,7 +579,9 @@ def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
     # Capture the registered usernames + actor BEFORE flipping status,
     # since list_registrations filters by REGISTERED and we want to
     # surface the affected players in the notification embed.
-    affected = [r.user.username for r in list_registrations(race_id) if r.user]
+    affected_regs = [r for r in list_registrations(race_id) if r.user]
+    affected_usernames = [r.user.username for r in affected_regs]
+    affected_user_ids = [r.user_id for r in affected_regs]
     actor = db.session.get(User, by_user_id)
     actor_username = actor.username if actor else None
 
@@ -587,7 +589,9 @@ def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
     race.cancelled_at = _utcnow()
     race.cancelled_by_user_id = by_user_id
     db.session.commit()
-    _notify_race_cancelled(race, actor_username, affected)
+    _notify_race_cancelled(
+        race, actor_username, affected_usernames, affected_user_ids
+    )
     # Audit trail (best-effort).
     try:
         from . import admin_audit
@@ -597,7 +601,7 @@ def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
             action="official_race_cancel",
             target_kind="official_race",
             target_id=race.id,
-            details=f"affected_registrations={len(affected)}",
+            details=f"affected_registrations={len(affected_regs)}",
         )
     except Exception:  # noqa: BLE001
         pass
@@ -605,7 +609,10 @@ def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
 
 
 def _notify_race_cancelled(
-    race: OfficialRace, actor_username: str | None, affected_usernames: list[str]
+    race: OfficialRace,
+    actor_username: str | None,
+    affected_usernames: list[str],
+    affected_user_ids: list[int],
 ) -> None:
     try:
         from ..notifications import services as notif_services
@@ -614,6 +621,7 @@ def _notify_race_cancelled(
             race,
             cancelled_by_username=actor_username,
             registered_usernames=affected_usernames,
+            registered_user_ids=affected_user_ids,
         )
     except Exception:  # noqa: BLE001
         pass

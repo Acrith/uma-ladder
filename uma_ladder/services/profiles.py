@@ -28,6 +28,7 @@ class ProfileUpdate:
     description: str | None = None
     friend_code: str | None = None
     discord_handle: str | None = None
+    discord_user_id: str | None = None
     oshi_character_id: int | None = None
     oshi_outfit_id: int | None = None
 
@@ -74,6 +75,7 @@ def update_profile(user: User, update: ProfileUpdate) -> UserProfile:
     profile.description = update.description
     profile.friend_code = update.friend_code
     profile.discord_handle = update.discord_handle
+    profile.discord_user_id = update.discord_user_id
     profile.oshi_character_id = update.oshi_character_id
     profile.oshi_outfit_id = final_outfit_id
     db.session.commit()

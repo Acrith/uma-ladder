@@ -63,6 +63,7 @@ def me() -> object:
             description=form.description.data or None,
             friend_code=form.friend_code.data or None,
             discord_handle=form.discord_handle.data or None,
+            discord_user_id=form.discord_user_id.data or None,
             oshi_character_id=form.oshi_character_id.data or None,
             oshi_outfit_id=outfit_id,
         )

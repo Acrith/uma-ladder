@@ -24,6 +24,10 @@ class UserProfile(db.Model):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     friend_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     discord_handle: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Discord snowflake (64-bit int rendered as decimal string). Drives
+    # `<@id>` mentions in webhook embeds so the user gets a desktop /
+    # mobile push when an actionable event fires for them.
+    discord_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     oshi_character_id: Mapped[int | None] = mapped_column(
         ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True, index=True
     )

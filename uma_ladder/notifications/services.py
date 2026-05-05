@@ -22,10 +22,17 @@ from ..models import (
 )
 from ..services.official import LadderRow
 from .discord import send_event
+from .mentions import mention_prefix
 
 
-def _embed(title: str, fields: list[dict[str, Any]], *, color: int = 0x3B82F6) -> dict[str, Any]:
-    return {
+def _embed(
+    title: str,
+    fields: list[dict[str, Any]],
+    *,
+    color: int = 0x3B82F6,
+    mention: str = "",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "embeds": [
             {
                 "title": title,
@@ -34,6 +41,14 @@ def _embed(title: str, fields: list[dict[str, Any]], *, color: int = 0x3B82F6) -
             }
         ]
     }
+    if mention:
+        # Discord renders `content` above the embed and triggers a push
+        # for each mentioned user. `allowed_mentions.parse=["users"]`
+        # restricts pinging to the explicit user IDs (can't @here from
+        # a stray string in any future title text).
+        payload["content"] = mention
+        payload["allowed_mentions"] = {"parse": ["users"]}
+    return payload
 
 
 def _field(name: str, value: Any, *, inline: bool = True) -> dict[str, Any]:
@@ -70,10 +85,13 @@ def notify_official_room_code(
     if registrations:
         names = ", ".join(r.user.username for r in registrations)
         fields.append(_field("Registered", names, inline=False))
+    mention = mention_prefix(r.user_id for r in registrations)
     return send_event(
         event_type=NotificationEvent.OFFICIAL_ROOM_CODE,
         target=NotificationTarget.RACE_REGISTRATION,
-        payload=_embed(f"Room code for {race.name}", fields, color=0x10B981),
+        payload=_embed(
+            f"Room code for {race.name}", fields, color=0x10B981, mention=mention
+        ),
     )
 
 
@@ -82,6 +100,7 @@ def notify_official_race_cancelled(
     *,
     cancelled_by_username: str | None = None,
     registered_usernames: Sequence[str] = (),
+    registered_user_ids: Sequence[int] = (),
 ) -> DiscordNotificationAttempt:
     """Tell the registration channel a race they were registered for is
     gone. Mentions the registered users so they get pinged via Discord
@@ -95,10 +114,16 @@ def notify_official_race_cancelled(
     if registered_usernames:
         names = ", ".join(registered_usernames)
         fields.append(_field("Affected registrations", names, inline=False))
+    mention = mention_prefix(registered_user_ids)
     return send_event(
         event_type=NotificationEvent.OFFICIAL_RACE_CANCELLED,
         target=NotificationTarget.RACE_REGISTRATION,
-        payload=_embed(f"Race cancelled: {race.name}", fields, color=0xEF4444),
+        payload=_embed(
+            f"Race cancelled: {race.name}",
+            fields,
+            color=0xEF4444,
+            mention=mention,
+        ),
     )
 
 
@@ -119,11 +144,15 @@ def notify_official_registration_removed(
     ]
     if removed_by_username:
         fields.append(_field("Removed by", removed_by_username, inline=True))
+    mention = mention_prefix([registration.user_id])
     return send_event(
         event_type=NotificationEvent.OFFICIAL_REGISTRATION_REMOVED,
         target=NotificationTarget.RACE_REGISTRATION,
         payload=_embed(
-            f"Registration removed: {race.name}", fields, color=0xF59E0B
+            f"Registration removed: {race.name}",
+            fields,
+            color=0xF59E0B,
+            mention=mention,
         ),
     )
 
@@ -160,10 +189,16 @@ def notify_draft_room_code(match: DraftMatch) -> DiscordNotificationAttempt:
         fields.append(_field("Preset", match.selected_preset.name, inline=False))
     if match.room_code_expires_at is not None:
         fields.append(_field("Expires at", match.room_code_expires_at.isoformat()))
+    mention = mention_prefix([match.host_user_id, match.opponent_user_id])
     return send_event(
         event_type=NotificationEvent.DRAFT_ROOM_CODE,
         target=NotificationTarget.RACE_REGISTRATION,
-        payload=_embed(f"Draft match #{match.id} — room code", fields, color=0x10B981),
+        payload=_embed(
+            f"Draft match #{match.id} — room code",
+            fields,
+            color=0x10B981,
+            mention=mention,
+        ),
     )
 
 
@@ -181,10 +216,16 @@ def notify_draft_results(
     ]
     if match.selected_preset is not None:
         fields.append(_field("Preset", match.selected_preset.name, inline=False))
+    mention = mention_prefix([match.host_user_id, match.opponent_user_id])
     return send_event(
         event_type=NotificationEvent.DRAFT_RESULTS,
         target=NotificationTarget.DRAFT_RESULTS,
-        payload=_embed(f"Draft match #{match.id} complete", fields, color=0xF59E0B),
+        payload=_embed(
+            f"Draft match #{match.id} complete",
+            fields,
+            color=0xF59E0B,
+            mention=mention,
+        ),
     )
 
 
@@ -203,11 +244,15 @@ def notify_draft_match_cancelled(
     ]
     if cancelled_by_username:
         fields.append(_field("Cancelled by", cancelled_by_username, inline=True))
+    mention = mention_prefix([match.host_user_id, match.opponent_user_id])
     return send_event(
         event_type=NotificationEvent.DRAFT_MATCH_CANCELLED,
         target=NotificationTarget.DRAFT_RESULTS,
         payload=_embed(
-            f"Draft match #{match.id} cancelled", fields, color=0xEF4444
+            f"Draft match #{match.id} cancelled",
+            fields,
+            color=0xEF4444,
+            mention=mention,
         ),
     )
 

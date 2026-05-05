@@ -20,6 +20,15 @@
           </div>
         {% endfor %}
 
+        <div>
+          <label class="text-sm text-slate-300">{{ form.discord_user_id.label.text }}</label>
+          {{ form.discord_user_id(class="input-base mt-1", placeholder="e.g. 123456789012345678") }}
+          <p class="mt-1 text-[11px] text-slate-500">
+            Optional. Lets us @-mention you in the Discord channel for actions you can take (room codes, results, cancellations). Enable Discord Developer Mode → right-click your name → Copy User ID.
+          </p>
+          {% for err in form.discord_user_id.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+        </div>
+
         {# Avatar: upload OR URL. The uploaded file wins on save. #}
         <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
           <p class="label-eyebrow">Avatar</p>
