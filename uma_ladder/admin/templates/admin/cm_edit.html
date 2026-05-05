@@ -94,10 +94,70 @@
         </div>
       </details>
 
+      <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-4">
+        <p class="label-eyebrow">Race conditions</p>
+        <div class="mt-3 grid gap-3 md:grid-cols-3">
+          <div>
+            <label class="text-xs text-slate-400">Season</label>
+            <select id="cm-race-season" class="input-base mt-1" name="race_season">
+              <option value="">— pick —</option>
+              {% for v in ['Spring', 'Summer', 'Autumn', 'Winter'] %}
+                <option value="{{ v }}" {% if cm and cm.race_season == v %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">Weather</label>
+            <select id="cm-weather" class="input-base mt-1" name="weather">
+              <option value="">— pick —</option>
+              {% for v in ['Sunny', 'Cloudy', 'Rainy', 'Snowy'] %}
+                <option value="{{ v }}" {% if cm and cm.weather == v %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            </select>
+            <p class="mt-1 text-[11px] text-slate-500">Snowy is Winter-only.</p>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">Ground condition</label>
+            <select class="input-base mt-1" name="ground_condition">
+              <option value="">— pick —</option>
+              {% for v in ['Firm', 'Good', 'Soft', 'Heavy'] %}
+                <option value="{{ v }}" {% if cm and cm.ground_condition == v %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div>
         <label class="text-sm text-slate-300">Notes <span class="text-slate-500">(optional)</span></label>
         <textarea class="input-base mt-1" name="notes" rows="3" placeholder="Pickup banners, gimmicks, community meetup time, etc.">{{ cm.notes if cm and cm.notes else '' }}</textarea>
       </div>
+
+      {# Hide the Snowy weather option when season != Winter so admins
+         can't construct an invalid combo client-side. Server-side
+         validation in services/track_conditions.py is still the
+         source of truth. #}
+      <script>
+        (function () {
+          var seasonEl = document.getElementById('cm-race-season');
+          var weatherEl = document.getElementById('cm-weather');
+          if (!seasonEl || !weatherEl) return;
+          var snowyOpt = Array.from(weatherEl.options).find(function (o) {
+            return o.value === 'Snowy';
+          });
+          if (!snowyOpt) return;
+          function sync() {
+            var winter = seasonEl.value === 'Winter';
+            snowyOpt.hidden = !winter;
+            snowyOpt.disabled = !winter;
+            if (!winter && weatherEl.value === 'Snowy') {
+              weatherEl.value = '';
+            }
+          }
+          seasonEl.addEventListener('change', sync);
+          sync();
+        })();
+      </script>
 
       <div class="flex flex-wrap items-center gap-3">
         <button class="btn-primary">{% if cm %}Save changes{% else %}Create CM{% endif %}</button>

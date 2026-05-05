@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField, FileRequired
-from wtforms import DateTimeLocalField, IntegerField, StringField, TextAreaField
-from wtforms.validators import DataRequired, Length, NumberRange, Optional
+from wtforms import (
+    DateTimeLocalField,
+    IntegerField,
+    SelectField,
+    StringField,
+    TextAreaField,
+)
+from wtforms.validators import AnyOf, DataRequired, Length, NumberRange, Optional
 
 
 class CreateOfficialRaceForm(FlaskForm):
@@ -25,6 +31,27 @@ class CreateOfficialRaceForm(FlaskForm):
         validators=[Optional()],
     )
     notes = TextAreaField("Notes", validators=[Optional(), Length(max=2000)])
+    # Race-day conditions (PR-G3). Optional so an organizer who hasn't
+    # decided yet can publish a race; the service-layer validator
+    # enforces the Snowy/Winter pairing when both are set.
+    race_season = SelectField(
+        "Season",
+        choices=[("", "—"), ("Spring", "Spring"), ("Summer", "Summer"),
+                 ("Autumn", "Autumn"), ("Winter", "Winter")],
+        validators=[Optional(), AnyOf(["", "Spring", "Summer", "Autumn", "Winter"])],
+    )
+    weather = SelectField(
+        "Weather",
+        choices=[("", "—"), ("Sunny", "Sunny"), ("Cloudy", "Cloudy"),
+                 ("Rainy", "Rainy"), ("Snowy", "Snowy")],
+        validators=[Optional(), AnyOf(["", "Sunny", "Cloudy", "Rainy", "Snowy"])],
+    )
+    ground_condition = SelectField(
+        "Ground",
+        choices=[("", "—"), ("Firm", "Firm"), ("Good", "Good"),
+                 ("Soft", "Soft"), ("Heavy", "Heavy")],
+        validators=[Optional(), AnyOf(["", "Firm", "Good", "Soft", "Heavy"])],
+    )
 
 
 class RoomCodeForm(FlaskForm):

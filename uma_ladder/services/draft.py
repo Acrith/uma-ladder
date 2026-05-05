@@ -537,6 +537,15 @@ def randomize_preset(
         raise
 
     match.selected_preset_id = chosen.id
+    # Roll race-day conditions at the same time the preset locks. Snowy
+    # is restricted to Winter inside the helper. Pass the same RNG so a
+    # deterministic test seed reproduces both selections together.
+    from . import track_conditions as track_conditions_service
+
+    season, weather, ground = track_conditions_service.roll_random(rng=rng)
+    match.race_season = season
+    match.weather = weather
+    match.ground_condition = ground
     match.status = DraftMatchStatus.UMA_BAN_PHASE
     db.session.commit()
     return match

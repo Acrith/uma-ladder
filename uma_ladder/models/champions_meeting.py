@@ -59,6 +59,12 @@ class ChampionsMeeting(db.Model):
         String(16), nullable=True
     )
 
+    # Race-day conditions (PR-G3). Nullable so existing rows from PR-G1
+    # don't fail the migration; admin form requires them on new entries.
+    race_season: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    weather: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    ground_condition: Mapped[str | None] = mapped_column(String(8), nullable=True)
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 

@@ -52,6 +52,11 @@ class OfficialRace(db.Model):
     )
     max_players: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Race-day conditions (PR-G3). Nullable so legacy rows still load;
+    # the organizer form encourages — but doesn't yet require — values.
+    race_season: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    weather: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    ground_condition: Mapped[str | None] = mapped_column(String(8), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

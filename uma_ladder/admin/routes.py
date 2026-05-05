@@ -407,6 +407,9 @@ def _build_cm_input(form) -> cm_service.CmInput | str:
         override_distance_meters=distance_override,
         override_distance_category=_opt("override_distance_category"),
         override_direction=_opt("override_direction"),
+        race_season=_opt("race_season"),
+        weather=_opt("weather"),
+        ground_condition=_opt("ground_condition"),
         notes=_opt("notes"),
         source_url=_opt("source_url"),
     )
@@ -440,6 +443,9 @@ def cm_new() -> object:
         except cm_service.UnknownPresetError:
             flash("Selected preset is no longer available.")
             return redirect(url_for("admin.cm_new"))
+        except cm_service.track_conditions_service.TrackConditionError as exc:
+            flash(str(exc))
+            return redirect(url_for("admin.cm_new"))
         flash(f"Champions Meeting '{cm.name}' created.")
         return redirect(url_for("admin.cm_list"))
     return render_template(
@@ -468,6 +474,9 @@ def cm_edit(cm_id: int) -> object:
             cm_service.update_cm(cm_id, result, by_user_id=current_user.id)
         except cm_service.UnknownPresetError:
             flash("Selected preset is no longer available.")
+            return redirect(url_for("admin.cm_edit", cm_id=cm_id))
+        except cm_service.track_conditions_service.TrackConditionError as exc:
+            flash(str(exc))
             return redirect(url_for("admin.cm_edit", cm_id=cm_id))
         flash("Champions Meeting updated.")
         return redirect(url_for("admin.cm_list"))

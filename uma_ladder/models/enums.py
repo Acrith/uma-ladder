@@ -22,6 +22,32 @@ class Direction(StrEnum):
     STRETCH = "Stretch"
 
 
+class RaceSeason(StrEnum):
+    """Game-side racing season — Spring/Summer/Autumn/Winter. Distinct
+    from `Season` (the SQLAlchemy model used for ladder windows)."""
+
+    SPRING = "Spring"
+    SUMMER = "Summer"
+    AUTUMN = "Autumn"
+    WINTER = "Winter"
+
+
+class Weather(StrEnum):
+    SUNNY = "Sunny"
+    CLOUDY = "Cloudy"
+    RAINY = "Rainy"
+    SNOWY = "Snowy"
+
+
+class GroundCondition(StrEnum):
+    """Track surface condition — drier → wetter."""
+
+    FIRM = "Firm"
+    GOOD = "Good"
+    SOFT = "Soft"
+    HEAVY = "Heavy"
+
+
 class PresetSource(StrEnum):
     G1_IMPORT = "g1_import"
     CUSTOM_BUILTIN = "custom_builtin"

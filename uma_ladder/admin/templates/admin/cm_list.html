@@ -59,6 +59,13 @@
                     {% if cm.effective_direction == 'Right' %}{{ chip("Clockwise", "amber") }}
                     {% elif cm.effective_direction == 'Left' %}{{ chip("Counterclockwise", "cyan") }}
                     {% else %}{{ chip(cm.effective_direction, "slate") }}{% endif %}
+                    {% if cm.race_season or cm.weather or cm.ground_condition %}
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        {% if cm.race_season %}{{ chip(cm.race_season, "slate") }}{% endif %}
+                        {% if cm.weather %}{{ chip(cm.weather, "cyan" if cm.weather == 'Sunny' else ("amber" if cm.weather == 'Cloudy' else ("violet" if cm.weather == 'Rainy' else "slate"))) }}{% endif %}
+                        {% if cm.ground_condition %}{{ chip(cm.ground_condition, "emerald" if cm.ground_condition == 'Firm' else ("cyan" if cm.ground_condition == 'Good' else ("amber" if cm.ground_condition == 'Soft' else "rose"))) }}{% endif %}
+                      </div>
+                    {% endif %}
                   </td>
                   <td class="px-4 py-2 text-right">
                     <div class="flex items-center justify-end gap-3 text-xs">

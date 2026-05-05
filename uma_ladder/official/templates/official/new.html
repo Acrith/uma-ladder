@@ -111,6 +111,25 @@
         </div>
       </div>
 
+      <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+        <p class="label-eyebrow">Race conditions <span class="ml-1 normal-case text-[10px] tracking-normal text-slate-500">(optional — declare if you've decided)</span></p>
+        <div class="mt-2 grid gap-3 md:grid-cols-3">
+          <div>
+            <label class="text-xs text-slate-400">{{ form.race_season.label.text }}</label>
+            {{ form.race_season(id="official-race-season", class="input-base mt-1") }}
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">{{ form.weather.label.text }}</label>
+            {{ form.weather(id="official-weather", class="input-base mt-1") }}
+            <p class="mt-1 text-[11px] text-slate-500">Snowy is Winter-only.</p>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">{{ form.ground_condition.label.text }}</label>
+            {{ form.ground_condition(class="input-base mt-1") }}
+          </div>
+        </div>
+      </div>
+
       <div>
         <label class="text-sm text-slate-300">{{ form.notes.label.text }}</label>
         {{ form.notes(class="input-base mt-1", rows=3) }}
@@ -170,6 +189,29 @@
         document.getElementById('pp-runners').innerHTML =
           chip('Max ' + opt.dataset.runners, 'slate');
       };
+    })();
+  </script>
+
+  <script>
+    // Snowy weather only in Winter — same UX as the CM admin form.
+    (function () {
+      var seasonEl = document.getElementById('official-race-season');
+      var weatherEl = document.getElementById('official-weather');
+      if (!seasonEl || !weatherEl) return;
+      var snowyOpt = Array.from(weatherEl.options).find(function (o) {
+        return o.value === 'Snowy';
+      });
+      if (!snowyOpt) return;
+      function sync() {
+        var winter = seasonEl.value === 'Winter';
+        snowyOpt.hidden = !winter;
+        snowyOpt.disabled = !winter;
+        if (!winter && weatherEl.value === 'Snowy') {
+          weatherEl.value = '';
+        }
+      }
+      seasonEl.addEventListener('change', sync);
+      sync();
     })();
   </script>
 {% endblock %}

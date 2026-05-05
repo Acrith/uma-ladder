@@ -57,6 +57,9 @@ class CreateRaceRequest:
     scheduled_at: datetime | None = None
     max_players: int | None = None
     notes: str | None = None
+    race_season: str | None = None
+    weather: str | None = None
+    ground_condition: str | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,13 @@ def create_race(req: CreateRaceRequest) -> OfficialRace:
     season = db.session.get(Season, req.season_id)
     if season is None:
         raise OfficialError(f"season {req.season_id} not found")
+    from . import track_conditions as track_conditions_service
+
+    race_season, weather, ground = track_conditions_service.normalize(
+        race_season=req.race_season,
+        weather=req.weather,
+        ground_condition=req.ground_condition,
+    )
     race = OfficialRace(
         season_id=req.season_id,
         preset_id=req.preset_id,
@@ -94,6 +104,9 @@ def create_race(req: CreateRaceRequest) -> OfficialRace:
         scheduled_at=req.scheduled_at,
         max_players=req.max_players,
         notes=req.notes,
+        race_season=race_season,
+        weather=weather,
+        ground_condition=ground,
     )
     db.session.add(race)
     db.session.commit()

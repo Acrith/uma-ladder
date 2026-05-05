@@ -90,6 +90,20 @@
                   <a href="{{ cm.source_url }}" target="_blank" rel="noopener" class="text-cyan-300/80 hover:text-cyan-200">source ↗</a>
                 {% endif %}
               </p>
+              {% if cm.race_season or cm.weather or cm.ground_condition %}
+                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                  {% if cm.race_season %}<span class="rounded-full border border-slate-700 px-2 py-0.5 text-slate-300">{{ cm.race_season }}</span>{% endif %}
+                  {% if cm.weather %}
+                    {% set weather_icon = {'Sunny': '☀', 'Cloudy': '☁', 'Rainy': '☂', 'Snowy': '❄'}[cm.weather] %}
+                    {% set weather_class = {'Sunny': 'text-amber-300', 'Cloudy': 'text-slate-300', 'Rainy': 'text-cyan-300', 'Snowy': 'text-sky-200'}[cm.weather] %}
+                    <span class="rounded-full border border-slate-700 px-2 py-0.5 {{ weather_class }}">{{ weather_icon }} {{ cm.weather }}</span>
+                  {% endif %}
+                  {% if cm.ground_condition %}
+                    {% set ground_class = {'Firm': 'text-emerald-300', 'Good': 'text-cyan-300', 'Soft': 'text-amber-300', 'Heavy': 'text-rose-300'}[cm.ground_condition] %}
+                    <span class="rounded-full border border-slate-700 px-2 py-0.5 {{ ground_class }}">{{ cm.ground_condition }}</span>
+                  {% endif %}
+                </p>
+              {% endif %}
             </li>
           {% endfor %}
         </ul>

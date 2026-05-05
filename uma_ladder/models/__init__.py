@@ -12,16 +12,19 @@ from .enums import (
     DistanceCategory,
     DraftBanType,
     DraftMatchStatus,
+    GroundCondition,
     NotificationEvent,
     NotificationStatus,
     NotificationTarget,
     OcrParseStatus,
     OfficialRaceStatus,
     PresetSource,
+    RaceSeason,
     RegistrationStatus,
     SeasonStatus,
     Surface,
     UploadPurpose,
+    Weather,
 )
 from .notifications import DiscordNotificationAttempt
 from .official_races import (
@@ -53,6 +56,7 @@ __all__ = [
     "DraftMatchBan",
     "DraftMatchStatus",
     "DraftRaceResult",
+    "GroundCondition",
     "NotificationEvent",
     "NotificationStatus",
     "NotificationTarget",
@@ -65,6 +69,7 @@ __all__ = [
     "OfficialRaceStatus",
     "PresetSource",
     "RacePreset",
+    "RaceSeason",
     "RegistrationStatus",
     "Role",
     "Season",
@@ -78,4 +83,5 @@ __all__ = [
     "UploadedImage",
     "User",
     "UserProfile",
+    "Weather",
 ]

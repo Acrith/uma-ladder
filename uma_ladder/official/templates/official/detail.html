@@ -12,6 +12,16 @@
         {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
         {% if race.preset %}{{ chip(race.preset.name, "violet") }}{% endif %}
         {% if race.scheduled_at %}{{ chip("⏰ " + race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC'), "amber") }}{% endif %}
+        {% if race.race_season %}{{ chip(race.race_season, "slate") }}{% endif %}
+        {% if race.weather %}
+          {% set weather_tone = {'Sunny': 'amber', 'Cloudy': 'slate', 'Rainy': 'cyan', 'Snowy': 'cyan'}[race.weather] %}
+          {% set weather_icon = {'Sunny': '☀', 'Cloudy': '☁', 'Rainy': '☂', 'Snowy': '❄'}[race.weather] %}
+          {{ chip(weather_icon ~ " " ~ race.weather, weather_tone) }}
+        {% endif %}
+        {% if race.ground_condition %}
+          {% set ground_tone = {'Firm': 'emerald', 'Good': 'cyan', 'Soft': 'amber', 'Heavy': 'rose'}[race.ground_condition] %}
+          {{ chip(race.ground_condition, ground_tone) }}
+        {% endif %}
       </div>
     </div>
     {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}

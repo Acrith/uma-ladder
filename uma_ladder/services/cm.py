@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from ..extensions import db
 from ..models import ChampionsMeeting, RacePreset
+from . import track_conditions as track_conditions_service
 
 
 class CmError(Exception):
@@ -40,6 +41,9 @@ class CmInput:
     override_distance_meters: int | None = None
     override_distance_category: str | None = None
     override_direction: str | None = None
+    race_season: str | None = None
+    weather: str | None = None
+    ground_condition: str | None = None
     notes: str | None = None
     source_url: str | None = None
 
@@ -53,6 +57,11 @@ def _validate_preset(preset_id: int) -> RacePreset:
 
 def create_cm(payload: CmInput, *, by_user_id: int | None) -> ChampionsMeeting:
     _validate_preset(payload.preset_id)
+    season, weather, ground = track_conditions_service.normalize(
+        race_season=payload.race_season,
+        weather=payload.weather,
+        ground_condition=payload.ground_condition,
+    )
     cm = ChampionsMeeting(
         name=payload.name.strip(),
         starts_on=payload.starts_on,
@@ -63,6 +72,9 @@ def create_cm(payload: CmInput, *, by_user_id: int | None) -> ChampionsMeeting:
         override_distance_meters=payload.override_distance_meters,
         override_distance_category=payload.override_distance_category,
         override_direction=payload.override_direction,
+        race_season=season,
+        weather=weather,
+        ground_condition=ground,
         notes=payload.notes,
         source_url=payload.source_url,
         created_by_user_id=by_user_id,
@@ -80,6 +92,11 @@ def update_cm(
     if cm is None:
         raise CmError(f"unknown cm id {cm_id}")
     _validate_preset(payload.preset_id)
+    season, weather, ground = track_conditions_service.normalize(
+        race_season=payload.race_season,
+        weather=payload.weather,
+        ground_condition=payload.ground_condition,
+    )
     cm.name = payload.name.strip()
     cm.starts_on = payload.starts_on
     cm.ends_on = payload.ends_on
@@ -89,6 +106,9 @@ def update_cm(
     cm.override_distance_meters = payload.override_distance_meters
     cm.override_distance_category = payload.override_distance_category
     cm.override_direction = payload.override_direction
+    cm.race_season = season
+    cm.weather = weather
+    cm.ground_condition = ground
     cm.notes = payload.notes
     cm.source_url = payload.source_url
     db.session.commit()

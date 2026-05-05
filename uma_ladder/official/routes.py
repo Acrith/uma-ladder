@@ -17,6 +17,7 @@ from ..services import ocr as ocr_service
 from ..services import official as official_service
 from ..services import presets as presets_service
 from ..services import seasons as seasons_service
+from ..services import track_conditions as track_conditions_service
 from ..services.permissions import min_role_required
 from .forms import (
     CreateOfficialRaceForm,
@@ -98,9 +99,14 @@ def new() -> object:
                     scheduled_at=scheduled_at,
                     max_players=form.max_players.data or None,
                     notes=form.notes.data or None,
+                    race_season=form.race_season.data or None,
+                    weather=form.weather.data or None,
+                    ground_condition=form.ground_condition.data or None,
                 )
             )
         except official_service.OfficialError as exc:
+            flash(str(exc))
+        except track_conditions_service.TrackConditionError as exc:
             flash(str(exc))
         else:
             return redirect(url_for("official.detail", race_id=race.id))

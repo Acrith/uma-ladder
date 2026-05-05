@@ -35,6 +35,12 @@ class DraftMatch(db.Model):
     selected_preset_id: Mapped[int | None] = mapped_column(
         ForeignKey("race_presets.id", ondelete="SET NULL"), nullable=True
     )
+    # Race-day conditions (PR-G3). Rolled at the same time as the
+    # preset, so they're always set together (or both still NULL on
+    # legacy / pre-randomization matches).
+    race_season: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    weather: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    ground_condition: Mapped[str | None] = mapped_column(String(8), nullable=True)
     host_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     opponent_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     room_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
