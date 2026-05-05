@@ -133,15 +133,19 @@ def serve_avatar(image_id: int) -> object:
 
 @bp.get("/<username>")
 def public(username: str) -> object:
+    from ..services import draft as draft_service
+
     user = profiles_service.find_user_by_username(username)
     if user is None:
         abort(404)
     profile = profiles_service.get_or_create_profile(user)
     history = profiles_service.list_recent_history_for_user(user.id, limit=10)
+    elo = draft_service.elo_summary_for_user(user.id)
     return render_template(
         "profiles/public.html",
         user=user,
         profile=profile,
         oshi_image=profiles_service.resolve_oshi_image(profile),
         history=history,
+        elo=elo,
     )

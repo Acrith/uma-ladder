@@ -197,6 +197,107 @@ def test_serve_avatar_refuses_non_avatar_uploads(
     assert resp.status_code == 404
 
 
+def test_elo_summary_returns_default_for_user_with_no_matches(
+    app: Flask, make_user
+) -> None:
+    user = make_user(username="alice", role=Role.USER)
+    with app.app_context():
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+        from uma_ladder.services import draft as draft_service
+        summary = draft_service.elo_summary_for_user(user["id"])
+        assert summary is not None
+        assert summary.rating == 1000  # DEFAULT_RATING
+        assert summary.last_delta == 0
+        assert summary.match_count == 0
+
+
+def test_elo_summary_reflects_latest_change(app: Flask, make_user) -> None:
+    user = make_user(username="alice", role=Role.USER)
+    opp = make_user(username="bob", role=Role.USER)
+    with app.app_context():
+        from uma_ladder.models import DraftEloChange
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+        # Synthesize two changes — services-level submit_results would
+        # write these via the standard flow, but for a pure read test
+        # we don't need the full match scaffolding.
+        db.session.add_all([
+            DraftEloChange(
+                draft_match_id=1,
+                season_id=s.id,
+                user_id=user["id"],
+                opponent_user_id=opp["id"],
+                rating_before=1000,
+                rating_after=1016,
+                delta=16,
+                outcome=1.0,
+            ),
+            DraftEloChange(
+                draft_match_id=2,
+                season_id=s.id,
+                user_id=user["id"],
+                opponent_user_id=opp["id"],
+                rating_before=1016,
+                rating_after=1003,
+                delta=-13,
+                outcome=0.0,
+            ),
+        ])
+        db.session.commit()
+        from uma_ladder.services import draft as draft_service
+        summary = draft_service.elo_summary_for_user(user["id"])
+        assert summary.rating == 1003
+        assert summary.last_delta == -13
+        assert summary.match_count == 2
+
+
+def test_elo_summary_returns_none_when_no_active_season(
+    app: Flask, make_user
+) -> None:
+    user = make_user(username="alice", role=Role.USER)
+    with app.app_context():
+        from uma_ladder.services import draft as draft_service
+        # No season seeded — get_active_season returns None.
+        assert draft_service.elo_summary_for_user(user["id"]) is None
+
+
+def test_public_profile_renders_elo_card(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="alice", role=Role.USER)
+    with app.app_context():
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+    resp = client.get("/profiles/alice")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Draft Elo" in body
+    assert "1000" in body
+    assert "Provisional rating" in body
+
+
 def test_history_combines_draft_and_official_in_recency_order(
     app: Flask, make_user
 ) -> None:

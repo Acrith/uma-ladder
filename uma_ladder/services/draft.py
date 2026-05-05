@@ -750,6 +750,59 @@ def current_rating(user_id: int, season_id: int) -> int:
 
 
 @dataclass(frozen=True)
+class EloSummary:
+    """Compact view of a user's Draft Elo state for profile rendering.
+
+    `rating` is the current rating (DEFAULT_RATING if no matches yet),
+    `last_delta` is signed (+ or -) from the most recent change, and
+    `match_count` is the total number of changes recorded for the user
+    in the season — i.e. matches played that produced an Elo update.
+    """
+
+    rating: int
+    last_delta: int
+    match_count: int
+
+
+def elo_summary_for_user(
+    user_id: int, *, season_id: int | None = None
+) -> EloSummary | None:
+    """Resolve a user's current Elo + last delta + match count.
+
+    `season_id=None` means "use the active season" — returns None when
+    no season is active (we don't have a coherent rating to show in
+    that case). Use this from profile / dashboard read paths.
+    """
+    if season_id is None:
+        from .seasons import get_active_season
+
+        season = get_active_season()
+        if season is None:
+            return None
+        season_id = season.id
+
+    latest = db.session.scalars(
+        select(DraftEloChange)
+        .where(DraftEloChange.user_id == user_id)
+        .where(DraftEloChange.season_id == season_id)
+        .order_by(DraftEloChange.id.desc())
+        .limit(1)
+    ).first()
+    if latest is None:
+        return EloSummary(rating=DEFAULT_RATING, last_delta=0, match_count=0)
+    count = db.session.scalar(
+        select(func.count(DraftEloChange.id))
+        .where(DraftEloChange.user_id == user_id)
+        .where(DraftEloChange.season_id == season_id)
+    ) or 0
+    return EloSummary(
+        rating=latest.rating_after,
+        last_delta=latest.delta,
+        match_count=count,
+    )
+
+
+@dataclass(frozen=True)
 class EloLadderRow:
     user_id: int
     username: str

@@ -109,6 +109,35 @@
     </div>
   </article>
 
+  {% if elo %}
+    <section class="mt-6">
+      <div class="surface-card p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="label-eyebrow">Draft Elo</p>
+            <p class="mt-1 flex items-baseline gap-2">
+              <span class="text-3xl font-semibold text-cyan-300">{{ elo.rating }}</span>
+              {% if elo.last_delta > 0 %}
+                <span class="text-xs font-medium text-emerald-300">▲ {{ elo.last_delta }}</span>
+              {% elif elo.last_delta < 0 %}
+                <span class="text-xs font-medium text-rose-300">▼ {{ elo.last_delta|abs }}</span>
+              {% else %}
+                <span class="text-xs text-slate-500">— no recent change</span>
+              {% endif %}
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+              {% if elo.match_count == 0 %}
+                Provisional rating · no matches played yet
+              {% else %}
+                {{ elo.match_count }} match{{ '' if elo.match_count == 1 else 'es' }} this season
+              {% endif %}
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
   {% if history %}
     <section class="mt-6">
       <div class="surface-card p-5">
