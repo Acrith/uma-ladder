@@ -302,3 +302,108 @@ def test_build_factory_called_through_get_provider(app: Flask) -> None:
         set_vision_transport(canned)
         provider = build_google_vision_provider()
         assert provider.transport is canned
+
+
+# ---------- Stat-screen parsing ----------
+
+
+def test_extracts_stats_from_stat_screen_layout() -> None:
+    """A typical Uma stat screen lists Speed/Stamina/Power/Guts/Wisdom
+    each with a number on the same row. Parser pairs them up."""
+    ann = _annotation(
+        [
+            [_word("Speed", 10, 10), _word("1100", 100, 10)],
+            [_word("Stamina", 10, 50), _word("900", 100, 50)],
+            [_word("Power", 10, 90), _word("1000", 100, 90)],
+            [_word("Guts", 10, 130), _word("600", 100, 130)],
+            [_word("Wisdom", 10, 170), _word("800", 100, 170)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert parse.stats == {
+        "speed": 1100,
+        "stamina": 900,
+        "power": 1000,
+        "guts": 600,
+        "wisdom": 800,
+    }
+
+
+def test_stats_fall_through_to_next_line_when_label_row_has_no_number() -> None:
+    """Some game UIs put the label above the value rather than beside it."""
+    ann = _annotation(
+        [
+            [_word("Speed", 10, 10)],
+            [_word("1100", 10, 50)],
+            [_word("Stamina", 10, 90)],
+            [_word("900", 10, 130)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert parse.stats == {"speed": 1100, "stamina": 900}
+
+
+def test_stats_recognise_wit_alias_for_wisdom() -> None:
+    ann = _annotation(
+        [[_word("Wit", 10, 10), _word("750", 100, 10)]]
+    )
+    parse = _parse_annotation(ann)
+    assert parse.stats == {"wisdom": 750}
+
+
+def test_skill_candidates_skip_stat_rows_and_placements() -> None:
+    """Stat label/value rows + placement rows shouldn't pollute the
+    skill candidate list. Real skill-name rows pass through."""
+    ann = _annotation(
+        [
+            [_word("Speed", 10, 10), _word("1100", 100, 10)],
+            [_word("Warning", 10, 50), _word("Shot!", 100, 50)],
+            [_word("Hot", 10, 90), _word("Blooded", 50, 90), _word("Amigo", 150, 90)],
+            [_word("1", 10, 130), _word("Special", 40, 130), _word("Week", 130, 130)],
+            [_word("3500", 10, 170)],  # pure-number row
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert "Warning Shot!" in parse.skills
+    assert "Hot Blooded Amigo" in parse.skills
+    # Placement / pure-number / stat rows excluded.
+    assert not any("Special" in s for s in parse.skills)
+    assert not any("3500" in s for s in parse.skills)
+    assert not any("Speed" in s for s in parse.skills)
+
+
+def test_skill_candidates_dedupe_repeats() -> None:
+    ann = _annotation(
+        [
+            [_word("Warning", 10, 10), _word("Shot!", 100, 10)],
+            [_word("Warning", 10, 50), _word("Shot!", 100, 50)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert parse.skills == ["Warning Shot!"]
+
+
+def test_skill_candidates_drop_overlong_lines() -> None:
+    """Misclustered paragraph-length lines aren't useful skill candidates."""
+    long_text = "x" * 100
+    ann = _annotation([[_word(long_text, 10, 10)]])
+    parse = _parse_annotation(ann)
+    assert long_text not in parse.skills
+
+
+def test_placement_screen_parse_unchanged_by_stat_extraction() -> None:
+    """Sanity: a pure result-summary screenshot still produces the
+    same row output as before. Stats are empty (no labels detected)
+    and skills are empty too, since every line begins with a placement
+    digit and gets filtered out as a non-skill row."""
+    ann = _annotation(
+        [
+            [_word("1", 10, 10), _word("Special", 50, 10), _word("Week", 130, 10)],
+            [_word("2", 10, 60), _word("Gold", 50, 60), _word("Ship", 110, 60)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert parse.rows[0]["placement"] == 1
+    assert parse.rows[0]["uma_name"] == "Special Week"
+    assert parse.stats == {}
+    assert parse.skills == []

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import statistics
 import urllib.error
 import urllib.request
@@ -38,6 +39,23 @@ from .ocr import OcrParse, OcrProvider
 VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate"
 _PLACEMENT_MIN = 1
 _PLACEMENT_MAX = 30  # generous upper bound for any future race format
+
+# Stat-screen detection: lowercased labels we recognise as Uma stats.
+# The label appears once per row; the value is the closest plausible
+# number on the same row (or directly below).
+_STAT_LABELS: dict[str, str] = {
+    "speed": "speed",
+    "stamina": "stamina",
+    "power": "power",
+    "guts": "guts",
+    "wisdom": "wisdom",
+    "wit": "wisdom",   # JP localisation often renders Wisdom as "Wit"
+}
+
+# Stat values cap at 1200 in-game (raw) and ~2000 with bonuses; reject
+# numbers wildly outside that range so a placement digit doesn't sneak in.
+_STAT_VALUE_MIN = 1
+_STAT_VALUE_MAX = 9999
 
 
 # ---------- Transport ----------
@@ -227,9 +245,11 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
             rows.append([w])
 
     parsed_rows: list[dict[str, Any]] = []
+    line_texts: list[str] = []
     for row in rows:
         row.sort(key=lambda w: w["x"])
         line = " ".join(w["text"] for w in row)
+        line_texts.append(line)
         avg_conf = (
             sum(w.get("confidence", 0.0) for w in row) / len(row) if row else 0.0
         )
@@ -257,8 +277,90 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
         if parsed_rows
         else 0.0
     )
+
+    stats = _extract_stats(line_texts)
+    skill_candidates = _extract_skill_candidates(line_texts, stats)
+
     return OcrParse(
         raw_text=raw_text,
         rows=parsed_rows,
+        stats=stats,
+        skills=skill_candidates,
         confidence={"overall": round(overall, 3)},
     )
+
+
+_STAT_VALUE_RE = re.compile(r"\b(\d{1,4})\b")
+_STAT_LABEL_RE = re.compile(
+    r"\b(" + "|".join(re.escape(lbl) for lbl in _STAT_LABELS) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_stats(line_texts: list[str]) -> dict[str, int]:
+    """Pair each Speed/Stamina/Power/Guts/Wisdom label with the nearest
+    plausible number on the same line. Falls back to scanning the next
+    line when the label row has no number (some game UIs put the label
+    above the value).
+    """
+    stats: dict[str, int] = {}
+    for i, line in enumerate(line_texts):
+        for match in _STAT_LABEL_RE.finditer(line):
+            key = _STAT_LABELS[match.group(1).lower()]
+            if key in stats:
+                continue
+            tail = line[match.end():]
+            value = _first_int_in_range(tail)
+            if value is None and i + 1 < len(line_texts):
+                value = _first_int_in_range(line_texts[i + 1])
+            if value is not None:
+                stats[key] = value
+    return stats
+
+
+def _first_int_in_range(s: str) -> int | None:
+    for raw in _STAT_VALUE_RE.findall(s):
+        n = int(raw)
+        if _STAT_VALUE_MIN <= n <= _STAT_VALUE_MAX:
+            return n
+    return None
+
+
+def _extract_skill_candidates(
+    line_texts: list[str], stats: dict[str, int]
+) -> list[str]:
+    """Return clustered lines that look like skill names — i.e. drop
+    pure-number rows, stat-label rows, and lines that begin with a
+    placement digit. The fuzzy matcher in services.official is the
+    authority on what's a real skill; the organiser confirms before save.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for line in line_texts:
+        text = line.strip()
+        if not text:
+            continue
+        # Drop placement rows ("1 Special Week", "2 Silence Suzuka").
+        first = text.split(maxsplit=1)[0].rstrip(".")
+        if first.isdigit():
+            n = int(first)
+            if _PLACEMENT_MIN <= n <= _PLACEMENT_MAX:
+                continue
+        # Drop pure-number rows.
+        if text.replace(",", "").replace(".", "").isdigit():
+            continue
+        # Drop stat-label rows when we already extracted a value for that
+        # label — keeps the candidate list short and the organiser's
+        # editor focused on real skill candidates.
+        if stats and _STAT_LABEL_RE.search(text):
+            continue
+        # Skill names are typically short. Anything > 80 chars is almost
+        # certainly a misclustered paragraph; skip rather than confuse
+        # the matcher with sentence-length raw OCR text.
+        if len(text) > 80:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out

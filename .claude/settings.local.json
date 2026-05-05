@@ -23,7 +23,8 @@
       "Bash(FLASK_APP=uma_ladder FLASK_CONFIG=development uv run flask uma fetch-gametora-skills)",
       "Bash(FLASK_APP=uma_ladder FLASK_CONFIG=development uv run flask uma seed-skills)",
       "Bash(curl -sI -A \"uma-ladder/0.1\" \"https://gametora.com/images/umamusume/skill_icons/utx_ico_skill_20013.png\")",
-      "Bash(curl -sI -A \"uma-ladder/0.1\" \"https://gametora.com/images/umamusume/skill_icons/utx_ico_skill_20011.png\")"
+      "Bash(curl -sI -A \"uma-ladder/0.1\" \"https://gametora.com/images/umamusume/skill_icons/utx_ico_skill_20011.png\")",
+      "Bash(command -v tesseract)"
     ]
   }
 }
