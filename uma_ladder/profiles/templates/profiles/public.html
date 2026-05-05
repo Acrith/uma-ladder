@@ -108,12 +108,9 @@
           </p>
         {% endif %}
 
-        {# Hero stat tile grid — placeholders for Official podiums /
-           Best track / Season rank are deferred until their backing
-           services exist. For now the row holds just Draft Elo
-           (real data) at a constrained width so it doesn't stretch
-           full-bleed. The grid scaffold stays so future tiles drop
-           in without re-flowing the column. #}
+        {# Hero stat tile grid — Best Track tile still deferred until
+           PR-A4 (will reuse track_strengths_for_user). The other three
+           are real now. #}
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div class="rounded-xl border border-cyan-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
             <p class="label-eyebrow">Draft Elo</p>
@@ -133,10 +130,53 @@
               {% endif %}
             </p>
           </div>
-          {# Slots reserved for: Official podiums, Best track, Season
-             rank. Re-add once services.official.podium_counts_for_user,
-             services.draft.track_strengths_for_user, and a per-season
-             rank lookup are wired. #}
+
+          {# Official podiums — top 1/2/3 finish counts in the active
+             season. Falls back to '0 / 0 / 0' so the tile doesn't
+             vanish on a brand new user. #}
+          <div class="rounded-xl border border-amber-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
+            <p class="label-eyebrow">Official podiums</p>
+            <p class="mt-1 text-2xl font-semibold text-amber-300">
+              {{ standing.top1 if standing else 0 }}
+              <span class="text-slate-600">/</span>
+              {{ standing.top2 if standing else 0 }}
+              <span class="text-slate-600">/</span>
+              {{ standing.top3 if standing else 0 }}
+            </p>
+            <p class="mt-0.5 text-[11px] text-slate-500">
+              {% if standing %}
+                {{ standing.races_entered }} race{{ '' if standing.races_entered == 1 else 's' }} this season
+              {% elif active_season %}
+                Top 1 / 2 / 3 this season
+              {% else %}
+                No active season
+              {% endif %}
+            </p>
+          </div>
+
+          {# Best track — placeholder until PR-A4 wires it from
+             track_strengths_for_user.best_distance/.best_surface. #}
+          <div class="rounded-xl border border-violet-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
+            <p class="label-eyebrow">Best track</p>
+            <p class="mt-1 text-base font-semibold text-slate-300">—</p>
+            <p class="mt-0.5 text-[11px] text-slate-500">Coming soon</p>
+          </div>
+
+          {# Season rank — 1-based ladder position in the active season.
+             ``standing.rank`` only exists when the user has a row in
+             the season's ladder (i.e. has raced at least once). #}
+          <div class="rounded-xl border border-fuchsia-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
+            <p class="label-eyebrow">Season rank</p>
+            {% if standing %}
+              <p class="mt-1 text-2xl font-semibold text-fuchsia-300">#{{ standing.rank }}</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">of {{ standing.total_players }} · {{ standing.total_points }} pts</p>
+            {% else %}
+              <p class="mt-1 text-2xl font-semibold text-slate-300">#—</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">
+                {% if active_season %}No official races yet{% else %}No active season{% endif %}
+              </p>
+            {% endif %}
+          </div>
         </div>
 
       </div>

@@ -344,6 +344,48 @@ def season_ladder(season_id: int, *, limit: int | None = None) -> list[LadderRow
     ]
 
 
+@dataclass(frozen=True)
+class SeasonStanding:
+    """Where a user sits on the season's official ladder + their podium
+    counts. ``rank`` is 1-based. ``total_players`` lets the UI render
+    'rank #X of Y' for context."""
+
+    rank: int
+    total_players: int
+    top1: int
+    top2: int
+    top3: int
+    races_entered: int
+    total_points: int
+
+
+def season_standing_for_user(
+    user_id: int, season_id: int
+) -> SeasonStanding | None:
+    """Reuses :func:`season_ladder` and walks the result to find the
+    user's row + position. Returns ``None`` when the user hasn't raced
+    in the given season — caller decides whether that means a 'no data'
+    tile or hiding entirely.
+
+    O(N) over the player count; fine for a small community ladder. If
+    we ever scale we can replace with a windowed SQL query (RANK()
+    OVER PARTITION BY).
+    """
+    rows = season_ladder(season_id)
+    for i, r in enumerate(rows):
+        if r.user_id == user_id:
+            return SeasonStanding(
+                rank=i + 1,
+                total_players=len(rows),
+                top1=r.top1,
+                top2=r.top2,
+                top3=r.top3,
+                races_entered=r.races_entered,
+                total_points=r.total_points,
+            )
+    return None
+
+
 def list_races(*, season_id: int | None = None) -> Sequence[OfficialRace]:
     stmt = select(OfficialRace)
     if season_id is not None:

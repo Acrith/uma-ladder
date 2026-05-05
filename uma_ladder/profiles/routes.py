@@ -167,6 +167,18 @@ def public(username: str) -> object:
     )
     track_strengths = profiles_service.track_strengths_for_user(user.id)
     elo = draft_service.elo_summary_for_user(user.id)
+    # Active-season standing for the hero Official-podiums + Season-rank
+    # tiles. Requires an active season; otherwise both tiles render in
+    # their "no active season" empty states.
+    from ..services import official as official_service
+    from ..services import seasons as seasons_service
+
+    active_season = seasons_service.get_active_season()
+    standing = (
+        official_service.season_standing_for_user(user.id, active_season.id)
+        if active_season is not None
+        else None
+    )
     # Best-effort uma.moe enrichment when friend_code is set. Returns
     # None for missing code / 404 / network error / malformed JSON —
     # the template just doesn't render the card in that case.
@@ -183,5 +195,7 @@ def public(username: str) -> object:
         most_used_draft=most_used_draft,
         track_strengths=track_strengths,
         elo=elo,
+        active_season=active_season,
+        standing=standing,
         trainer=trainer,
     )
