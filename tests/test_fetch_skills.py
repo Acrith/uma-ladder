@@ -108,12 +108,32 @@ def test_coerce_no_image_url_when_icon_id_missing() -> None:
     assert s.image_url is None
 
 
-def test_coerce_prefers_endesc_over_machine_translated_desc_en() -> None:
+def test_coerce_prefers_global_desc_en_over_endesc() -> None:
+    """`desc_en` is the polished Global EN copy; `endesc` is an older
+    JP-EN rendering. Prefer the Global text — falls back to endesc only
+    when desc_en is missing."""
     s = _coerce_skill(
-        _row(endesc="curated EN copy", desc_en="machine translated")
+        _row(desc_en="Global EN copy", endesc="JP-EN fallback")
     )
     assert s is not None
-    assert s.description_en == "curated EN copy"
+    assert s.description_en == "Global EN copy"
+
+
+def test_coerce_falls_back_to_endesc_when_desc_en_missing() -> None:
+    s = _coerce_skill(_row(desc_en=None, endesc="Only fallback available"))
+    assert s is not None
+    assert s.description_en == "Only fallback available"
+
+
+def test_coerce_prefers_global_name_en_over_enname() -> None:
+    """`name_en` is the Global localisation (e.g. "Professor of
+    Curvature"); `enname` is a JP-romanised label that often diverges
+    (e.g. "Archline Professor"). Prefer the Global name."""
+    s = _coerce_skill(
+        _row(name_en="Professor of Curvature", enname="Archline Professor")
+    )
+    assert s is not None
+    assert s.name_en == "Professor of Curvature"
 
 
 # ---------- fetch_skills ----------

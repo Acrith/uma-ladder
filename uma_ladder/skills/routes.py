@@ -4,7 +4,8 @@ from flask import Blueprint, render_template, request
 from sqlalchemy import func, select
 
 from ..extensions import db
-from ..models import UmaSkill
+from ..models import Role, UmaSkill
+from ..services.permissions import min_role_required
 
 bp = Blueprint("skills", __name__, template_folder="templates")
 
@@ -12,6 +13,7 @@ PAGE_SIZE = 60
 
 
 @bp.get("/")
+@min_role_required(Role.ORGANIZER)
 def index() -> object:
     page = max(1, request.args.get("page", 1, type=int))
     q = (request.args.get("q") or "").strip()

@@ -688,7 +688,11 @@ def _coerce_skill(
     machine-translated and noisier, so prefer endesc for display.
     """
     skill_id = raw.get("id")
-    name_en = raw.get("enname") or raw.get("name_en")
+    # Prefer `name_en` (the polished Global EN localisation) over
+    # `enname` (a JP-romanised label that diverges for many skills, e.g.
+    # "Archline Professor" vs the Global "Professor of Curvature").
+    # `enname` is the fallback only when name_en is missing.
+    name_en = raw.get("name_en") or raw.get("enname")
     if not isinstance(skill_id, int) or not name_en:
         return None
     char = raw.get("char")
@@ -698,7 +702,9 @@ def _coerce_skill(
         gametora_id=skill_id,
         name_en=name_en,
         name_jp=raw.get("jpname") or raw.get("name_jp"),
-        description_en=raw.get("endesc") or raw.get("desc_en"),
+        # Same logic for descriptions: `desc_en` is the curated Global
+        # copy, `endesc` is the older / less polished JP-EN version.
+        description_en=raw.get("desc_en") or raw.get("endesc"),
         description_jp=raw.get("jpdesc") or raw.get("desc_jp"),
         icon_id=icon_id,
         image_url=_skill_image_url(icon_id),
