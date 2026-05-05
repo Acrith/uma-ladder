@@ -15,6 +15,18 @@
     Edit anything OCR got wrong, then save. Skill names are matched against the catalogue case-insensitively — anything that doesn't match is still kept as raw text so you can correct the spelling.
   </p>
 
+  {% if attempt.status == 'failed' %}
+    <div class="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/5 p-3">
+      <p class="text-sm font-semibold text-rose-200">⚠ OCR failed</p>
+      <p class="mt-1 text-xs text-rose-100/80">
+        {{ attempt.error_message or 'The provider rejected the image or returned an unparseable response.' }}
+      </p>
+      <p class="mt-2 text-xs text-slate-400">
+        Fill in stats + skills manually below — the screenshot stays attached for reference.
+      </p>
+    </div>
+  {% endif %}
+
   <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
     {% call card(class="p-3") %}
       <p class="label-eyebrow">Source screenshot</p>

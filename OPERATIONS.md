@@ -62,6 +62,59 @@ One Vision API request per uploaded screenshot (no per-feature
 multiplier — we use only `DOCUMENT_TEXT_DETECTION`). Confirmation /
 re-edits don't re-call the API.
 
+### Smoke-testing the configured provider
+
+Before real races flow through the UI, verify the pipeline against
+a local screenshot:
+
+```bash
+flask uma ocr-test ~/screenshots/result.png
+flask uma ocr-test ~/screenshots/stats.png --provider google_vision
+```
+
+Reads the configured provider (or the `--provider` override), prints
+parsed rows / stats / skills / confidence. Doesn't write to the DB,
+so it's safe to run repeatedly. Use it to:
+
+- Confirm the API key + IP restriction work after deploy.
+- Compare `mock` vs `google_vision` against the same image to see
+  what fields the parser is finding.
+- Triage why a real screenshot didn't parse the way you expected
+  before opening the UI flow.
+
+### Troubleshooting
+
+**`PERMISSION_DENIED: Cloud Vision API has not been used`** — enable
+the API in the GCP console (`APIs & Services → Library → Cloud
+Vision API → Enable`).
+
+**`API key not valid`** — verify `GOOGLE_VISION_API_KEY` env var is
+set and the key still exists in the GCP console. Cloud Run / Heroku
+deploys: confirm the env var made it through the runtime, not just
+the build step.
+
+**`Requests from referer / IP blocked`** — your key's *Application
+restrictions* don't include the server's egress IP. The key needs to
+be reachable *from the server*, not from a browser; "HTTP referrers"
+is the wrong restriction type for our use case.
+
+**Empty / degenerate parses on a clear screenshot** — the
+`fullTextAnnotation` block can come back missing if the image is too
+small. Vision wants ≥ ~640px on the long side for reliable detection
+on game UIs. Re-take the screenshot at native game resolution; don't
+downscale.
+
+**Image-too-large** — Vision rejects > 20 MB body (after base64
+encoding, so ~15 MB raw). Stat screenshots from a phone may exceed
+this. The OCR step page exposes the upstream `error_message` inline
+so you'll see this clearly when it happens.
+
+**Step page is blank after upload** — check
+`/notifications` (admin role) for the OcrParseAttempt row by id; its
+`error_message` and `raw_text` fields capture what Vision actually
+returned. Or run `flask uma ocr-test` against the same screenshot
+locally for a faster feedback loop.
+
 ## Discord notifications
 
 Each notification target maps to a webhook URL via env var. Without

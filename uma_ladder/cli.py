@@ -270,5 +270,66 @@ def cmd_seed_skills(file_path: Path | None, prune_missing: bool) -> None:
     )
 
 
+@uma_cli.command("ocr-test")
+@click.argument(
+    "image_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--provider",
+    type=str,
+    default=None,
+    help=(
+        "Override OCR_PROVIDER for this single run. Useful for comparing "
+        "manual / mock / google_vision against the same image."
+    ),
+)
+def cmd_ocr_test(image_path: Path, provider: str | None) -> None:
+    """Smoke-test the configured OCR provider against a local image.
+
+    Prints structured output (rows / stats / skills / confidence) so
+    you can verify Google Vision is producing sensible results before
+    real races flow through the UI. Does NOT write to the database —
+    no UploadedImage row, no OcrParseAttempt row, no commits.
+
+    Example:
+        flask uma ocr-test ~/screenshots/result.png
+        flask uma ocr-test ~/screenshots/stats.png --provider google_vision
+    """
+    from flask import current_app
+
+    from .services import ocr as ocr_service
+
+    if provider is not None:
+        current_app.config["OCR_PROVIDER"] = provider
+
+    chosen = ocr_service.get_provider()
+    click.echo(f"ocr-test: provider={chosen.name} image={image_path}")
+
+    try:
+        parse = chosen.parse(image_path)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"ocr-test: provider raised: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+    # Don't dump huge raw_text — show first 200 chars.
+    raw = parse.raw_text or ""
+    raw_preview = raw if len(raw) <= 200 else raw[:200] + "…"
+
+    click.echo(f"  raw_text:   {raw_preview!r}")
+    click.echo(f"  rows:       {len(parse.rows)}")
+    for i, row in enumerate(parse.rows[:10]):
+        click.echo(f"    [{i}] {row}")
+    if len(parse.rows) > 10:
+        click.echo(f"    ... ({len(parse.rows) - 10} more rows)")
+    click.echo(f"  stats:      {parse.stats}")
+    click.echo(f"  skills:     {len(parse.skills)} candidate(s)")
+    for s in parse.skills[:15]:
+        click.echo(f"    · {s}")
+    if len(parse.skills) > 15:
+        click.echo(f"    ... ({len(parse.skills) - 15} more)")
+    click.echo(f"  confidence: {parse.confidence}")
+
+
 def register_cli(app: Flask) -> None:
     app.cli.add_command(uma_cli)
