@@ -46,13 +46,22 @@ def log_action(
         )
         db.session.add(row)
         db.session.commit()
-        return row
     except Exception:  # noqa: BLE001
         # Defensive rollback — the calling service may still need the
         # session for subsequent commits.
         with contextlib.suppress(Exception):
             db.session.rollback()
         return None
+
+    # Mirror the audit row to the admin Discord channel (best-effort —
+    # any failure is swallowed so audit-log failures stay isolated from
+    # the original action). Skipped silently when no webhook is wired.
+    with contextlib.suppress(Exception):
+        from ..notifications import services as notif_services
+
+        notif_services.notify_admin_action(row)
+
+    return row
 
 
 @dataclass(frozen=True)

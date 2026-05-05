@@ -126,7 +126,12 @@ table with `status=skipped` — the calling service still succeeds.
 | `race_registration`   | `DISCORD_WEBHOOK_RACE_REGISTRATION_URL`     |
 | `official_results`    | `DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL`      |
 | `draft_results`       | `DISCORD_WEBHOOK_DRAFT_RESULTS_URL`         |
+| `admin_audit`         | `DISCORD_WEBHOOK_ADMIN_AUDIT_URL`           |
 | `fallback`            | `DISCORD_WEBHOOK_FALLBACK_URL`              |
+
+`admin_audit` mirrors every row the audit log writes to a private
+Discord channel — role changes, race/match cancellations, forfeits.
+Point it at a mod-only channel.
 
 Lifecycle events: race published, room code, results, race cancelled,
 registration removed, draft match cancelled. Failures are recorded in

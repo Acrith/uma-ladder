@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from ..models import (
+    AdminAuditLog,
     DiscordNotificationAttempt,
     DraftMatch,
     NotificationEvent,
@@ -208,4 +209,53 @@ def notify_draft_match_cancelled(
         payload=_embed(
             f"Draft match #{match.id} cancelled", fields, color=0xEF4444
         ),
+    )
+
+
+# ----- Admin audit feed (PR-E1) -----
+
+
+# Color-code admin actions so the audit channel is scannable at a glance.
+_ADMIN_ACTION_COLORS: dict[str, int] = {
+    "role_change": 0x06B6D4,             # cyan
+    "official_race_cancel": 0xEF4444,    # rose
+    "draft_match_cancel": 0xEF4444,      # rose
+    "draft_match_forfeit": 0xF59E0B,     # amber
+}
+
+
+def notify_admin_action(row: AdminAuditLog) -> DiscordNotificationAttempt:
+    """Post one Discord embed per admin/audit-log action to the
+    ADMIN_AUDIT channel.
+
+    The audit table is the source of truth; this is a real-time mirror
+    so a moderation team watching Discord sees actions as they happen
+    (without having to refresh /admin/audit). Coexists with the per-
+    action notifications (e.g. race cancel also fires the player-facing
+    OFFICIAL_RACE_CANCELLED) — those go to player channels; this one
+    goes to the admin channel."""
+    actor = row.actor.username if row.actor else "?"
+    target = row.target_user.username if row.target_user else None
+
+    fields = [_field("Actor", actor)]
+    if target:
+        fields.append(_field("Target", target))
+    elif row.target_kind:
+        target_str = row.target_kind
+        if row.target_id is not None:
+            target_str += f" #{row.target_id}"
+        fields.append(_field("Target", target_str))
+
+    if row.before_json:
+        fields.append(_field("Before", str(row.before_json), inline=True))
+    if row.after_json:
+        fields.append(_field("After", str(row.after_json), inline=True))
+    if row.details:
+        fields.append(_field("Details", row.details, inline=False))
+
+    color = _ADMIN_ACTION_COLORS.get(row.action, 0x64748B)  # slate fallback
+    return send_event(
+        event_type=NotificationEvent.ADMIN_ACTION,
+        target=NotificationTarget.ADMIN_AUDIT,
+        payload=_embed(f"Admin · {row.action}", fields, color=color),
     )

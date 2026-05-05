@@ -91,6 +91,7 @@ class NotificationEvent(StrEnum):
     DRAFT_ROOM_CODE = "draft_room_code"
     DRAFT_RESULTS = "draft_results"
     DRAFT_MATCH_CANCELLED = "draft_match_cancelled"
+    ADMIN_ACTION = "admin_action"
 
 
 class NotificationTarget(StrEnum):
@@ -99,6 +100,7 @@ class NotificationTarget(StrEnum):
     RACE_REGISTRATION = "race_registration"
     OFFICIAL_RESULTS = "official_results"
     DRAFT_RESULTS = "draft_results"
+    ADMIN_AUDIT = "admin_audit"
     FALLBACK = "fallback"
 
 
