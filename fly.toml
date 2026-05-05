@@ -1,47 +1,39 @@
-# fly.toml — Uma Ladder
+# fly.toml app configuration file generated for uma-ladder on 2026-05-05T19:48:51+02:00
 #
-# Provision via:
-#   fly launch --no-deploy --copy-config --name <your-app> --org <your-org>
-#   fly postgres create --name <your-app>-db
-#   fly postgres attach --app <your-app> <your-app>-db
-#   fly secrets set SECRET_KEY=$(openssl rand -hex 32) \
-#                   GOOGLE_VISION_API_KEY=...
-#                   DISCORD_WEBHOOK_*_URL=...
-#   fly deploy
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# Never commit real secrets. fly.toml is checked into the repo.
 
-app = "uma-ladder"
-primary_region = "fra"
+app = 'uma-ladder'
+primary_region = 'fra'
 
 [build]
 
 [env]
-  FLASK_APP = "uma_ladder"
-  FLASK_CONFIG = "production"
-  TAILWIND_BUILT = "1"
-  PORT = "8080"
+  FLASK_APP = 'uma_ladder'
+  FLASK_CONFIG = 'production'
+  PORT = '8080'
+  TAILWIND_BUILT = '1'
+
+[[mounts]]
+  source = 'uma_ladder_uploads'
+  destination = '/app/instance'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'suspend'
   auto_start_machines = true
   min_machines_running = 0
 
   [[http_service.checks]]
-    grace_period = "10s"
-    interval = "30s"
-    method = "GET"
-    path = "/healthz"
-    protocol = "http"
-    timeout = "5s"
-
-[[mounts]]
-  source = "uma_ladder_uploads"
-  destination = "/app/instance"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/healthz'
+    protocol = 'http'
 
 [[vm]]
-  cpu_kind = "shared"
+  memory = '512mb'
   cpus = 1
   memory_mb = 512

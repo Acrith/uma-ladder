@@ -104,7 +104,8 @@
                 <span class="text-slate-500">Discord</span>
                 <span>{{ profile.discord_handle }}</span>
                 {% if profile.discord_user_id %}
-                  <span class="text-emerald-300/80" title="Will be @-mentioned in lifecycle notifications">·@</span>
+                  <span class="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-semibold leading-none text-emerald-300"
+                        title="Pings enabled — Uma Ladder will @-mention you in Discord for actions you can take">@</span>
                 {% endif %}
               </span>
             {% endif %}
