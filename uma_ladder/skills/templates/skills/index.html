@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Skills · Uma Ladder{% endblock %}
+{% block content %}
+
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Catalogue</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Skills <span class="text-base font-normal text-slate-500">({{ total }})</span></h1>
+      <p class="mt-1 text-sm text-slate-400">Reference for organisers correcting unmatched OCR names.</p>
+    </div>
+    <form method="get" class="flex flex-wrap items-center gap-2 text-sm">
+      <input type="search"
+             name="q"
+             value="{{ q }}"
+             placeholder="Search by name…"
+             class="input-base"
+             autocomplete="off" />
+      <select name="kind" class="input-base">
+        <option value="" {% if not filter_kind %}selected{% endif %}>All kinds</option>
+        <option value="unique" {% if filter_kind == 'unique' %}selected{% endif %}>Unique only</option>
+        <option value="inherited" {% if filter_kind == 'inherited' %}selected{% endif %}>Inherited only</option>
+      </select>
+      <button class="btn-primary">Filter</button>
+    </form>
+  </div>
+
+  {% if not skills %}
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">No skills match.</div>
+  {% else %}
+    <ul class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {% for s in skills %}
+        <li class="rounded-lg border border-slate-800 bg-slate-900/40 p-3 transition hover:border-cyan-500/40">
+          <div class="flex items-start gap-3">
+            {% if s.image_url %}
+              <img src="{{ s.image_url }}"
+                   alt=""
+                   loading="lazy"
+                   referrerpolicy="no-referrer"
+                   class="h-9 w-9 shrink-0 rounded border border-slate-800 bg-slate-950/60" />
+            {% else %}
+              <div class="h-9 w-9 shrink-0 rounded border border-slate-800 bg-slate-950/60"></div>
+            {% endif %}
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-slate-100">{{ s.name_en }}</p>
+              {% if s.name_jp %}<p class="truncate text-xs text-slate-500">{{ s.name_jp }}</p>{% endif %}
+              <div class="mt-1.5 flex flex-wrap gap-1 text-[10px]">
+                {% if s.rarity %}
+                  <span class="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/5 px-1.5 py-0.5 text-amber-200">{{ '★' * s.rarity }}</span>
+                {% endif %}
+                {% if s.is_unique %}
+                  <span class="inline-flex items-center rounded-full border border-fuchsia-500/30 bg-fuchsia-500/5 px-1.5 py-0.5 font-medium uppercase tracking-wider text-fuchsia-200">Unique</span>
+                {% endif %}
+                {% if s.is_inherited %}
+                  <span class="inline-flex items-center rounded-full border border-slate-600 bg-slate-800/40 px-1.5 py-0.5 font-medium uppercase tracking-wider text-slate-300">Inherited</span>
+                {% endif %}
+              </div>
+              {% if s.description_en %}
+                <p class="mt-2 line-clamp-3 text-xs text-slate-400">{{ s.description_en }}</p>
+              {% endif %}
+            </div>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if pages > 1 %}
+      <div class="mt-6 flex items-center justify-between text-xs text-slate-400">
+        <span>Page {{ page }} / {{ pages }}</span>
+        <div class="flex gap-2">
+          {% if page > 1 %}
+            <a class="btn-ghost" href="{{ url_for('skills.index', page=page - 1, q=q, kind=filter_kind) }}">← Prev</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn-ghost" href="{{ url_for('skills.index', page=page + 1, q=q, kind=filter_kind) }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+{% endblock %}
