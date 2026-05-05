@@ -64,6 +64,73 @@ def test_index_anonymous_ok(client: FlaskClient) -> None:
     assert resp.status_code == 200
 
 
+def test_index_filters_by_status(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", role=Role.ORGANIZER)
+
+    from uma_ladder.models import OfficialRace
+
+    with app.app_context():
+        db.session.add_all([
+            OfficialRace(
+                season_id=sid,
+                organizer_user_id=org["id"],
+                name="OpenRace",
+                preset_id=pid,
+                status=OfficialRaceStatus.REGISTRATION_OPEN,
+            ),
+            OfficialRace(
+                season_id=sid,
+                organizer_user_id=org["id"],
+                name="DoneRace",
+                preset_id=pid,
+                status=OfficialRaceStatus.COMPLETED,
+            ),
+        ])
+        db.session.commit()
+
+    resp = client.get(
+        f"/official/?status={OfficialRaceStatus.REGISTRATION_OPEN.value}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "OpenRace" in body
+    assert "DoneRace" not in body
+
+
+def test_index_paginates(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", role=Role.ORGANIZER)
+
+    from uma_ladder.models import OfficialRace
+
+    with app.app_context():
+        for i in range(55):
+            db.session.add(
+                OfficialRace(
+                    season_id=sid,
+                    organizer_user_id=org["id"],
+                    name=f"Race-{i:02d}",
+                    preset_id=pid,
+                    status=OfficialRaceStatus.REGISTRATION_OPEN,
+                )
+            )
+        db.session.commit()
+
+    resp = client.get("/official/?page=1")
+    assert resp.status_code == 200
+    assert b"Page 1 / 2" in resp.data
+    resp = client.get("/official/?page=2")
+    assert resp.status_code == 200
+    assert b"Page 2 / 2" in resp.data
+
+
 def test_create_requires_organizer(client: FlaskClient, app: Flask, make_user) -> None:
     sid = _make_season(app)
     # anon → 401

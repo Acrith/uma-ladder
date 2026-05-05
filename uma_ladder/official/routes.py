@@ -31,8 +31,46 @@ bp = Blueprint("official", __name__, template_folder="templates")
 
 @bp.get("/")
 def index() -> object:
-    races = official_service.list_races()
-    return render_template("official/index.html", races=races)
+    from sqlalchemy import func, select
+
+    from ..models import OfficialRace, OfficialRaceStatus, Season
+
+    page = max(1, request.args.get("page", 1, type=int))
+    status = (request.args.get("status") or "").strip()
+    season_id_raw = (request.args.get("season_id") or "").strip()
+    page_size = 50
+
+    stmt = select(OfficialRace).order_by(OfficialRace.created_at.desc())
+    if status:
+        stmt = stmt.where(OfficialRace.status == status)
+    if season_id_raw.isdigit():
+        stmt = stmt.where(OfficialRace.season_id == int(season_id_raw))
+
+    total = db.session.scalar(
+        select(func.count()).select_from(stmt.subquery())
+    )
+    races = list(
+        db.session.scalars(
+            stmt.limit(page_size).offset((page - 1) * page_size)
+        )
+    )
+    pages = max(1, (total + page_size - 1) // page_size)
+
+    seasons = list(
+        db.session.scalars(select(Season).order_by(Season.starts_at.desc()))
+    )
+
+    return render_template(
+        "official/index.html",
+        races=races,
+        seasons=seasons,
+        statuses=[s.value for s in OfficialRaceStatus],
+        page=page,
+        pages=pages,
+        total=total,
+        status=status,
+        season_id=season_id_raw,
+    )
 
 
 @bp.route("/new", methods=["GET", "POST"])

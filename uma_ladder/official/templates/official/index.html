@@ -2,20 +2,37 @@
 {% from "_components.html" import card, official_status_chip %}
 {% block title %}Official races · Uma Ladder{% endblock %}
 {% block content %}
-  <div class="flex items-center justify-between">
+  <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
       <p class="label-eyebrow">Official</p>
-      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Race schedule</h1>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Race schedule <span class="text-base font-normal text-slate-500">({{ total }})</span></h1>
     </div>
-    {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
-      <a href="{{ url_for('official.new') }}" class="btn-primary">+ New race</a>
-    {% endif %}
+    <div class="flex flex-wrap items-center gap-2">
+      <form method="get" class="flex flex-wrap items-center gap-2 text-sm">
+        <select name="status" class="input-base">
+          <option value="">all statuses</option>
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s.replace('_', ' ') }}</option>
+          {% endfor %}
+        </select>
+        <select name="season_id" class="input-base">
+          <option value="">all seasons</option>
+          {% for s in seasons %}
+            <option value="{{ s.id }}" {% if season_id and season_id|int == s.id %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn-ghost">Filter</button>
+      </form>
+      {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+        <a href="{{ url_for('official.new') }}" class="btn-primary">+ New race</a>
+      {% endif %}
+    </div>
   </div>
 
   {% if not races %}
     <div class="surface-card mt-6 px-6 py-10 text-center">
-      <p class="text-slate-400">No official races yet.</p>
-      {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+      <p class="text-slate-400">No official races match.</p>
+      {% if current_user.is_authenticated and current_user.has_at_least('organizer') and not status and not season_id %}
         <a href="{{ url_for('official.new') }}" class="btn-primary mt-4">+ Create the first one</a>
       {% endif %}
     </div>
@@ -43,5 +60,19 @@
         </li>
       {% endfor %}
     </ul>
+
+    {% if pages > 1 %}
+      <div class="mt-6 flex items-center justify-between text-xs text-slate-400">
+        <span>Page {{ page }} / {{ pages }}</span>
+        <div class="flex gap-2">
+          {% if page > 1 %}
+            <a class="btn-ghost" href="{{ url_for('official.index', page=page - 1, status=status, season_id=season_id) }}">← Prev</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn-ghost" href="{{ url_for('official.index', page=page + 1, status=status, season_id=season_id) }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
   {% endif %}
 {% endblock %}
