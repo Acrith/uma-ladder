@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Edit season · {{ season.name }} · Admin · Uma Ladder{% endblock %}
+{% block content %}
+  <p class="label-eyebrow"><a href="{{ url_for('admin.seasons_list') }}" class="hover:text-cyan-300">Admin · Seasons</a></p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">{{ season.name }}</h1>
+  <div class="mt-2 flex items-center gap-2 text-xs text-slate-400">
+    {% set tone = {'planned': 'slate', 'active': 'cyan', 'completed': 'amber', 'archived': 'slate'}.get(season.status, 'slate') %}
+    {{ chip(season.status, tone) }}
+    <span>created {{ season.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+  </div>
+
+  {% call card(class="mt-6 p-6 max-w-xl") %}
+    <form method="post" class="space-y-4">
+      {{ csrf_form.hidden_tag() }}
+
+      <div>
+        <label class="text-sm text-slate-300">Name</label>
+        <input type="text" name="name" required maxlength="64" value="{{ season.name }}" class="input-base mt-1" />
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="text-sm text-slate-300">Starts at (UTC)</label>
+          <input type="datetime-local" name="starts_at" required value="{{ season.starts_at.strftime('%Y-%m-%dT%H:%M') }}" class="input-base mt-1" />
+        </div>
+        <div>
+          <label class="text-sm text-slate-300">Ends at (UTC)</label>
+          <input type="datetime-local" name="ends_at" required value="{{ season.ends_at.strftime('%Y-%m-%dT%H:%M') }}" class="input-base mt-1" />
+        </div>
+      </div>
+
+      <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+        <label class="flex items-center gap-2 text-sm text-slate-300">
+          <input type="checkbox" name="official_enabled" {% if season.official_enabled %}checked{% endif %} class="rounded border-slate-700 bg-slate-900 text-cyan-500" />
+          Official races count toward this season's ladder
+        </label>
+        <label class="flex items-center gap-2 text-sm text-slate-300">
+          <input type="checkbox" name="draft_enabled" {% if season.draft_enabled %}checked{% endif %} class="rounded border-slate-700 bg-slate-900 text-fuchsia-500" />
+          Draft matches contribute to this season's Elo
+        </label>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="{{ url_for('admin.seasons_list') }}" class="btn-ghost">Cancel</a>
+        <button class="btn-primary">Save changes</button>
+      </div>
+    </form>
+  {% endcall %}
+
+  <p class="mt-4 text-xs text-slate-500">
+    Status transitions are on the seasons list page (right-most column).
+  </p>
+{% endblock %}

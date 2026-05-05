@@ -6,9 +6,10 @@ from flask_wtf import FlaskForm
 from sqlalchemy import func, select
 
 from ..extensions import db
-from ..models import DraftMatch, DraftMatchStatus, Role, Season, User
+from ..models import DraftMatch, DraftMatchStatus, Role, Season, SeasonStatus, User
 from ..services import admin as admin_service
 from ..services import draft as draft_service
+from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
 
 bp = Blueprint("admin", __name__, template_folder="templates")
@@ -33,11 +34,15 @@ def index() -> object:
             ])
         )
     )
+    season_count = db.session.scalar(select(func.count(Season.id))) or 0
+    active_season = seasons_service.get_active_season()
     return render_template(
         "admin/index.html",
         user_count=user_count,
         match_count=match_count,
         open_matches=open_matches,
+        season_count=season_count,
+        active_season=active_season,
     )
 
 
@@ -165,3 +170,126 @@ def cancel_match(match_id: int) -> object:
         flash(str(exc))
     next_url = request.form.get("next") or url_for("admin.matches_list")
     return redirect(next_url)
+
+
+# ---------- Season management ----------
+
+
+def _parse_dt_local(raw: str) -> object | None:
+    """HTML5 datetime-local submits naive `YYYY-MM-DDTHH:MM`. We treat
+    that as UTC (matches the convention everywhere else in this app).
+    Returns None on bad input rather than 500ing — the route flashes."""
+    from datetime import UTC, datetime
+
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.strptime(raw, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        return None
+    return dt.replace(tzinfo=UTC)
+
+
+@bp.get("/seasons")
+@min_role_required(Role.ADMIN)
+def seasons_list() -> object:
+    seasons = list(
+        db.session.scalars(select(Season).order_by(Season.starts_at.desc()))
+    )
+    active = seasons_service.get_active_season()
+    return render_template(
+        "admin/seasons_list.html",
+        seasons=seasons,
+        active_season=active,
+        statuses=[s.value for s in SeasonStatus],
+        csrf_form=CsrfOnlyForm(),
+    )
+
+
+@bp.route("/seasons/new", methods=["GET", "POST"])
+@min_role_required(Role.ADMIN)
+def season_new() -> object:
+    csrf_form = CsrfOnlyForm()
+    if request.method == "POST":
+        if not csrf_form.validate_on_submit():
+            abort(400)
+        name = (request.form.get("name") or "").strip()
+        starts_at = _parse_dt_local(request.form.get("starts_at") or "")
+        ends_at = _parse_dt_local(request.form.get("ends_at") or "")
+        status = (request.form.get("status") or SeasonStatus.PLANNED.value).strip()
+        if not name or starts_at is None or ends_at is None:
+            flash("Name, start, and end are all required.")
+            return redirect(url_for("admin.season_new"))
+        try:
+            season = seasons_service.create_season(
+                name=name,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                status=status,
+                created_by_user_id=current_user.id,
+            )
+        except (ValueError, seasons_service.SeasonError) as exc:
+            flash(str(exc))
+            return redirect(url_for("admin.season_new"))
+        flash(f"Season '{season.name}' created.")
+        return redirect(url_for("admin.seasons_list"))
+    return render_template(
+        "admin/season_new.html",
+        csrf_form=csrf_form,
+        statuses=[s.value for s in SeasonStatus],
+    )
+
+
+@bp.route("/seasons/<int:season_id>", methods=["GET", "POST"])
+@min_role_required(Role.ADMIN)
+def season_edit(season_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    try:
+        season = seasons_service.get_season(season_id)
+    except seasons_service.SeasonNotFoundError:
+        abort(404)
+    if request.method == "POST":
+        if not csrf_form.validate_on_submit():
+            abort(400)
+        name = (request.form.get("name") or "").strip() or None
+        starts_at = _parse_dt_local(request.form.get("starts_at") or "")
+        ends_at = _parse_dt_local(request.form.get("ends_at") or "")
+        official_enabled = "official_enabled" in request.form
+        draft_enabled = "draft_enabled" in request.form
+        try:
+            seasons_service.update_season(
+                season_id,
+                name=name,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                official_enabled=official_enabled,
+                draft_enabled=draft_enabled,
+            )
+        except (ValueError, seasons_service.SeasonError) as exc:
+            flash(str(exc))
+            return redirect(url_for("admin.season_edit", season_id=season_id))
+        flash(f"Season '{season.name}' updated.")
+        return redirect(url_for("admin.seasons_list"))
+    return render_template(
+        "admin/season_edit.html",
+        season=season,
+        csrf_form=csrf_form,
+    )
+
+
+@bp.post("/seasons/<int:season_id>/status")
+@min_role_required(Role.ADMIN)
+def season_set_status(season_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    new_status = (request.form.get("status") or "").strip()
+    try:
+        seasons_service.set_status(season_id, new_status)
+        flash(f"Season status set to {new_status}.")
+    except seasons_service.SeasonNotFoundError:
+        abort(404)
+    except seasons_service.SeasonError as exc:
+        flash(str(exc))
+    return redirect(url_for("admin.seasons_list"))

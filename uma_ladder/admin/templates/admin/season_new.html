@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}New season · Admin · Uma Ladder{% endblock %}
+{% block content %}
+  <p class="label-eyebrow"><a href="{{ url_for('admin.seasons_list') }}" class="hover:text-cyan-300">Admin · Seasons</a></p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Create season</h1>
+  <p class="mt-1 text-sm text-slate-400">Sets the time window and which modes count toward the seasonal ladders. Datetimes are submitted as UTC.</p>
+
+  {% call card(class="mt-6 p-6 max-w-xl") %}
+    <form method="post" class="space-y-4">
+      {{ csrf_form.hidden_tag() }}
+
+      <div>
+        <label class="text-sm text-slate-300">Name</label>
+        <input type="text" name="name" required maxlength="64" class="input-base mt-1" placeholder="e.g. Spring 2026" />
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="text-sm text-slate-300">Starts at (UTC)</label>
+          <input type="datetime-local" name="starts_at" required class="input-base mt-1" />
+        </div>
+        <div>
+          <label class="text-sm text-slate-300">Ends at (UTC)</label>
+          <input type="datetime-local" name="ends_at" required class="input-base mt-1" />
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-slate-300">Initial status</label>
+        <select name="status" class="input-base mt-1">
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if s == 'planned' %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        <p class="mt-1 text-xs text-slate-500">Planned = not yet visible. Active = current ladder season. Completed/Archived = read-only.</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="{{ url_for('admin.seasons_list') }}" class="btn-ghost">Cancel</a>
+        <button class="btn-primary">Create</button>
+      </div>
+    </form>
+  {% endcall %}
+{% endblock %}

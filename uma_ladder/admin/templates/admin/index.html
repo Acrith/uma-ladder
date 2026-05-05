@@ -20,6 +20,17 @@
       <a href="{{ url_for('admin.matches_list') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage matches →</a>
     {% endcall %}
 
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Seasons</p>
+      <p class="mt-1 text-3xl font-semibold text-slate-100">{{ season_count }}</p>
+      {% if active_season %}
+        <p class="text-xs text-cyan-300">Active: {{ active_season.name }}</p>
+      {% else %}
+        <p class="text-xs text-amber-300">No active season in window</p>
+      {% endif %}
+      <a href="{{ url_for('admin.seasons_list') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage seasons →</a>
+    {% endcall %}
+
     {% call card(class="p-5 opacity-60") %}
       <p class="label-eyebrow">Notifications</p>
       <p class="mt-1 text-sm text-slate-400">Discord webhook attempts.</p>

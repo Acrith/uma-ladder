@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Seasons · Admin · Uma Ladder{% endblock %}
+{% block content %}
+
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Admin · Seasons</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Seasons <span class="text-base font-normal text-slate-500">({{ seasons|length }})</span></h1>
+      {% if active_season %}
+        <p class="mt-1 text-xs text-slate-400">Active: <span class="text-cyan-300">{{ active_season.name }}</span> · {{ active_season.starts_at.strftime('%Y-%m-%d') }} → {{ active_season.ends_at.strftime('%Y-%m-%d') }}</p>
+      {% else %}
+        <p class="mt-1 text-xs text-amber-300">No active season currently in window.</p>
+      {% endif %}
+    </div>
+    <a href="{{ url_for('admin.season_new') }}" class="btn-primary">+ New season</a>
+  </div>
+
+  {% if not seasons %}
+    <div class="surface-card mt-6 px-6 py-10 text-center">
+      <p class="text-slate-400">No seasons yet.</p>
+      <a href="{{ url_for('admin.season_new') }}" class="btn-primary mt-4">+ Create the first one</a>
+    </div>
+  {% else %}
+    {% call card(class="mt-6 overflow-hidden") %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-900/50 text-xs uppercase tracking-wider text-slate-500">
+            <tr class="text-left">
+              <th class="px-4 py-3">#</th>
+              <th class="px-4 py-3">Name</th>
+              <th class="px-4 py-3">Window</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Modes</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in seasons %}
+              {% set tone = {'planned': 'slate', 'active': 'cyan', 'completed': 'amber', 'archived': 'slate'}.get(s.status, 'slate') %}
+              <tr class="border-t border-slate-800 align-top">
+                <td class="px-4 py-2 text-slate-500">{{ s.id }}</td>
+                <td class="px-4 py-2 font-medium text-slate-200">{{ s.name }}</td>
+                <td class="px-4 py-2 text-slate-400">
+                  {{ s.starts_at.strftime('%Y-%m-%d') }}
+                  <span class="text-slate-600">→</span>
+                  {{ s.ends_at.strftime('%Y-%m-%d') }}
+                </td>
+                <td class="px-4 py-2">{{ chip(s.status, tone) }}</td>
+                <td class="px-4 py-2 text-xs">
+                  {% if s.official_enabled %}<span class="text-cyan-300">Official</span>{% else %}<span class="text-slate-600">Official off</span>{% endif %}
+                  ·
+                  {% if s.draft_enabled %}<span class="text-fuchsia-300">Draft</span>{% else %}<span class="text-slate-600">Draft off</span>{% endif %}
+                </td>
+                <td class="px-4 py-2 text-right">
+                  <div class="flex items-center justify-end gap-2 text-xs">
+                    <a href="{{ url_for('admin.season_edit', season_id=s.id) }}" class="text-cyan-300 hover:text-cyan-200">Edit</a>
+                    <details class="relative">
+                      <summary class="cursor-pointer list-none text-slate-400 hover:text-slate-200">Status ▾</summary>
+                      <div class="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
+                        {% for status in statuses if status != s.status %}
+                          <form method="post" action="{{ url_for('admin.season_set_status', season_id=s.id) }}">
+                            {{ csrf_form.hidden_tag() }}
+                            <input type="hidden" name="status" value="{{ status }}" />
+                            <button class="block w-full text-left px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-cyan-200 rounded">→ {{ status }}</button>
+                          </form>
+                        {% endfor %}
+                      </div>
+                    </details>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endcall %}
+  {% endif %}
+
+{% endblock %}
