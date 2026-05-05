@@ -20,6 +20,8 @@ class BaseConfig:
     DISCORD_WEBHOOK_FALLBACK_URL: str | None = None
     OCR_PROVIDER: str = "manual"
     GOOGLE_VISION_API_KEY: str | None = None
+    UMA_MOE_BASE_URL: str = "https://uma.moe"
+    UMA_MOE_CACHE_TTL_HOURS: int = 12
     # Set to True in production where Tailwind has been built into
     # uma_ladder/static/css/output.css. Dev defaults to False so the CDN
     # fallback in base.html avoids a build step on every reload.

@@ -1,0 +1,58 @@
+{
+  "trainer": {
+    "account_id": "111122223333",
+    "name": "TestTrainer",
+    "follower_num": 42,
+    "best_team_class": 5,
+    "team_class": 5,
+    "team_evaluation_point": 200000,
+    "rank_score": 1500000,
+    "comment": "fixture",
+    "trophy_num_info": {"grade_1": 10, "grade_2": 12, "grade_3": 20, "grade_ex": 5}
+  },
+  "circle": {
+    "circle_id": 9999,
+    "name": "TestClub",
+    "member_count": 30,
+    "monthly_rank": 500,
+    "monthly_point": 1234567
+  },
+  "circle_history": [],
+  "fan_history": {
+    "monthly": [],
+    "rolling": {
+      "viewer_id": 111122223333,
+      "trainer_name": "TestTrainer",
+      "gain_3d": 800000,
+      "gain_7d": 2000000,
+      "gain_30d": 8500000,
+      "rank_3d": 4321,
+      "rank_7d": 5000,
+      "rank_30d": 5500,
+      "circle_id": 9999,
+      "circle_name": "TestClub"
+    },
+    "alltime": {
+      "viewer_id": 111122223333,
+      "trainer_name": "TestTrainer",
+      "total_fans": 150000000,
+      "total_gain": 150000000,
+      "active_days": 300,
+      "avg_day": 500000.0,
+      "avg_week": 3500000.0,
+      "avg_month": 15000000.0,
+      "rank": 12345,
+      "rank_total_fans": 12345,
+      "rank_total_gain": 13000,
+      "rank_avg_day": 14000,
+      "rank_avg_week": 14500,
+      "rank_avg_month": 15000,
+      "circle_id": 9999,
+      "circle_name": "TestClub"
+    }
+  },
+  "inheritance": {},
+  "support_card": {},
+  "team_stadium": [],
+  "veterans": []
+}

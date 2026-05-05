@@ -138,6 +138,7 @@ def serve_avatar(image_id: int) -> object:
 @bp.get("/<username>")
 def public(username: str) -> object:
     from ..services import draft as draft_service
+    from ..services import uma_moe as uma_moe_service
 
     user = profiles_service.find_user_by_username(username)
     if user is None:
@@ -149,6 +150,10 @@ def public(username: str) -> object:
         user.id, page=page, page_size=10, kind=kind
     )
     elo = draft_service.elo_summary_for_user(user.id)
+    # Best-effort uma.moe enrichment when friend_code is set. Returns
+    # None for missing code / 404 / network error / malformed JSON —
+    # the template just doesn't render the card in that case.
+    trainer = uma_moe_service.fetch_trainer_summary(profile.friend_code)
     return render_template(
         "profiles/public.html",
         user=user,
@@ -156,4 +161,5 @@ def public(username: str) -> object:
         oshi_image=profiles_service.resolve_oshi_image(profile),
         history=history,
         elo=elo,
+        trainer=trainer,
     )

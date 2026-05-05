@@ -138,6 +138,45 @@
     </section>
   {% endif %}
 
+  {% if trainer %}
+    <section class="mt-6">
+      <div class="surface-card p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="label-eyebrow">In-game stats</p>
+            <h2 class="mt-1 text-base font-semibold text-slate-100">
+              {{ trainer.trainer_name or '—' }}
+            </h2>
+            <p class="text-xs text-slate-500">via uma.moe · cached {{ trainer.fetched_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+          </div>
+          {% if trainer.alltime_rank %}
+            <span class="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/5 px-2.5 py-0.5 text-xs font-medium text-amber-200">
+              Global rank #{{ '{:,}'.format(trainer.alltime_rank) }}
+            </span>
+          {% endif %}
+        </div>
+        <dl class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
+          <div>
+            <dt class="text-xs uppercase tracking-wider text-slate-500">Club</dt>
+            <dd class="mt-0.5 truncate text-slate-200">{{ trainer.circle_name or '—' }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs uppercase tracking-wider text-slate-500">Total fans</dt>
+            <dd class="mt-0.5 truncate text-slate-200">{% if trainer.total_fans is not none %}{{ '{:,}'.format(trainer.total_fans) }}{% else %}—{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-xs uppercase tracking-wider text-slate-500">+ 7d</dt>
+            <dd class="mt-0.5 truncate text-emerald-300">{% if trainer.gain_7d is not none %}+{{ '{:,}'.format(trainer.gain_7d) }}{% else %}—{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-xs uppercase tracking-wider text-slate-500">+ 30d</dt>
+            <dd class="mt-0.5 truncate text-emerald-300">{% if trainer.gain_30d is not none %}+{{ '{:,}'.format(trainer.gain_30d) }}{% else %}—{% endif %}</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+  {% endif %}
+
   {% if history.total > 0 %}
     {% set kind_arg = request.args.get('kind') or '' %}
     <section class="mt-6">
