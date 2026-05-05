@@ -86,8 +86,11 @@ class NotificationEvent(StrEnum):
     OFFICIAL_RACE_PUBLISHED = "official_race_published"
     OFFICIAL_ROOM_CODE = "official_room_code"
     OFFICIAL_RESULTS = "official_results"
+    OFFICIAL_RACE_CANCELLED = "official_race_cancelled"
+    OFFICIAL_REGISTRATION_REMOVED = "official_registration_removed"
     DRAFT_ROOM_CODE = "draft_room_code"
     DRAFT_RESULTS = "draft_results"
+    DRAFT_MATCH_CANCELLED = "draft_match_cancelled"
 
 
 class NotificationTarget(StrEnum):

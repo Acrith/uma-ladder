@@ -829,7 +829,22 @@ def cancel_match(match_id: int, *, by_user_id: int) -> DraftMatch:
     match.cancelled_at = _utcnow()
     match.cancelled_by_user_id = by_user_id
     db.session.commit()
+    _notify_match_cancelled(match, by_user_id)
     return match
+
+
+def _notify_match_cancelled(match: DraftMatch, by_user_id: int) -> None:
+    """Best-effort: never raises into the caller."""
+    try:
+        from ..models import User
+        from ..notifications import services as notif_services
+
+        actor = db.session.get(User, by_user_id)
+        notif_services.notify_draft_match_cancelled(
+            match, cancelled_by_username=actor.username if actor else None
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def list_matches_for_user(user_id: int) -> Sequence[DraftMatch]:

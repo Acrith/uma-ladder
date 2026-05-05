@@ -76,6 +76,57 @@ def notify_official_room_code(
     )
 
 
+def notify_official_race_cancelled(
+    race: OfficialRace,
+    *,
+    cancelled_by_username: str | None = None,
+    registered_usernames: Sequence[str] = (),
+) -> DiscordNotificationAttempt:
+    """Tell the registration channel a race they were registered for is
+    gone. Mentions the registered users so they get pinged via Discord
+    when their handles match."""
+    fields = [
+        _field("Race", race.name),
+        _field("Status", race.status, inline=True),
+    ]
+    if cancelled_by_username:
+        fields.append(_field("Cancelled by", cancelled_by_username, inline=True))
+    if registered_usernames:
+        names = ", ".join(registered_usernames)
+        fields.append(_field("Affected registrations", names, inline=False))
+    return send_event(
+        event_type=NotificationEvent.OFFICIAL_RACE_CANCELLED,
+        target=NotificationTarget.RACE_REGISTRATION,
+        payload=_embed(f"Race cancelled: {race.name}", fields, color=0xEF4444),
+    )
+
+
+def notify_official_registration_removed(
+    race: OfficialRace,
+    registration: OfficialRaceRegistration,
+    *,
+    removed_by_username: str | None = None,
+) -> DiscordNotificationAttempt:
+    """Tell the channel that one player's registration was removed.
+    Useful so the user can re-register or DM the organiser."""
+    fields = [
+        _field("Race", race.name),
+        _field(
+            "Player",
+            registration.user.username if registration.user else "?",
+        ),
+    ]
+    if removed_by_username:
+        fields.append(_field("Removed by", removed_by_username, inline=True))
+    return send_event(
+        event_type=NotificationEvent.OFFICIAL_REGISTRATION_REMOVED,
+        target=NotificationTarget.RACE_REGISTRATION,
+        payload=_embed(
+            f"Registration removed: {race.name}", fields, color=0xF59E0B
+        ),
+    )
+
+
 def notify_official_results(
     race: OfficialRace, top: Sequence[LadderRow]
 ) -> DiscordNotificationAttempt:
@@ -133,4 +184,28 @@ def notify_draft_results(
         event_type=NotificationEvent.DRAFT_RESULTS,
         target=NotificationTarget.DRAFT_RESULTS,
         payload=_embed(f"Draft match #{match.id} complete", fields, color=0xF59E0B),
+    )
+
+
+def notify_draft_match_cancelled(
+    match: DraftMatch, *, cancelled_by_username: str | None = None
+) -> DiscordNotificationAttempt:
+    """Admin cancelled a draft match — tell both participants via the
+    DRAFT_RESULTS channel (same audience that already follows the
+    match's outcome)."""
+    fields = [
+        _field("Host", match.host.username if match.host else "?"),
+        _field(
+            "Opponent",
+            match.opponent.username if match.opponent else "—",
+        ),
+    ]
+    if cancelled_by_username:
+        fields.append(_field("Cancelled by", cancelled_by_username, inline=True))
+    return send_event(
+        event_type=NotificationEvent.DRAFT_MATCH_CANCELLED,
+        target=NotificationTarget.DRAFT_RESULTS,
+        payload=_embed(
+            f"Draft match #{match.id} cancelled", fields, color=0xEF4444
+        ),
     )

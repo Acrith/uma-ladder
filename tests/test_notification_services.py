@@ -48,12 +48,16 @@ def test_official_set_room_code_fires_notification(app: Flask) -> None:
                 season_id=s.id, name="Test", organizer_user_id=org
             )
         )
-        official_service.open_registration(race.id)
+        official_service.open_registration(race.id)  # also fires "published"
         official_service.set_room_code(race.id, "ROOM-1")
 
-        assert len(transport.calls) == 1
-        url, payload = transport.calls[0]
-        assert "ROOM-1" in str(payload)
+        # Find the room-code call specifically (publish event also fires).
+        room_code_calls = [
+            (url, payload) for url, payload in transport.calls
+            if "Room code" in str(payload)
+        ]
+        assert len(room_code_calls) == 1
+        assert "ROOM-1" in str(room_code_calls[0][1])
 
 
 def test_official_results_fires_notification(app: Flask) -> None:
@@ -91,6 +95,9 @@ def test_official_results_fires_notification(app: Flask) -> None:
 
 
 def test_notify_off_via_kwarg(app: Flask) -> None:
+    """notify=False on set_room_code suppresses *only* the room-code
+    notification — the race-published event from open_registration is
+    a separate broadcast and still fires."""
     with app.app_context():
         app.config["DISCORD_WEBHOOK_RACE_REGISTRATION_URL"] = "https://x"
         transport = FakeTransport()
@@ -106,7 +113,10 @@ def test_notify_off_via_kwarg(app: Flask) -> None:
         official_service.open_registration(race.id)
         official_service.set_room_code(race.id, "ROOM-1", notify=False)
 
-        assert transport.calls == []
+        # No "Room code" payload should have been sent.
+        assert not any(
+            "Room code" in str(payload) for _, payload in transport.calls
+        )
 
 
 def test_failure_does_not_break_caller(app: Flask) -> None:
@@ -129,5 +139,8 @@ def test_failure_does_not_break_caller(app: Flask) -> None:
         from uma_ladder.models import DiscordNotificationAttempt
 
         rows = db.session.query(DiscordNotificationAttempt).all()
-        assert len(rows) == 1
-        assert rows[0].status == NotificationStatus.FAILED
+        # Two attempts now: open_registration's publish + set_room_code's
+        # room-code event. Both should be marked FAILED by the broken
+        # transport — and crucially, the race state still updated.
+        assert len(rows) == 2
+        assert all(r.status == NotificationStatus.FAILED for r in rows)

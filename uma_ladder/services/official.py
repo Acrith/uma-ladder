@@ -107,9 +107,24 @@ def open_registration(race_id: int) -> OfficialRace:
         OfficialRaceStatus.REGISTRATION_CLOSED,
     ):
         raise InvalidRaceStateError(f"cannot open registration from {race.status}")
+    was_draft = race.status == OfficialRaceStatus.DRAFT
     race.status = OfficialRaceStatus.REGISTRATION_OPEN
     db.session.commit()
+    # Only broadcast the published event on the *first* open — re-opening
+    # after closing is not a publish event, the channel already saw it.
+    if was_draft:
+        _notify_race_published(race)
     return race
+
+
+def _notify_race_published(race: OfficialRace) -> None:
+    """Best-effort: never raises into the caller."""
+    try:
+        from ..notifications import services as notif_services
+
+        notif_services.notify_official_race_published(race)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def close_registration(race_id: int) -> OfficialRace:
@@ -508,11 +523,34 @@ def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
         raise InvalidRaceStateError("cannot cancel a completed race")
     if race.status == OfficialRaceStatus.CANCELLED:
         raise InvalidRaceStateError("race is already cancelled")
+    # Capture the registered usernames + actor BEFORE flipping status,
+    # since list_registrations filters by REGISTERED and we want to
+    # surface the affected players in the notification embed.
+    affected = [r.user.username for r in list_registrations(race_id) if r.user]
+    actor = db.session.get(User, by_user_id)
+    actor_username = actor.username if actor else None
+
     race.status = OfficialRaceStatus.CANCELLED
     race.cancelled_at = _utcnow()
     race.cancelled_by_user_id = by_user_id
     db.session.commit()
+    _notify_race_cancelled(race, actor_username, affected)
     return race
+
+
+def _notify_race_cancelled(
+    race: OfficialRace, actor_username: str | None, affected_usernames: list[str]
+) -> None:
+    try:
+        from ..notifications import services as notif_services
+
+        notif_services.notify_official_race_cancelled(
+            race,
+            cancelled_by_username=actor_username,
+            registered_usernames=affected_usernames,
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def remove_registration(
@@ -530,7 +568,27 @@ def remove_registration(
         return reg  # already removed; idempotent
     reg.status = RegistrationStatus.CANCELLED
     db.session.commit()
+
+    actor = db.session.get(User, by_user_id)
+    _notify_registration_removed(
+        race, reg, actor.username if actor else None
+    )
     return reg
+
+
+def _notify_registration_removed(
+    race: OfficialRace,
+    registration: OfficialRaceRegistration,
+    actor_username: str | None,
+) -> None:
+    try:
+        from ..notifications import services as notif_services
+
+        notif_services.notify_official_registration_removed(
+            race, registration, removed_by_username=actor_username
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _get_race(race_id: int) -> OfficialRace:
