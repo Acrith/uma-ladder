@@ -136,7 +136,10 @@
             <tbody>
               {% for r in registrations %}
                 <tr class="border-t border-slate-800">
-                  <td class="pr-3 py-2 text-slate-200">{{ r.user.username }}</td>
+                  <td class="pr-3 py-2 text-slate-200">
+                    <a href="{{ url_for('profiles.public', username=r.user.username) }}"
+                       class="hover:text-cyan-300">{{ r.user.username }}</a>
+                  </td>
                   <td class="pr-3 py-2"><input type="number" min="1" name="placement_{{ r.id }}" class="input-base w-20" /></td>
                   <td class="py-2"><input type="text" name="uma_name_{{ r.id }}" class="input-base" /></td>
                 </tr>
@@ -163,7 +166,12 @@
                 <div class="min-w-0">
                   <p class="text-sm">
                     <span class="text-mono-pill mr-1">#{{ r.placement }}</span>
-                    <span class="font-medium text-slate-100">@{{ r.user.username if r.user else '?' }}</span>
+                    {% if r.user %}
+                      <a href="{{ url_for('profiles.public', username=r.user.username) }}"
+                         class="font-medium text-slate-100 hover:text-cyan-300">@{{ r.user.username }}</a>
+                    {% else %}
+                      <span class="font-medium text-slate-100">@?</span>
+                    {% endif %}
                     {% if r.uma_name %}<span class="ml-2 text-slate-400">· {{ r.uma_name }}</span>{% endif %}
                   </p>
                   {% if r.speed or r.stamina or r.power or r.guts or r.wisdom %}

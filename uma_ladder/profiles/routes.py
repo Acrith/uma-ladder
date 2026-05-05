@@ -23,8 +23,12 @@ bp = Blueprint("profiles", __name__, template_folder="templates")
 
 
 @bp.get("/")
-def index() -> str:
-    return "profiles placeholder"
+def index() -> object:
+    """Public players browse — paginated list with username search."""
+    page = max(1, request.args.get("page", 1, type=int))
+    q = (request.args.get("q") or "").strip()
+    players = profiles_service.list_players(q=q, page=page, page_size=30)
+    return render_template("profiles/index.html", players=players, q=q)
 
 
 @bp.route("/me", methods=["GET", "POST"])

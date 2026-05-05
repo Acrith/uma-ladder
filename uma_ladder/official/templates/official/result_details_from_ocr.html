@@ -4,7 +4,11 @@
 {% block content %}
   <p class="label-eyebrow">
     <a class="hover:text-cyan-300" href="{{ url_for('official.detail', race_id=race.id) }}">{{ race.name }}</a>
-    · #{{ result.placement }} {% if result.user %}@{{ result.user.username }}{% endif %}
+    · #{{ result.placement }}
+    {% if result.user %}
+      <a href="{{ url_for('profiles.public', username=result.user.username) }}"
+         class="hover:text-cyan-300">@{{ result.user.username }}</a>
+    {% endif %}
   </p>
   <h1 class="mt-1 text-2xl font-semibold text-slate-100">Confirm parsed details</h1>
   <p class="mt-1 text-sm text-slate-400">

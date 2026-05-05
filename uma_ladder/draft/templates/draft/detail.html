@@ -117,15 +117,16 @@
               </div>
               <div class="min-w-0 flex-1">
                 <p class="label-eyebrow">{{ side.label }}{% if side.is_me %} · you{% endif %}</p>
-                <p class="mt-0.5 truncate text-base font-semibold text-slate-50">
-                  {% if side.user %}
-                    {% if side.profile and side.profile.display_name %}{{ side.profile.display_name }}{% else %}{{ side.user.username }}{% endif %}
-                  {% else %}
-                    — waiting —
-                  {% endif %}
-                </p>
                 {% if side.user %}
-                  <p class="text-xs text-slate-400">@{{ side.user.username }}</p>
+                  <a href="{{ url_for('profiles.public', username=side.user.username) }}"
+                     class="block hover:text-cyan-300">
+                    <p class="mt-0.5 truncate text-base font-semibold text-slate-50">
+                      {% if side.profile and side.profile.display_name %}{{ side.profile.display_name }}{% else %}{{ side.user.username }}{% endif %}
+                    </p>
+                    <p class="text-xs text-slate-400">@{{ side.user.username }}</p>
+                  </a>
+                {% else %}
+                  <p class="mt-0.5 truncate text-base font-semibold text-slate-50">— waiting —</p>
                 {% endif %}
               </div>
             </div>
@@ -455,14 +456,25 @@
           {% call card(class="p-5 border-fuchsia-500/30 shadow-glow-fuchsia") %}
             <p class="label-eyebrow">Result</p>
             <p class="mt-1 text-lg text-slate-100">
-              Winner: <span class="text-fuchsia-300 font-semibold">
-                {% if match.winner_user_id == match.host_user_id %}{{ match.host.username }}{% elif match.opponent and match.winner_user_id == match.opponent_user_id %}{{ match.opponent.username }}{% else %}user_id {{ match.winner_user_id }}{% endif %}
-              </span>
+              Winner:
+              {% if match.winner_user_id == match.host_user_id %}
+                <a href="{{ url_for('profiles.public', username=match.host.username) }}" class="text-fuchsia-300 font-semibold hover:text-fuchsia-200">{{ match.host.username }}</a>
+              {% elif match.opponent and match.winner_user_id == match.opponent_user_id %}
+                <a href="{{ url_for('profiles.public', username=match.opponent.username) }}" class="text-fuchsia-300 font-semibold hover:text-fuchsia-200">{{ match.opponent.username }}</a>
+              {% else %}
+                <span class="text-fuchsia-300 font-semibold">user_id {{ match.winner_user_id }}</span>
+              {% endif %}
             </p>
             {% if match.forfeit_user_id %}
               <p class="mt-2 text-xs text-rose-300">
                 ⚠ Forfeit by
-                {% if match.forfeit_user_id == match.host_user_id %}@{{ match.host.username }}{% elif match.opponent and match.forfeit_user_id == match.opponent_user_id %}@{{ match.opponent.username }}{% else %}user {{ match.forfeit_user_id }}{% endif %}
+                {% if match.forfeit_user_id == match.host_user_id %}
+                  <a href="{{ url_for('profiles.public', username=match.host.username) }}" class="hover:text-rose-200">@{{ match.host.username }}</a>
+                {% elif match.opponent and match.forfeit_user_id == match.opponent_user_id %}
+                  <a href="{{ url_for('profiles.public', username=match.opponent.username) }}" class="hover:text-rose-200">@{{ match.opponent.username }}</a>
+                {% else %}
+                  user {{ match.forfeit_user_id }}
+                {% endif %}
                 {% if match.forfeit_reason %}<span class="text-slate-400">· {{ match.forfeit_reason }}</span>{% endif %}
               </p>
             {% endif %}

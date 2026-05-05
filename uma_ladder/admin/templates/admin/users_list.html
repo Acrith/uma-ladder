@@ -38,7 +38,10 @@
               {% set tone = {'user': 'slate', 'organizer': 'cyan', 'editor': 'violet', 'admin': 'amber', 'superadmin': 'rose'}.get(u.role, 'slate') %}
               <tr class="border-t border-slate-800">
                 <td class="px-4 py-2 text-slate-500">{{ u.id }}</td>
-                <td class="px-4 py-2 font-medium text-slate-200">@{{ u.username }}</td>
+                <td class="px-4 py-2 font-medium text-slate-200">
+                  <a href="{{ url_for('profiles.public', username=u.username) }}"
+                     class="hover:text-cyan-300" title="View public profile">@{{ u.username }}</a>
+                </td>
                 <td class="px-4 py-2">{{ chip(u.role, tone) }}</td>
                 <td class="px-4 py-2 text-slate-500">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
                 <td class="px-4 py-2 text-right">

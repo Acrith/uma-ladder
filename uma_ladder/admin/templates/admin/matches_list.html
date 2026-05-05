@@ -47,8 +47,16 @@
                 <td class="px-4 py-2 text-slate-500">{{ m.id }}</td>
                 <td class="px-4 py-2 text-slate-400">{{ m.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                 <td class="px-4 py-2 text-slate-400">{{ m.season.name if m.season else '—' }}</td>
-                <td class="px-4 py-2 text-slate-300">@{{ m.host.username if m.host else '—' }}</td>
-                <td class="px-4 py-2 text-slate-300">{% if m.opponent %}@{{ m.opponent.username }}{% else %}<span class="text-slate-600">—</span>{% endif %}</td>
+                <td class="px-4 py-2 text-slate-300">
+                  {% if m.host %}
+                    <a href="{{ url_for('profiles.public', username=m.host.username) }}" class="hover:text-cyan-300">@{{ m.host.username }}</a>
+                  {% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-2 text-slate-300">
+                  {% if m.opponent %}
+                    <a href="{{ url_for('profiles.public', username=m.opponent.username) }}" class="hover:text-cyan-300">@{{ m.opponent.username }}</a>
+                  {% else %}<span class="text-slate-600">—</span>{% endif %}
+                </td>
                 <td class="px-4 py-2">{{ draft_status_chip(m.status) }}</td>
                 <td class="px-4 py-2 text-right">
                   <div class="flex items-center justify-end gap-2">

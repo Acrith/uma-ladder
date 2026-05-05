@@ -86,6 +86,55 @@ def find_user_by_username(username: str) -> User | None:
     ).first()
 
 
+@dataclass(frozen=True)
+class PlayersPage:
+    rows: list[tuple[User, UserProfile | None]]
+    total: int
+    page: int
+    page_size: int
+
+    @property
+    def pages(self) -> int:
+        return max(1, (self.total + self.page_size - 1) // self.page_size)
+
+
+def list_players(
+    *, q: str = "", page: int = 1, page_size: int = 30
+) -> PlayersPage:
+    """Paginated player browse for /profiles/. Joins User + UserProfile
+    so the template can render avatar / display_name / oshi inline.
+    Search is case-insensitive substring on username."""
+    from sqlalchemy import func as sa_func
+
+    page = max(1, page)
+    page_size = max(1, page_size)
+
+    base = select(User).order_by(User.username.asc())
+    qstr = q.strip().lower()
+    if qstr:
+        base = base.where(sa_func.lower(User.username).contains(qstr))
+
+    total = db.session.scalar(
+        select(sa_func.count()).select_from(base.subquery())
+    ) or 0
+    users = list(
+        db.session.scalars(
+            base.limit(page_size).offset((page - 1) * page_size)
+        )
+    )
+    # Fetch profiles in a single round trip then zip — avoids N+1.
+    profiles_by_uid: dict[int, UserProfile] = {}
+    if users:
+        rows = db.session.scalars(
+            select(UserProfile).where(
+                UserProfile.user_id.in_([u.id for u in users])
+            )
+        ).all()
+        profiles_by_uid = {p.user_id: p for p in rows}
+    pairs = [(u, profiles_by_uid.get(u.id)) for u in users]
+    return PlayersPage(rows=pairs, total=total, page=page, page_size=page_size)
+
+
 def list_enabled_characters() -> list[UmaCharacter]:
     return list(
         db.session.scalars(

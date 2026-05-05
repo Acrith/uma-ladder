@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Players · Uma Ladder{% endblock %}
+{% block content %}
+
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Community</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Players <span class="text-base font-normal text-slate-500">({{ players.total }})</span></h1>
+    </div>
+    <form method="get" class="flex items-center gap-2 text-sm">
+      <input type="search"
+             name="q"
+             value="{{ q }}"
+             placeholder="Search username…"
+             class="input-base"
+             autocomplete="off" />
+      <button class="btn-primary">Search</button>
+    </form>
+  </div>
+
+  {% if not players.rows %}
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">
+      {% if q %}No players match “{{ q }}”.{% else %}No players yet.{% endif %}
+    </div>
+  {% else %}
+    <ul class="mt-6 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+      {% for u, profile in players.rows %}
+        <li>
+          <a href="{{ url_for('profiles.public', username=u.username) }}"
+             class="surface-card flex items-center gap-3 p-3 transition hover:border-cyan-500/40">
+            {% if profile and profile.avatar_url %}
+              <img src="{{ profile.avatar_url }}"
+                   alt=""
+                   loading="lazy"
+                   class="h-10 w-10 shrink-0 rounded-xl border border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
+            {% else %}
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-800 bg-slate-800 text-base font-semibold text-slate-300 {% if profile and profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
+                {{ u.username[:1] | upper }}
+              </div>
+            {% endif %}
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-slate-100">
+                {% if profile and profile.display_name %}{{ profile.display_name }}{% else %}{{ u.username }}{% endif %}
+              </p>
+              <p class="truncate text-xs text-slate-500">@{{ u.username }}</p>
+              {% if profile and profile.oshi %}
+                <p class="truncate text-[11px] text-fuchsia-200/80">
+                  {{ profile.oshi.name_en }}
+                  {%- if profile.oshi_outfit %} · {{ profile.oshi_outfit.display_title }}{% endif %}
+                </p>
+              {% endif %}
+            </div>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if players.pages > 1 %}
+      <div class="mt-6 flex items-center justify-between text-xs text-slate-400">
+        <span>Page {{ players.page }} / {{ players.pages }}</span>
+        <div class="flex gap-2">
+          {% if players.page > 1 %}
+            <a class="btn-ghost" href="{{ url_for('profiles.index', page=players.page - 1, q=q or none) }}">← Prev</a>
+          {% endif %}
+          {% if players.page < players.pages %}
+            <a class="btn-ghost" href="{{ url_for('profiles.index', page=players.page + 1, q=q or none) }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+{% endblock %}
