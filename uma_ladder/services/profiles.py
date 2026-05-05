@@ -447,6 +447,140 @@ def most_used_umas_for_user(
     return out
 
 
+@dataclass(frozen=True)
+class TrackBucket:
+    """One row in the track-strength breakdown."""
+
+    label: str  # e.g. "Mile" or "Turf"
+    races: int
+    wins: int
+
+    @property
+    def win_rate(self) -> float:
+        return self.wins / self.races if self.races else 0.0
+
+
+@dataclass(frozen=True)
+class TrackStrengths:
+    """Combined Official + Draft view of which conditions a user wins
+    in. `best_distance` / `best_surface` are the highest-WR buckets
+    that clear the sample-size threshold, or None when no bucket
+    clears it."""
+
+    by_distance: list[TrackBucket]
+    by_surface: list[TrackBucket]
+    best_distance: TrackBucket | None
+    best_surface: TrackBucket | None
+    total_races: int
+
+
+def track_strengths_for_user(
+    user_id: int,
+    *,
+    min_races: int = 3,
+) -> TrackStrengths:
+    """Aggregate placement counts grouped by ``preset.distance_category``
+    and ``preset.surface`` across BOTH official races and draft matches.
+
+    Combines the two sources because they're the same physical race
+    conditions — players want one picture of "where do I do well." A
+    win is placement==1 in either source. The sample-size guard
+    (`min_races`) hides best-* picks for buckets that haven't seen
+    enough data; full breakdown lists still surface every observed
+    bucket so the player can see why something says "not enough data."
+    """
+    from ..models import (
+        DraftMatch,
+        DraftRaceResult,
+        OfficialRace,
+        OfficialRaceResult,
+        RacePreset,
+    )
+
+    distance_counts: dict[str, dict[str, int]] = {}
+    surface_counts: dict[str, dict[str, int]] = {}
+
+    def _bump(table: dict[str, dict[str, int]], key: str, won: bool) -> None:
+        slot = table.setdefault(key, {"races": 0, "wins": 0})
+        slot["races"] += 1
+        if won:
+            slot["wins"] += 1
+
+    # Official: result → race → preset.
+    official_rows = db.session.execute(
+        select(
+            RacePreset.distance_category,
+            RacePreset.surface,
+            OfficialRaceResult.placement,
+        )
+        .join(OfficialRace, OfficialRace.id == OfficialRaceResult.official_race_id)
+        .join(RacePreset, RacePreset.id == OfficialRace.preset_id)
+        .where(OfficialRaceResult.user_id == user_id)
+    ).all()
+    for cat, surf, place in official_rows:
+        won = place == 1
+        if cat:
+            _bump(distance_counts, cat, won)
+        if surf:
+            _bump(surface_counts, surf, won)
+
+    # Draft: result → match → preset (selected_preset_id).
+    draft_rows = db.session.execute(
+        select(
+            RacePreset.distance_category,
+            RacePreset.surface,
+            DraftRaceResult.placement,
+        )
+        .join(DraftMatch, DraftMatch.id == DraftRaceResult.draft_match_id)
+        .join(RacePreset, RacePreset.id == DraftMatch.selected_preset_id)
+        .where(DraftRaceResult.user_id == user_id)
+    ).all()
+    for cat, surf, place in draft_rows:
+        won = place == 1
+        if cat:
+            _bump(distance_counts, cat, won)
+        if surf:
+            _bump(surface_counts, surf, won)
+
+    # Stable display order for the breakdowns.
+    distance_order = ("Sprint", "Mile", "Medium", "Long")
+    surface_order = ("Turf", "Dirt")
+
+    def _ordered(table: dict[str, dict[str, int]], order: tuple[str, ...]) -> list[TrackBucket]:
+        seen = set(table.keys())
+        out = [
+            TrackBucket(label=k, races=table[k]["races"], wins=table[k]["wins"])
+            for k in order
+            if k in seen
+        ]
+        # Anything not in the canonical order list (defensive) appended.
+        for k in seen - set(order):
+            out.append(
+                TrackBucket(label=k, races=table[k]["races"], wins=table[k]["wins"])
+            )
+        return out
+
+    by_distance = _ordered(distance_counts, distance_order)
+    by_surface = _ordered(surface_counts, surface_order)
+
+    def _best(buckets: list[TrackBucket]) -> TrackBucket | None:
+        eligible = [b for b in buckets if b.races >= min_races]
+        if not eligible:
+            return None
+        # Highest win-rate; tiebreak on race count so a 100% on 3 races
+        # doesn't beat 95% on 50.
+        return max(eligible, key=lambda b: (b.win_rate, b.races))
+
+    total = sum(b.races for b in by_distance)
+    return TrackStrengths(
+        by_distance=by_distance,
+        by_surface=by_surface,
+        best_distance=_best(by_distance),
+        best_surface=_best(by_surface),
+        total_races=total,
+    )
+
+
 def list_recent_history_for_user(
     user_id: int,
     *,

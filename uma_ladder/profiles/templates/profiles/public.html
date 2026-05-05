@@ -266,9 +266,68 @@
       {% endcall %}
     {% endif %}
 
-    {# Track Strengths card still deferred until track_strengths_for_user
-       lands. In-game Stats keeps its empty state because the user can
-       fix it themselves by setting a friend code. #}
+    {# Track Strengths — combined Official + Draft view. The card
+       only renders when there's at least one race recorded; the
+       sample-size guard inside the service is what gates the
+       best-distance / best-surface picks (not the card visibility).
+       Buckets without enough data still appear in the breakdown so
+       the player can see why they're not eligible for "best." #}
+    {% if track_strengths.total_races > 0 %}
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Track strengths</p>
+        <h2 class="mt-1 text-base font-semibold text-slate-100">{{ track_strengths.total_races }} race{{ '' if track_strengths.total_races == 1 else 's' }} across both kinds</h2>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">Best distance</p>
+            {% if track_strengths.best_distance %}
+              <p class="mt-0.5 text-base font-semibold text-cyan-300">{{ track_strengths.best_distance.label }}</p>
+              <p class="text-xs text-slate-400">{{ '%.0f' % (track_strengths.best_distance.win_rate * 100) }}% WR · {{ track_strengths.best_distance.races }} race{{ '' if track_strengths.best_distance.races == 1 else 's' }}</p>
+            {% else %}
+              <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
+            {% endif %}
+          </div>
+          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">Best surface</p>
+            {% if track_strengths.best_surface %}
+              <p class="mt-0.5 text-base font-semibold text-fuchsia-300">{{ track_strengths.best_surface.label }}</p>
+              <p class="text-xs text-slate-400">{{ '%.0f' % (track_strengths.best_surface.win_rate * 100) }}% WR · {{ track_strengths.best_surface.races }} race{{ '' if track_strengths.best_surface.races == 1 else 's' }}</p>
+            {% else %}
+              <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          {% if track_strengths.by_distance %}
+            <div>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500">Distance</p>
+              <ul class="mt-2 space-y-1.5">
+                {% for b in track_strengths.by_distance %}
+                  <li class="flex items-center justify-between text-xs">
+                    <span class="text-slate-300">{{ b.label }}</span>
+                    <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+          {% if track_strengths.by_surface %}
+            <div>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500">Surface</p>
+              <ul class="mt-2 space-y-1.5">
+                {% for b in track_strengths.by_surface %}
+                  <li class="flex items-center justify-between text-xs">
+                    <span class="text-slate-300">{{ b.label }}</span>
+                    <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+      {% endcall %}
+    {% endif %}
 
     {# In-game Stats — real (uma.moe), compact metric tiles #}
     {% if trainer %}
