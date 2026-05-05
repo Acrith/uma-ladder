@@ -7,10 +7,15 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     url_for,
 )
 from flask_login import current_user, login_required
 
+from ..extensions import db
+from ..models import UploadedImage
+from ..models.enums import UploadPurpose
+from ..services import ocr as ocr_service
 from ..services import profiles as profiles_service
 from .forms import ProfileForm
 
@@ -36,9 +41,21 @@ def me() -> object:
     if form.validate_on_submit():
         outfit_raw = (request.form.get("oshi_outfit_id") or "").strip()
         outfit_id = int(outfit_raw) if outfit_raw.isdigit() else None
+        # Uploaded avatar wins over the URL field — handles the common
+        # case of a user pasting a URL once, then later uploading their
+        # own image (the upload is the more deliberate action).
+        avatar_url = form.avatar_url.data or None
+        if form.avatar_image.data:
+            try:
+                avatar_url = profiles_service.save_avatar_upload(
+                    form.avatar_image.data, user=current_user
+                )
+            except ocr_service.OcrError as exc:
+                flash(f"Avatar upload failed: {exc}")
+                return redirect(url_for("profiles.me"))
         update = profiles_service.ProfileUpdate(
             display_name=form.display_name.data or None,
-            avatar_url=form.avatar_url.data or None,
+            avatar_url=avatar_url,
             description=form.description.data or None,
             friend_code=form.friend_code.data or None,
             discord_handle=form.discord_handle.data or None,
@@ -90,15 +107,30 @@ def partial_outfits() -> object:
     )
 
 
+@bp.get("/avatars/<int:image_id>")
+def serve_avatar(image_id: int) -> object:
+    """Public serve endpoint for user-uploaded avatars. No auth — avatars
+    are part of public profiles. Refuses to serve images uploaded for any
+    other purpose, so the OCR upload bucket isn't accidentally exposed
+    by guessing image_ids."""
+    image = db.session.get(UploadedImage, image_id)
+    if image is None or image.purpose != UploadPurpose.AVATAR:
+        abort(404)
+    directory = ocr_service.image_path(image).parent
+    return send_from_directory(directory, image.storage_key)
+
+
 @bp.get("/<username>")
 def public(username: str) -> object:
     user = profiles_service.find_user_by_username(username)
     if user is None:
         abort(404)
     profile = profiles_service.get_or_create_profile(user)
+    history = profiles_service.list_recent_history_for_user(user.id, limit=10)
     return render_template(
         "profiles/public.html",
         user=user,
         profile=profile,
         oshi_image=profiles_service.resolve_oshi_image(profile),
+        history=history,
     )

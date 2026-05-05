@@ -9,16 +9,40 @@
 
     {# Form column #}
     {% call card(class="p-6") %}
-      <form method="post" class="space-y-4">
+      <form method="post" enctype="multipart/form-data" class="space-y-4">
         {{ form.hidden_tag() }}
 
-        {% for f in [form.display_name, form.avatar_url, form.friend_code, form.discord_handle] %}
+        {% for f in [form.display_name, form.friend_code, form.discord_handle] %}
           <div>
             <label class="text-sm text-slate-300">{{ f.label.text }}</label>
             {{ f(class="input-base mt-1") }}
             {% for err in f.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
           </div>
         {% endfor %}
+
+        {# Avatar: upload OR URL. The uploaded file wins on save. #}
+        <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+          <p class="label-eyebrow">Avatar</p>
+          <div class="mt-2 space-y-2">
+            {% if profile.avatar_url %}
+              <div class="flex items-center gap-2 text-xs text-slate-400">
+                <img src="{{ profile.avatar_url }}" alt="" class="h-8 w-8 rounded border border-slate-800 object-cover" />
+                <span class="truncate">Current: {{ profile.avatar_url }}</span>
+              </div>
+            {% endif %}
+            <div>
+              <label class="text-xs text-slate-400">Upload new image</label>
+              {{ form.avatar_image(class="mt-1 block text-xs text-slate-300 file:mr-3 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-3 file:py-1 file:text-slate-300 hover:file:bg-slate-800", accept="image/png,image/jpeg,image/webp") }}
+              {% for err in form.avatar_image.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+            </div>
+            <div>
+              <label class="text-xs text-slate-400">…or use a URL</label>
+              {{ form.avatar_url(class="input-base mt-1", placeholder="https://…") }}
+              {% for err in form.avatar_url.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+            </div>
+            <p class="text-[11px] text-slate-500">Uploaded image wins over the URL field on save.</p>
+          </div>
+        </div>
 
         <div>
           <label class="text-sm text-slate-300">{{ form.description.label.text }}</label>

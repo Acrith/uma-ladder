@@ -104,6 +104,7 @@ class NotificationTarget(StrEnum):
 
 class UploadPurpose(StrEnum):
     OCR_RESULT = "ocr_result"
+    AVATAR = "avatar"
     OTHER = "other"
 
 

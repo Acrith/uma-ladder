@@ -121,6 +121,26 @@ def list_all_outfits() -> Sequence[UmaOutfit]:
     )
 
 
+def save_avatar_upload(file, *, user: User) -> str:
+    """Save an uploaded avatar image and return the served URL.
+
+    Wraps services.ocr.save_uploaded_image (which already handles the
+    file storage path + size + extension validation) with
+    purpose=AVATAR. The returned URL is suitable for writing into
+    UserProfile.avatar_url — it points at the public avatar serving
+    route, not at the OCR-protected serve endpoint.
+    """
+    from flask import url_for
+
+    from ..models.enums import UploadPurpose
+    from . import ocr as ocr_service
+
+    image = ocr_service.save_uploaded_image(
+        file, uploader_user_id=user.id, purpose=UploadPurpose.AVATAR
+    )
+    return url_for("profiles.serve_avatar", image_id=image.id)
+
+
 def resolve_oshi_image(profile: UserProfile) -> str | None:
     """Pick the best Oshi image: chosen outfit > character default > none."""
     if profile.oshi_outfit and profile.oshi_outfit.image_url:
@@ -128,3 +148,93 @@ def resolve_oshi_image(profile: UserProfile) -> str | None:
     if profile.oshi and profile.oshi.image_url:
         return profile.oshi.image_url
     return None
+
+
+# ---------- Race history ----------
+
+
+@dataclass(frozen=True)
+class HistoryEntry:
+    """One race result for a user — covers both draft and official."""
+
+    kind: str  # "draft" | "official"
+    placement: int
+    when: object  # datetime; kept loose so callers don't need to import
+    title: str
+    detail_url_endpoint: str
+    detail_url_kwargs: dict
+    venue: str | None = None
+
+
+def list_recent_history_for_user(
+    user_id: int, *, limit: int = 10
+) -> list[HistoryEntry]:
+    """Combined draft + official race history for a user, newest first.
+
+    Pulls completed entries from both sources and merges them in Python
+    rather than UNION'ing in SQL — the combined volume per user is small
+    and this keeps the join shape simple.
+    """
+    from ..models import (
+        DraftMatch,
+        DraftRaceResult,
+        OfficialRace,
+        OfficialRaceResult,
+    )
+
+    entries: list[HistoryEntry] = []
+
+    draft_rows = db.session.scalars(
+        select(DraftRaceResult)
+        .where(DraftRaceResult.user_id == user_id)
+        .order_by(DraftRaceResult.created_at.desc())
+        .limit(limit)
+    ).all()
+    for r in draft_rows:
+        match = db.session.get(DraftMatch, r.draft_match_id)
+        title = (
+            match.selected_preset.name
+            if match and match.selected_preset
+            else f"Match #{r.draft_match_id}"
+        )
+        venue = (
+            match.selected_preset.venue
+            if match and match.selected_preset
+            else None
+        )
+        entries.append(
+            HistoryEntry(
+                kind="draft",
+                placement=r.placement,
+                when=r.created_at,
+                title=title,
+                detail_url_endpoint="draft.detail",
+                detail_url_kwargs={"match_id": r.draft_match_id},
+                venue=venue,
+            )
+        )
+
+    official_rows = db.session.scalars(
+        select(OfficialRaceResult)
+        .where(OfficialRaceResult.user_id == user_id)
+        .order_by(OfficialRaceResult.created_at.desc())
+        .limit(limit)
+    ).unique().all()
+    for r in official_rows:
+        race = db.session.get(OfficialRace, r.official_race_id)
+        title = race.name if race else f"Race #{r.official_race_id}"
+        venue = race.preset.venue if race and race.preset else None
+        entries.append(
+            HistoryEntry(
+                kind="official",
+                placement=r.placement,
+                when=r.created_at,
+                title=title,
+                detail_url_endpoint="official.detail",
+                detail_url_kwargs={"race_id": r.official_race_id},
+                venue=venue,
+            )
+        )
+
+    entries.sort(key=lambda e: e.when, reverse=True)
+    return entries[:limit]
