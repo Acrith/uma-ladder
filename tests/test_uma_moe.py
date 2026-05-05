@@ -192,6 +192,47 @@ def test_public_profile_renders_card_when_friend_code_set(
     assert "via uma.moe" in body
 
 
+def test_public_profile_links_trainer_name_to_uma_moe(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    fc = "111122223333"
+    user = make_user(username="acrith2", role=Role.USER)
+    with app.app_context():
+        from uma_ladder.models import User
+        from uma_ladder.services import profiles as profiles_service
+        u = db.session.get(User, user["id"])
+        profiles_service.update_profile(
+            u, profiles_service.ProfileUpdate(friend_code=fc)
+        )
+        set_transport(FakeUmaMoeTransport({_profile_url(fc): _ok_response()}))
+
+    resp = client.get("/profiles/acrith2")
+    body = resp.data.decode()
+    # Trainer name links out to uma.moe with the friend code.
+    assert f'href="https://uma.moe/profile/{fc}"' in body
+    assert 'target="_blank"' in body
+    assert 'rel="noopener noreferrer"' in body
+
+
+def test_public_profile_friend_code_is_click_to_copy(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    fc = "111122223333"
+    user = make_user(username="copyme", role=Role.USER)
+    with app.app_context():
+        from uma_ladder.models import User
+        from uma_ladder.services import profiles as profiles_service
+        u = db.session.get(User, user["id"])
+        profiles_service.update_profile(
+            u, profiles_service.ProfileUpdate(friend_code=fc)
+        )
+    resp = client.get("/profiles/copyme")
+    body = resp.data.decode()
+    # Friend-code pill carries the data-copy attribute the JS handler hooks.
+    assert f'data-copy="{fc}"' in body
+    assert 'Click to copy' in body
+
+
 def test_public_profile_skips_card_when_no_friend_code(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

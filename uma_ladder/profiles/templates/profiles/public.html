@@ -80,7 +80,10 @@
               {% if profile.friend_code %}
                 <span>
                   <span class="text-slate-500">Friend code:</span>
-                  <span class="text-mono-pill ml-1">{{ profile.friend_code }}</span>
+                  <button type="button"
+                          class="text-mono-pill ml-1 cursor-pointer hover:text-cyan-300 transition"
+                          data-copy="{{ profile.friend_code }}"
+                          title="Click to copy">{{ profile.friend_code }}</button>
                 </span>
               {% endif %}
               {% if profile.friend_code and profile.discord_handle %}
@@ -145,7 +148,15 @@
           <div>
             <p class="label-eyebrow">In-game stats</p>
             <h2 class="mt-1 text-base font-semibold text-slate-100">
-              {{ trainer.trainer_name or '—' }}
+              {% if trainer.trainer_name %}
+                <a href="https://uma.moe/profile/{{ trainer.friend_code }}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="hover:text-cyan-300 transition"
+                   title="Open on uma.moe">{{ trainer.trainer_name }} ↗</a>
+              {% else %}
+                —
+              {% endif %}
             </h2>
             <p class="text-xs text-slate-500">via uma.moe · cached {{ trainer.fetched_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
           </div>
@@ -240,5 +251,44 @@
       </div>
     </section>
   {% endif %}
+
+  <script>
+    /* Click-to-copy for any element with data-copy. Falls back to a
+       text-selection range on browsers without clipboard API access
+       (older Safari, non-HTTPS contexts). Brief inline feedback so the
+       user sees something happened. */
+    (function() {
+      function flashCopied(el, original) {
+        el.textContent = 'copied!';
+        el.classList.add('text-emerald-300');
+        setTimeout(function() {
+          el.textContent = original;
+          el.classList.remove('text-emerald-300');
+        }, 1200);
+      }
+      document.querySelectorAll('[data-copy]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          var text = el.dataset.copy;
+          var original = el.textContent;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+              .then(function() { flashCopied(el, original); })
+              .catch(function() { /* silent fail; nothing to do */ });
+          } else {
+            // Fallback for older browsers.
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); flashCopied(el, original); }
+            catch (e) { /* silent */ }
+            document.body.removeChild(ta);
+          }
+        });
+      });
+    })();
+  </script>
 
 {% endblock %}
