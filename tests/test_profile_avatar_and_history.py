@@ -365,14 +365,16 @@ def test_history_combines_draft_and_official_in_recency_order(
         db.session.add(off_result)
         db.session.commit()
 
-        history = profiles_service.list_recent_history_for_user(user["id"])
-        assert len(history) == 2
+        page = profiles_service.list_recent_history_for_user(user["id"])
+        assert page.total == 2
+        assert len(page.entries) == 2
         # Newer (official) first.
-        assert history[0].kind == "official"
-        assert history[0].title == "Spring Cup"
-        assert history[0].placement == 3
-        assert history[1].kind == "draft"
-        assert history[1].placement == 1
+        assert page.entries[0].kind == "official"
+        assert page.entries[0].title == "Spring Cup"
+        assert page.entries[0].placement == 3
+        assert page.entries[1].kind == "draft"
+        assert page.entries[1].placement == 1
+        assert page.pages == 1
 
 
 def test_public_profile_renders_history_section(
@@ -426,3 +428,149 @@ def test_public_profile_renders_history_section(
     assert "Recent races" in body
     assert "Spring Cup" in body
     assert "#1" in body
+
+
+def _seed_many_official_results(
+    app: Flask, user_id: int, n: int
+) -> None:
+    """Helper: create N completed OfficialRaceResult rows for a user.
+    Each result lives on its own race, since (race_id, user_id) is
+    uniquely constrained."""
+    with app.app_context():
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        p = RacePreset(
+            source=PresetSource.G1_IMPORT,
+            name="Tokyo G1",
+            venue="Tokyo",
+            surface="Turf",
+            distance_meters=2000,
+            distance_category="Medium",
+            direction="Left",
+            course_variant=None,
+            max_runners=18,
+            enabled=True,
+        )
+        db.session.add_all([s, p])
+        db.session.commit()
+        for i in range(n):
+            race = OfficialRace(
+                season_id=s.id,
+                organizer_user_id=user_id,
+                name=f"Race #{i}",
+                preset_id=p.id,
+                status=OfficialRaceStatus.COMPLETED,
+            )
+            db.session.add(race)
+            db.session.flush()
+            r = OfficialRaceResult(
+                official_race_id=race.id,
+                user_id=user_id,
+                placement=1,
+                uma_name=f"Uma {i}",
+            )
+            r.created_at = now - timedelta(minutes=i)
+            db.session.add(r)
+        db.session.commit()
+
+
+def test_history_pagination_boundaries(app: Flask, make_user) -> None:
+    user = make_user(username="alice", role=Role.USER)
+    _seed_many_official_results(app, user["id"], n=12)
+    with app.app_context():
+        page1 = profiles_service.list_recent_history_for_user(
+            user["id"], page=1, page_size=5
+        )
+        assert page1.total == 12
+        assert len(page1.entries) == 5
+        assert page1.pages == 3
+        page2 = profiles_service.list_recent_history_for_user(
+            user["id"], page=2, page_size=5
+        )
+        assert len(page2.entries) == 5
+        page3 = profiles_service.list_recent_history_for_user(
+            user["id"], page=3, page_size=5
+        )
+        assert len(page3.entries) == 2
+        # Page out of range returns empty (still a valid HistoryPage).
+        page99 = profiles_service.list_recent_history_for_user(
+            user["id"], page=99, page_size=5
+        )
+        assert page99.entries == []
+        assert page99.total == 12
+
+
+def test_history_kind_filter_changes_total(
+    app: Flask, make_user
+) -> None:
+    """`total` reflects the filtered set, not the global count — that's
+    what the template's "(X results)" header relies on."""
+    user = make_user(username="alice", role=Role.USER)
+    _seed_many_official_results(app, user["id"], n=3)
+
+    with app.app_context():
+        # Add one draft result so the unfiltered total is 4.
+        from uma_ladder.models import DraftMatch, DraftMatchStatus, DraftRaceResult
+        match = DraftMatch(
+            season_id=1,
+            host_user_id=user["id"],
+            join_code="ABCDEF12",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+        )
+        db.session.add(match)
+        db.session.commit()
+        db.session.add(
+            DraftRaceResult(
+                draft_match_id=match.id,
+                user_id=user["id"],
+                placement=1,
+            )
+        )
+        db.session.commit()
+
+        all_kinds = profiles_service.list_recent_history_for_user(user["id"])
+        assert all_kinds.total == 4
+
+        official_only = profiles_service.list_recent_history_for_user(
+            user["id"], kind="official"
+        )
+        assert official_only.total == 3
+        assert all(e.kind == "official" for e in official_only.entries)
+
+        draft_only = profiles_service.list_recent_history_for_user(
+            user["id"], kind="draft"
+        )
+        assert draft_only.total == 1
+        assert draft_only.entries[0].kind == "draft"
+
+
+def test_history_invalid_kind_treated_as_all(
+    app: Flask, make_user
+) -> None:
+    user = make_user(username="alice", role=Role.USER)
+    _seed_many_official_results(app, user["id"], n=2)
+    with app.app_context():
+        page = profiles_service.list_recent_history_for_user(
+            user["id"], kind="garbage"
+        )
+        assert page.total == 2  # treated as no filter
+
+
+def test_public_profile_pagination_links_preserve_kind(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    user = make_user(username="alice", role=Role.USER)
+    _seed_many_official_results(app, user["id"], n=12)
+    resp = client.get("/profiles/alice?kind=official&page=1")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Active filter pill highlighted + pagination link carries kind through.
+    assert "kind=official" in body
+    assert "Page 1 / 2" in body

@@ -139,7 +139,11 @@ def public(username: str) -> object:
     if user is None:
         abort(404)
     profile = profiles_service.get_or_create_profile(user)
-    history = profiles_service.list_recent_history_for_user(user.id, limit=10)
+    page = max(1, request.args.get("page", 1, type=int))
+    kind = (request.args.get("kind") or "").strip() or None
+    history = profiles_service.list_recent_history_for_user(
+        user.id, page=page, page_size=10, kind=kind
+    )
     elo = draft_service.elo_summary_for_user(user.id)
     return render_template(
         "profiles/public.html",

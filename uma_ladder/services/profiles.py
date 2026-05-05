@@ -198,15 +198,25 @@ class HistoryEntry:
     venue: str | None = None
 
 
-def list_recent_history_for_user(
-    user_id: int, *, limit: int = 10
-) -> list[HistoryEntry]:
-    """Combined draft + official race history for a user, newest first.
+@dataclass(frozen=True)
+class HistoryPage:
+    entries: list[HistoryEntry]
+    total: int  # within the active kind filter
+    page: int
+    page_size: int
 
-    Pulls completed entries from both sources and merges them in Python
-    rather than UNION'ing in SQL — the combined volume per user is small
-    and this keeps the join shape simple.
-    """
+    @property
+    def pages(self) -> int:
+        return max(1, (self.total + self.page_size - 1) // self.page_size)
+
+
+def _all_history_for_user(
+    user_id: int, *, kind: str | None
+) -> list[HistoryEntry]:
+    """Internal — returns the full sorted list across the chosen kind
+    filter. Per-user volume is small (a few hundred at most), so pulling
+    everything into Python and sorting beats a SQL UNION ALL with two
+    different result shapes."""
     from ..models import (
         DraftMatch,
         DraftRaceResult,
@@ -216,57 +226,85 @@ def list_recent_history_for_user(
 
     entries: list[HistoryEntry] = []
 
-    draft_rows = db.session.scalars(
-        select(DraftRaceResult)
-        .where(DraftRaceResult.user_id == user_id)
-        .order_by(DraftRaceResult.created_at.desc())
-        .limit(limit)
-    ).all()
-    for r in draft_rows:
-        match = db.session.get(DraftMatch, r.draft_match_id)
-        title = (
-            match.selected_preset.name
-            if match and match.selected_preset
-            else f"Match #{r.draft_match_id}"
-        )
-        venue = (
-            match.selected_preset.venue
-            if match and match.selected_preset
-            else None
-        )
-        entries.append(
-            HistoryEntry(
-                kind="draft",
-                placement=r.placement,
-                when=r.created_at,
-                title=title,
-                detail_url_endpoint="draft.detail",
-                detail_url_kwargs={"match_id": r.draft_match_id},
-                venue=venue,
+    if kind in (None, "draft"):
+        for r in db.session.scalars(
+            select(DraftRaceResult)
+            .where(DraftRaceResult.user_id == user_id)
+            .order_by(DraftRaceResult.created_at.desc())
+        ).all():
+            match = db.session.get(DraftMatch, r.draft_match_id)
+            title = (
+                match.selected_preset.name
+                if match and match.selected_preset
+                else f"Match #{r.draft_match_id}"
             )
-        )
+            venue = (
+                match.selected_preset.venue
+                if match and match.selected_preset
+                else None
+            )
+            entries.append(
+                HistoryEntry(
+                    kind="draft",
+                    placement=r.placement,
+                    when=r.created_at,
+                    title=title,
+                    detail_url_endpoint="draft.detail",
+                    detail_url_kwargs={"match_id": r.draft_match_id},
+                    venue=venue,
+                )
+            )
 
-    official_rows = db.session.scalars(
-        select(OfficialRaceResult)
-        .where(OfficialRaceResult.user_id == user_id)
-        .order_by(OfficialRaceResult.created_at.desc())
-        .limit(limit)
-    ).unique().all()
-    for r in official_rows:
-        race = db.session.get(OfficialRace, r.official_race_id)
-        title = race.name if race else f"Race #{r.official_race_id}"
-        venue = race.preset.venue if race and race.preset else None
-        entries.append(
-            HistoryEntry(
-                kind="official",
-                placement=r.placement,
-                when=r.created_at,
-                title=title,
-                detail_url_endpoint="official.detail",
-                detail_url_kwargs={"race_id": r.official_race_id},
-                venue=venue,
+    if kind in (None, "official"):
+        for r in db.session.scalars(
+            select(OfficialRaceResult)
+            .where(OfficialRaceResult.user_id == user_id)
+            .order_by(OfficialRaceResult.created_at.desc())
+        ).unique().all():
+            race = db.session.get(OfficialRace, r.official_race_id)
+            title = race.name if race else f"Race #{r.official_race_id}"
+            venue = race.preset.venue if race and race.preset else None
+            entries.append(
+                HistoryEntry(
+                    kind="official",
+                    placement=r.placement,
+                    when=r.created_at,
+                    title=title,
+                    detail_url_endpoint="official.detail",
+                    detail_url_kwargs={"race_id": r.official_race_id},
+                    venue=venue,
+                )
             )
-        )
 
     entries.sort(key=lambda e: e.when, reverse=True)
-    return entries[:limit]
+    return entries
+
+
+def list_recent_history_for_user(
+    user_id: int,
+    *,
+    page: int = 1,
+    page_size: int = 10,
+    kind: str | None = None,
+) -> HistoryPage:
+    """Paginated combined draft + official race history.
+
+    `kind` is None (both), "draft", or "official"; anything else is
+    treated as None. Pages are 1-indexed. `total` reflects the active
+    kind filter — switching the filter changes the total.
+    """
+    if kind not in (None, "draft", "official"):
+        kind = None
+    page = max(1, page)
+    page_size = max(1, page_size)
+
+    all_entries = _all_history_for_user(user_id, kind=kind)
+    total = len(all_entries)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return HistoryPage(
+        entries=all_entries[start:end],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
