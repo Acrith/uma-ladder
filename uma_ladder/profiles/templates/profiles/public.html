@@ -108,9 +108,13 @@
           </p>
         {% endif %}
 
-        {# Hero stat tile grid — 4-up summary fills the empty lower-left. #}
+        {# Hero stat tile grid — placeholders for Official podiums /
+           Best track / Season rank are deferred until their backing
+           services exist. For now the row holds just Draft Elo
+           (real data) at a constrained width so it doesn't stretch
+           full-bleed. The grid scaffold stays so future tiles drop
+           in without re-flowing the column. #}
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {# Draft ELO — real data #}
           <div class="rounded-xl border border-cyan-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
             <p class="label-eyebrow">Draft Elo</p>
             <p class="mt-1 flex items-baseline gap-1.5">
@@ -129,24 +133,10 @@
               {% endif %}
             </p>
           </div>
-          {# Official Podiums — placeholder until podium-counts service exists #}
-          <div class="rounded-xl border border-amber-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
-            <p class="label-eyebrow">Official podiums</p>
-            <p class="mt-1 text-2xl font-semibold text-slate-300">0 / 0 / 0</p>
-            <p class="mt-0.5 text-[11px] text-slate-500">Top 1 / 2 / 3</p>
-          </div>
-          {# Best Track — placeholder until track-strengths service exists #}
-          <div class="rounded-xl border border-violet-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
-            <p class="label-eyebrow">Best track</p>
-            <p class="mt-1 text-base font-semibold text-slate-300">—</p>
-            <p class="mt-0.5 text-[11px] text-slate-500">Not enough data</p>
-          </div>
-          {# Season Rank — placeholder until per-season ladder lookup wired #}
-          <div class="rounded-xl border border-fuchsia-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
-            <p class="label-eyebrow">Season rank</p>
-            <p class="mt-1 text-2xl font-semibold text-slate-300">#—</p>
-            <p class="mt-0.5 text-[11px] text-slate-500">No official races yet</p>
-          </div>
+          {# Slots reserved for: Official podiums, Best track, Season
+             rank. Re-add once services.official.podium_counts_for_user,
+             services.draft.track_strengths_for_user, and a per-season
+             rank lookup are wired. #}
         </div>
 
       </div>
@@ -217,14 +207,16 @@
       {{ empty_card("Recent · Draft", "No draft matches yet", "Draft Elo and recent matches will appear here after your first completed match.") }}
     {% endif %}
 
-    {# Most Used Umas — Official (placeholder) #}
-    {{ empty_card("Most used Umas · Official", "Coming soon", "Once you've raced a few times, your most-used Umas will appear here with race counts and win rates.") }}
+    {# Most Used Umas, Track Strengths, etc. are deferred until their
+       backing services exist (services.draft.most_used_umas_for_user,
+       services.draft.track_strengths_for_user, and the corresponding
+       official-side helpers). Empty placeholder cards were visible in
+       Stage 1 to validate the layout density; Stage 2 hides them so
+       every visible card carries real content.
 
-    {# Most Used Umas — Draft (placeholder) #}
-    {{ empty_card("Most used Umas · Draft", "Coming soon", "Tracks the Umas you bring to draft matches most often, with placement and win-rate stats.") }}
-
-    {# Track Strengths (placeholder) #}
-    {{ empty_card("Track strengths", "Not enough data", "Distance and surface win-rate breakdown will appear once you have at least 3 recorded races per condition.") }}
+       In-game Stats keeps its empty state because it has a clear user
+       action ("set your friend code in profile editor") — the others
+       require us to ship code, not the user to fill in data. #}
 
     {# In-game Stats — real (uma.moe), compact metric tiles #}
     {% if trainer %}
