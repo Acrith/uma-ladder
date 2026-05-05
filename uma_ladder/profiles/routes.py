@@ -146,8 +146,18 @@ def public(username: str) -> object:
     profile = profiles_service.get_or_create_profile(user)
     page = max(1, request.args.get("page", 1, type=int))
     kind = (request.args.get("kind") or "").strip() or None
+    # Combined paginated view (URL escape hatch via ?page= / ?kind= —
+    # not surfaced in the new layout but still usable directly).
     history = profiles_service.list_recent_history_for_user(
         user.id, page=page, page_size=10, kind=kind
+    )
+    # Split top-5 lists for the side-by-side dashboard cards. Cheap —
+    # same merge cost twice with kind filter applied per call.
+    recent_official = profiles_service.list_recent_history_for_user(
+        user.id, page=1, page_size=5, kind="official"
+    )
+    recent_draft = profiles_service.list_recent_history_for_user(
+        user.id, page=1, page_size=5, kind="draft"
     )
     elo = draft_service.elo_summary_for_user(user.id)
     # Best-effort uma.moe enrichment when friend_code is set. Returns
@@ -160,6 +170,8 @@ def public(username: str) -> object:
         profile=profile,
         oshi_image=profiles_service.resolve_oshi_image(profile),
         history=history,
+        recent_official=recent_official,
+        recent_draft=recent_draft,
         elo=elo,
         trainer=trainer,
     )

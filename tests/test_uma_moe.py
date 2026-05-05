@@ -233,20 +233,28 @@ def test_public_profile_friend_code_is_click_to_copy(
     assert 'Click to copy' in body
 
 
-def test_public_profile_skips_card_when_no_friend_code(
+def test_public_profile_renders_empty_state_when_no_friend_code(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
+    """Stage-1 layout always renders the In-game stats card slot —
+    when there's no friend code, it shows a polished 'Not linked'
+    empty state instead of suppressing the card."""
     make_user(username="bob", role=Role.USER)
     resp = client.get("/profiles/bob")
     assert resp.status_code == 200
     body = resp.data.decode()
-    assert "In-game stats" not in body
+    assert "In-game stats" in body
+    assert "Not linked" in body
+    # No real values from a TrainerSummary should leak in.
+    assert "via uma.moe" not in body
+    assert "Global rank" not in body
 
 
 def test_public_profile_silent_on_uma_moe_404(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
-    """A 404 (e.g. typo'd friend code) must not break the page."""
+    """A 404 (e.g. typo'd friend code) must not break the page — falls
+    back to the empty-state card without leaking any real values."""
     fc = "999988887777"
     user = make_user(username="dave", role=Role.USER)
     with app.app_context():
@@ -261,4 +269,7 @@ def test_public_profile_silent_on_uma_moe_404(
     resp = client.get("/profiles/dave")
     assert resp.status_code == 200
     body = resp.data.decode()
-    assert "In-game stats" not in body
+    # Empty-state placeholder rendered, not the real card.
+    assert "Not linked" in body
+    assert "via uma.moe" not in body
+    assert "Global rank" not in body

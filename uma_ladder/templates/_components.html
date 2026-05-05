@@ -31,6 +31,17 @@
   </div>
 {% endmacro %}
 
+{% macro empty_card(eyebrow, title, message) %}
+  {# Polished placeholder for a card whose data isn't yet populated.
+     Keeps the page feeling complete without leaving raw "TODO" gaps. #}
+  <div class="surface-card relative overflow-hidden p-5">
+    <p class="label-eyebrow">{{ eyebrow }}</p>
+    <h2 class="mt-1 text-base font-semibold text-slate-200">{{ title }}</h2>
+    <p class="mt-3 text-sm text-slate-500">{{ message }}</p>
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-slate-700/60 to-transparent"></div>
+  </div>
+{% endmacro %}
+
 {% macro live_dot(label="LIVE") %}
   <span class="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-cyan-300">
     <span class="h-2 w-2 rounded-full bg-cyan-400 animate-live-pulse"></span>{{ label }}

@@ -293,9 +293,12 @@ def test_public_profile_renders_elo_card(
     resp = client.get("/profiles/alice")
     assert resp.status_code == 200
     body = resp.data.decode()
+    # Draft Elo now lives in the hero stat tile grid.
     assert "Draft Elo" in body
     assert "1000" in body
-    assert "Provisional rating" in body
+    # Tile copy: "Provisional · no matches yet" (rephrased from old card).
+    assert "Provisional" in body
+    assert "no matches yet" in body
 
 
 def test_history_combines_draft_and_official_in_recency_order(
@@ -425,7 +428,8 @@ def test_public_profile_renders_history_section(
     resp = client.get("/profiles/alice")
     assert resp.status_code == 200
     body = resp.data.decode()
-    assert "Recent races" in body
+    # Split "Recent · Official" / "Recent · Draft" cards in the new layout.
+    assert "Recent · Official" in body
     assert "Spring Cup" in body
     assert "#1" in body
 
@@ -563,14 +567,19 @@ def test_history_invalid_kind_treated_as_all(
         assert page.total == 2  # treated as no filter
 
 
-def test_public_profile_pagination_links_preserve_kind(
+def test_public_profile_view_all_link_to_kind_filtered_view(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
+    """The Stage-1 layout dropped the inline filter-pill / pagination
+    controls in favour of split top-5 cards. When there are more
+    results than fit, the card surfaces a "View all →" link that
+    deep-links to the same route with ?kind= set."""
     user = make_user(username="alice", role=Role.USER)
     _seed_many_official_results(app, user["id"], n=12)
-    resp = client.get("/profiles/alice?kind=official&page=1")
+    resp = client.get("/profiles/alice")
     assert resp.status_code == 200
     body = resp.data.decode()
-    # Active filter pill highlighted + pagination link carries kind through.
+    # Card shows top 5 of 12 with a kind-filtered "View all" deep link.
+    assert "Last 5 of 12" in body
     assert "kind=official" in body
-    assert "Page 1 / 2" in body
+    assert "View all" in body

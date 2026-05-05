@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_components.html" import card, empty_card, stat_tile %}
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
 
@@ -12,11 +13,12 @@
     {% endif %}
   {% endif %}
 
-  <article class="surface-card relative overflow-hidden min-h-[42rem]">
+  {# ─── HERO ──────────────────────────────────────────────────────
+     Oshi artwork stays the emotional centerpiece on the right. The
+     left column carries identity + chips + a 4-up stat tile grid that
+     fills the previously empty lower-left space. #}
+  <article class="surface-card relative overflow-hidden min-h-[34rem]">
     {% if oshi_image %}
-      {# Source PNGs are 512×512. Display at 384px so on 2x DPI screens
-         we only ask the browser to upscale ~1.5× instead of 2×. Anchored
-         flush to the bottom-right corner of the card (right-0). #}
       <img src="{{ oshi_image }}"
            alt="{{ profile.oshi.name_en if profile.oshi else '' }}"
            loading="lazy"
@@ -30,120 +32,203 @@
     {% endif %}
 
     <div class="relative grid gap-6 p-6 md:grid-cols-[3fr_2fr] md:p-10">
-      <div class="space-y-4">
+      <div class="space-y-5">
 
-        {# Identity card with Oshi as a small inline annotation. #}
-        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-5 backdrop-blur-sm">
-          <div class="flex items-start gap-4">
-            <div class="shrink-0">
-              {% if profile.avatar_url %}
-                <img src="{{ profile.avatar_url }}"
-                     alt=""
-                     class="h-16 w-16 rounded-2xl border-2 border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
-              {% else %}
-                <div class="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-slate-800 bg-slate-800 text-xl font-semibold text-slate-300 {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
-                  {{ user.username[:1] | upper }}
-                </div>
-              {% endif %}
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="label-eyebrow">Trainer</p>
-              <h1 class="mt-0.5 truncate text-2xl font-semibold text-slate-50">{{ profile.display_name or user.username }}</h1>
-              <p class="mt-0.5 text-sm text-slate-400">@{{ user.username }}</p>
-              {% if profile.oshi %}
-                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span class="text-slate-400">Oshi:</span>
-                  {% if gametora_link %}
-                    <a href="{{ gametora_link }}" target="_blank" rel="noopener"
-                       class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 hover:text-fuchsia-100">
-                      {{ profile.oshi.name_en }}
-                      {% if profile.oshi_outfit %}<span class="text-fuchsia-300/70">· {{ profile.oshi_outfit.display_title }}</span>{% endif %}
-                      {% if profile.oshi_outfit and profile.oshi_outfit.rarity %}<span class="ml-1 text-amber-300">{{ '★' * profile.oshi_outfit.rarity }}</span>{% endif %}
-                    </a>
-                  {% else %}
-                    <span class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 font-medium text-fuchsia-200">
-                      {{ profile.oshi.name_en }}
-                      {% if profile.oshi_outfit %}<span class="text-fuchsia-300/70">· {{ profile.oshi_outfit.display_title }}</span>{% endif %}
-                    </span>
-                  {% endif %}
-                </div>
-              {% endif %}
-            </div>
+        {# Identity row — avatar + name + handle + Oshi pill inline. #}
+        <div class="flex items-start gap-4">
+          <div class="shrink-0">
+            {% if profile.avatar_url %}
+              <img src="{{ profile.avatar_url }}"
+                   alt=""
+                   class="h-16 w-16 rounded-2xl border-2 border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
+            {% else %}
+              <div class="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-slate-800 bg-slate-800 text-xl font-semibold text-slate-300 {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
+                {{ user.username[:1] | upper }}
+              </div>
+            {% endif %}
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="label-eyebrow">Trainer</p>
+            <h1 class="mt-0.5 truncate text-2xl font-semibold text-slate-50">{{ profile.display_name or user.username }}</h1>
+            <p class="mt-0.5 text-sm text-slate-400">@{{ user.username }}</p>
+            {% if profile.oshi %}
+              <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span class="text-slate-400">Oshi:</span>
+                {% if gametora_link %}
+                  <a href="{{ gametora_link }}" target="_blank" rel="noopener"
+                     class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 hover:text-fuchsia-100">
+                    {{ profile.oshi.name_en }}
+                    {% if profile.oshi_outfit %}<span class="text-fuchsia-300/70">· {{ profile.oshi_outfit.display_title }}</span>{% endif %}
+                    {% if profile.oshi_outfit and profile.oshi_outfit.rarity %}<span class="ml-1 text-amber-300">{{ '★' * profile.oshi_outfit.rarity }}</span>{% endif %}
+                  </a>
+                {% else %}
+                  <span class="rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 font-medium text-fuchsia-200">
+                    {{ profile.oshi.name_en }}
+                    {% if profile.oshi_outfit %}<span class="text-fuchsia-300/70">· {{ profile.oshi_outfit.display_title }}</span>{% endif %}
+                  </span>
+                {% endif %}
+              </div>
+            {% endif %}
           </div>
         </div>
 
-        {# Contact card — single inline row separated by pipes. #}
+        {# Bio — soft typographic treatment with a thin fuchsia accent
+           rule on the left, no border/box. Sits between identity and
+           contact line so the column reads identity → quote → terse
+           contact → tile grid, each layer with a different visual
+           weight instead of three stacked boxes. #}
+        {% if profile.description %}
+          {# `whitespace-pre-line` preserves real newlines from the user's
+             bio; strip the template indentation so the first line isn't
+             pushed down by the source whitespace around the variable. #}
+          <blockquote class="border-l-2 border-fuchsia-500/40 pl-4 italic text-sm leading-relaxed text-slate-300/90 whitespace-pre-line">{{- profile.description -}}</blockquote>
+        {% endif %}
+
+        {# Contact line — terse, no boxed card. Friend code uses the
+           same plain mono-pill styling as elsewhere (PR with the contact
+           card looked cleaner than the chunky chip in Stage 1) and keeps
+           click-to-copy via data-copy. Discord stays as the small chip. #}
         {% if profile.friend_code or profile.discord_handle %}
-          <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4 backdrop-blur-sm">
-            <p class="label-eyebrow">Contact</p>
-            <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
-              {% if profile.friend_code %}
-                <span>
-                  <span class="text-slate-500">Friend code:</span>
-                  <button type="button"
-                          class="text-mono-pill ml-1 cursor-pointer hover:text-cyan-300 transition"
-                          data-copy="{{ profile.friend_code }}"
-                          title="Click to copy">{{ profile.friend_code }}</button>
-                </span>
+          <p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
+            {% if profile.friend_code %}
+              <span>
+                <span class="text-slate-500">Friend code:</span>
+                <button type="button"
+                        class="text-mono-pill ml-1 cursor-pointer hover:text-cyan-300 transition"
+                        data-copy="{{ profile.friend_code }}"
+                        title="Click to copy">{{ profile.friend_code }}</button>
+              </span>
+            {% endif %}
+            {% if profile.discord_handle %}
+              <span class="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/5 px-2.5 py-1 text-xs text-violet-200">
+                <span class="text-slate-500">Discord</span>
+                <span>{{ profile.discord_handle }}</span>
+              </span>
+            {% endif %}
+          </p>
+        {% endif %}
+
+        {# Hero stat tile grid — 4-up summary fills the empty lower-left. #}
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {# Draft ELO — real data #}
+          <div class="rounded-xl border border-cyan-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
+            <p class="label-eyebrow">Draft Elo</p>
+            <p class="mt-1 flex items-baseline gap-1.5">
+              <span class="text-2xl font-semibold text-cyan-300">{{ elo.rating if elo else 1000 }}</span>
+              {% if elo and elo.last_delta > 0 %}
+                <span class="text-[10px] font-medium text-emerald-300">▲ {{ elo.last_delta }}</span>
+              {% elif elo and elo.last_delta < 0 %}
+                <span class="text-[10px] font-medium text-rose-300">▼ {{ elo.last_delta|abs }}</span>
               {% endif %}
-              {% if profile.friend_code and profile.discord_handle %}
-                <span class="text-slate-700">|</span>
-              {% endif %}
-              {% if profile.discord_handle %}
-                <span>
-                  <span class="text-slate-500">Discord:</span>
-                  <span class="ml-1">{{ profile.discord_handle }}</span>
-                </span>
+            </p>
+            <p class="mt-0.5 text-[11px] text-slate-500">
+              {% if not elo or elo.match_count == 0 %}
+                Provisional · no matches yet
+              {% else %}
+                {{ elo.match_count }} match{{ '' if elo.match_count == 1 else 'es' }} this season
               {% endif %}
             </p>
           </div>
-        {% endif %}
-
-        {# Bio card — only when description present #}
-        {% if profile.description %}
-          <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4 backdrop-blur-sm">
-            <p class="label-eyebrow">About</p>
-            <p class="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-300">{{ profile.description }}</p>
+          {# Official Podiums — placeholder until podium-counts service exists #}
+          <div class="rounded-xl border border-amber-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
+            <p class="label-eyebrow">Official podiums</p>
+            <p class="mt-1 text-2xl font-semibold text-slate-300">0 / 0 / 0</p>
+            <p class="mt-0.5 text-[11px] text-slate-500">Top 1 / 2 / 3</p>
           </div>
-        {% endif %}
+          {# Best Track — placeholder until track-strengths service exists #}
+          <div class="rounded-xl border border-violet-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
+            <p class="label-eyebrow">Best track</p>
+            <p class="mt-1 text-base font-semibold text-slate-300">—</p>
+            <p class="mt-0.5 text-[11px] text-slate-500">Not enough data</p>
+          </div>
+          {# Season Rank — placeholder until per-season ladder lookup wired #}
+          <div class="rounded-xl border border-fuchsia-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
+            <p class="label-eyebrow">Season rank</p>
+            <p class="mt-1 text-2xl font-semibold text-slate-300">#—</p>
+            <p class="mt-0.5 text-[11px] text-slate-500">No official races yet</p>
+          </div>
+        </div>
 
       </div>
       <div class="hidden md:block"></div>
     </div>
   </article>
 
-  {% if elo %}
-    <section class="mt-6">
-      <div class="surface-card p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p class="label-eyebrow">Draft Elo</p>
-            <p class="mt-1 flex items-baseline gap-2">
-              <span class="text-3xl font-semibold text-cyan-300">{{ elo.rating }}</span>
-              {% if elo.last_delta > 0 %}
-                <span class="text-xs font-medium text-emerald-300">▲ {{ elo.last_delta }}</span>
-              {% elif elo.last_delta < 0 %}
-                <span class="text-xs font-medium text-rose-300">▼ {{ elo.last_delta|abs }}</span>
-              {% else %}
-                <span class="text-xs text-slate-500">— no recent change</span>
-              {% endif %}
-            </p>
-            <p class="mt-1 text-xs text-slate-500">
-              {% if elo.match_count == 0 %}
-                Provisional rating · no matches played yet
-              {% else %}
-                {{ elo.match_count }} match{{ '' if elo.match_count == 1 else 'es' }} this season
-              {% endif %}
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  {% endif %}
+  {# ─── DASHBOARD GRID — 2 cols, paired cards per row ───────────── #}
+  <section class="mt-6 grid gap-4 lg:grid-cols-2">
 
-  {% if trainer %}
-    <section class="mt-6">
-      <div class="surface-card p-5">
+    {# Recent Official Results — real data, top 5 #}
+    {% if recent_official.total > 0 %}
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Recent · Official</p>
+        <h2 class="mt-1 text-base font-semibold text-slate-100">Last {{ recent_official.entries|length }} of {{ recent_official.total }}</h2>
+        <ul class="mt-3 divide-y divide-slate-800">
+          {% for h in recent_official.entries %}
+            <li class="py-2">
+              <a class="flex items-center justify-between gap-3 text-sm hover:bg-slate-900/40 -mx-2 px-2 py-1 rounded transition"
+                 href="{{ url_for(h.detail_url_endpoint, **h.detail_url_kwargs) }}">
+                <div class="min-w-0">
+                  <p class="truncate text-slate-200">{{ h.title }}</p>
+                  {% if h.venue %}<p class="truncate text-xs text-slate-500">{{ h.venue }}</p>{% endif %}
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                  <span class="text-mono-pill">#{{ h.placement }}</span>
+                  <span class="text-slate-500">{{ h.when.strftime('%Y-%m-%d') }}</span>
+                </div>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+        {% if recent_official.total > recent_official.entries|length %}
+          <a class="mt-3 inline-block text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.public', username=user.username, kind='official') }}">View all →</a>
+        {% endif %}
+      {% endcall %}
+    {% else %}
+      {{ empty_card("Recent · Official", "No official races yet", "Official podiums and recent placements will appear here after results are submitted.") }}
+    {% endif %}
+
+    {# Recent Draft Results — real data, top 5 #}
+    {% if recent_draft.total > 0 %}
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Recent · Draft</p>
+        <h2 class="mt-1 text-base font-semibold text-slate-100">Last {{ recent_draft.entries|length }} of {{ recent_draft.total }}</h2>
+        <ul class="mt-3 divide-y divide-slate-800">
+          {% for h in recent_draft.entries %}
+            <li class="py-2">
+              <a class="flex items-center justify-between gap-3 text-sm hover:bg-slate-900/40 -mx-2 px-2 py-1 rounded transition"
+                 href="{{ url_for(h.detail_url_endpoint, **h.detail_url_kwargs) }}">
+                <div class="min-w-0">
+                  <p class="truncate text-slate-200">{{ h.title }}</p>
+                  {% if h.venue %}<p class="truncate text-xs text-slate-500">{{ h.venue }}</p>{% endif %}
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                  <span class="text-mono-pill">#{{ h.placement }}</span>
+                  <span class="text-slate-500">{{ h.when.strftime('%Y-%m-%d') }}</span>
+                </div>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+        {% if recent_draft.total > recent_draft.entries|length %}
+          <a class="mt-3 inline-block text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.public', username=user.username, kind='draft') }}">View all →</a>
+        {% endif %}
+      {% endcall %}
+    {% else %}
+      {{ empty_card("Recent · Draft", "No draft matches yet", "Draft Elo and recent matches will appear here after your first completed match.") }}
+    {% endif %}
+
+    {# Most Used Umas — Official (placeholder) #}
+    {{ empty_card("Most used Umas · Official", "Coming soon", "Once you've raced a few times, your most-used Umas will appear here with race counts and win rates.") }}
+
+    {# Most Used Umas — Draft (placeholder) #}
+    {{ empty_card("Most used Umas · Draft", "Coming soon", "Tracks the Umas you bring to draft matches most often, with placement and win-rate stats.") }}
+
+    {# Track Strengths (placeholder) #}
+    {{ empty_card("Track strengths", "Not enough data", "Distance and surface win-rate breakdown will appear once you have at least 3 recorded races per condition.") }}
+
+    {# In-game Stats — real (uma.moe), compact metric tiles #}
+    {% if trainer %}
+      {% call card(class="p-5") %}
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p class="label-eyebrow">In-game stats</p>
@@ -166,123 +251,59 @@
             </span>
           {% endif %}
         </div>
-        <dl class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
-          <div>
-            <dt class="text-xs uppercase tracking-wider text-slate-500">Club</dt>
-            <dd class="mt-0.5 truncate text-slate-200">{{ trainer.circle_name or '—' }}</dd>
+        <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">Club</p>
+            <p class="mt-0.5 truncate text-sm text-slate-200">{{ trainer.circle_name or '—' }}</p>
           </div>
-          <div>
-            <dt class="text-xs uppercase tracking-wider text-slate-500">Total fans</dt>
-            <dd class="mt-0.5 truncate text-slate-200">{% if trainer.total_fans is not none %}{{ '{:,}'.format(trainer.total_fans) }}{% else %}—{% endif %}</dd>
+          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">Total fans</p>
+            <p class="mt-0.5 truncate text-sm text-slate-200">{% if trainer.total_fans is not none %}{{ '{:,}'.format(trainer.total_fans) }}{% else %}—{% endif %}</p>
           </div>
-          <div>
-            <dt class="text-xs uppercase tracking-wider text-slate-500">+ 7d</dt>
-            <dd class="mt-0.5 truncate text-emerald-300">{% if trainer.gain_7d is not none %}+{{ '{:,}'.format(trainer.gain_7d) }}{% else %}—{% endif %}</dd>
+          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">+ 7d</p>
+            <p class="mt-0.5 truncate text-sm text-emerald-300">{% if trainer.gain_7d is not none %}+{{ '{:,}'.format(trainer.gain_7d) }}{% else %}—{% endif %}</p>
           </div>
-          <div>
-            <dt class="text-xs uppercase tracking-wider text-slate-500">+ 30d</dt>
-            <dd class="mt-0.5 truncate text-emerald-300">{% if trainer.gain_30d is not none %}+{{ '{:,}'.format(trainer.gain_30d) }}{% else %}—{% endif %}</dd>
-          </div>
-        </dl>
-      </div>
-    </section>
-  {% endif %}
-
-  {% if history.total > 0 %}
-    {% set kind_arg = request.args.get('kind') or '' %}
-    <section class="mt-6">
-      <div class="surface-card p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p class="label-eyebrow">Recent races</p>
-            <h2 class="mt-1 text-base font-semibold text-slate-100">{{ history.total }} result{% if history.total != 1 %}s{% endif %}{% if kind_arg %} ({{ kind_arg }}){% endif %}</h2>
-          </div>
-          {# Kind filter pills — set ?kind to "" / "draft" / "official". #}
-          <div class="flex items-center gap-1 text-xs">
-            {% for label, value in [('All', ''), ('Draft', 'draft'), ('Official', 'official')] %}
-              {% set active = kind_arg == value %}
-              <a href="{{ url_for('profiles.public', username=user.username, kind=value or none) }}"
-                 class="rounded-full border px-2.5 py-0.5 transition
-                        {% if active %}border-cyan-400 bg-cyan-500/10 text-cyan-200{% else %}border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200{% endif %}">
-                {{ label }}
-              </a>
-            {% endfor %}
+          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-2.5">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">+ 30d</p>
+            <p class="mt-0.5 truncate text-sm text-emerald-300">{% if trainer.gain_30d is not none %}+{{ '{:,}'.format(trainer.gain_30d) }}{% else %}—{% endif %}</p>
           </div>
         </div>
+      {% endcall %}
+    {% else %}
+      {{ empty_card("In-game stats", "Not linked", "Set your in-game friend code on the profile editor to pull club, fans, and rank from uma.moe.") }}
+    {% endif %}
 
-        <ul class="mt-3 divide-y divide-slate-800">
-          {% for h in history.entries %}
-            <li class="py-2">
-              <a class="flex items-center justify-between gap-3 text-sm hover:bg-slate-900/40 -mx-2 px-2 py-1 rounded transition"
-                 href="{{ url_for(h.detail_url_endpoint, **h.detail_url_kwargs) }}">
-                <div class="flex min-w-0 items-center gap-3">
-                  {% if h.kind == 'official' %}
-                    <span class="inline-flex w-12 shrink-0 justify-center rounded-full border border-amber-500/40 bg-amber-500/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-200">official</span>
-                  {% else %}
-                    <span class="inline-flex w-12 shrink-0 justify-center rounded-full border border-fuchsia-500/40 bg-fuchsia-500/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-fuchsia-200">draft</span>
-                  {% endif %}
-                  <div class="min-w-0">
-                    <p class="truncate text-slate-200">{{ h.title }}</p>
-                    {% if h.venue %}<p class="truncate text-xs text-slate-500">{{ h.venue }}</p>{% endif %}
-                  </div>
-                </div>
-                <div class="flex items-center gap-3 text-xs">
-                  <span class="text-mono-pill">#{{ h.placement }}</span>
-                  <span class="text-slate-500">{{ h.when.strftime('%Y-%m-%d') }}</span>
-                </div>
-              </a>
-            </li>
-          {% endfor %}
-        </ul>
-
-        {% if history.pages > 1 %}
-          <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
-            <span>Page {{ history.page }} / {{ history.pages }}</span>
-            <div class="flex gap-2">
-              {% if history.page > 1 %}
-                <a class="btn-ghost" href="{{ url_for('profiles.public', username=user.username, page=history.page - 1, kind=kind_arg or none) }}">← Prev</a>
-              {% endif %}
-              {% if history.page < history.pages %}
-                <a class="btn-ghost" href="{{ url_for('profiles.public', username=user.username, page=history.page + 1, kind=kind_arg or none) }}">Next →</a>
-              {% endif %}
-            </div>
-          </div>
-        {% endif %}
-      </div>
-    </section>
-  {% endif %}
+  </section>
 
   <script>
-    /* Click-to-copy for any element with data-copy. Falls back to a
-       text-selection range on browsers without clipboard API access
-       (older Safari, non-HTTPS contexts). Brief inline feedback so the
-       user sees something happened. */
+    /* Click-to-copy for any element with data-copy. */
     (function() {
       function flashCopied(el, original) {
-        el.textContent = 'copied!';
-        el.classList.add('text-emerald-300');
+        var span = el.querySelector('.text-mono-pill') || el;
+        var prev = span.textContent;
+        span.textContent = 'copied!';
+        span.classList.add('text-emerald-300');
         setTimeout(function() {
-          el.textContent = original;
-          el.classList.remove('text-emerald-300');
+          span.textContent = prev;
+          span.classList.remove('text-emerald-300');
         }, 1200);
       }
       document.querySelectorAll('[data-copy]').forEach(function(el) {
         el.addEventListener('click', function() {
           var text = el.dataset.copy;
-          var original = el.textContent;
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text)
-              .then(function() { flashCopied(el, original); })
-              .catch(function() { /* silent fail; nothing to do */ });
+              .then(function() { flashCopied(el); })
+              .catch(function() { /* silent */ });
           } else {
-            // Fallback for older browsers.
             var ta = document.createElement('textarea');
             ta.value = text;
             ta.style.position = 'fixed';
             ta.style.opacity = '0';
             document.body.appendChild(ta);
             ta.select();
-            try { document.execCommand('copy'); flashCopied(el, original); }
+            try { document.execCommand('copy'); flashCopied(el); }
             catch (e) { /* silent */ }
             document.body.removeChild(ta);
           }
