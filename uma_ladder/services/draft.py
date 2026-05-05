@@ -953,6 +953,20 @@ def submit_forfeit(
     match.status = DraftMatchStatus.COMPLETED
     db.session.commit()
 
+    try:
+        from . import admin_audit
+
+        admin_audit.log_action(
+            actor_user_id=by_user_id,
+            action="draft_match_forfeit",
+            target_user_id=forfeiter_user_id,
+            target_kind="draft_match",
+            target_id=match.id,
+            details=match.forfeit_reason,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
     # Reuse the standard DRAFT_RESULTS notification — a forfeit IS a
     # result, the embed copy just happens to mention forfeit reason.
     try:
@@ -991,6 +1005,17 @@ def cancel_match(match_id: int, *, by_user_id: int) -> DraftMatch:
     match.cancelled_by_user_id = by_user_id
     db.session.commit()
     _notify_match_cancelled(match, by_user_id)
+    try:
+        from . import admin_audit
+
+        admin_audit.log_action(
+            actor_user_id=by_user_id,
+            action="draft_match_cancel",
+            target_kind="draft_match",
+            target_id=match.id,
+        )
+    except Exception:  # noqa: BLE001
+        pass
     return match
 
 

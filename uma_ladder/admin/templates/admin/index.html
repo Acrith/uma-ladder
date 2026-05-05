@@ -36,5 +36,11 @@
       <p class="mt-1 text-sm text-slate-400">Discord webhook attempts.</p>
       <a href="{{ url_for('notifications.index') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Open →</a>
     {% endcall %}
+
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Audit log</p>
+      <p class="mt-1 text-sm text-slate-400">Append-only feed of privileged actions.</p>
+      <a href="{{ url_for('admin.audit_log') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">View →</a>
+    {% endcall %}
   </div>
 {% endblock %}

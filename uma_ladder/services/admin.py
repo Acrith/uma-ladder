@@ -70,6 +70,18 @@ def change_user_role(*, actor: User, target: User, new_role: str) -> User:
         if not other_supers:
             raise LastSuperadminError()
 
+    before_role = target.role
     target.role = new_role
     db.session.commit()
+
+    # Append to the audit trail. Best-effort — never raises into caller.
+    from . import admin_audit
+
+    admin_audit.log_action(
+        actor_user_id=actor.id,
+        action="role_change",
+        target_user_id=target.id,
+        before={"role": before_role},
+        after={"role": new_role},
+    )
     return target

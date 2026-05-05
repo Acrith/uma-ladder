@@ -588,6 +588,19 @@ def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
     race.cancelled_by_user_id = by_user_id
     db.session.commit()
     _notify_race_cancelled(race, actor_username, affected)
+    # Audit trail (best-effort).
+    try:
+        from . import admin_audit
+
+        admin_audit.log_action(
+            actor_user_id=by_user_id,
+            action="official_race_cancel",
+            target_kind="official_race",
+            target_id=race.id,
+            details=f"affected_registrations={len(affected)}",
+        )
+    except Exception:  # noqa: BLE001
+        pass
     return race
 
 

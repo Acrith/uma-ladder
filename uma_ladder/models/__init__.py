@@ -1,3 +1,4 @@
+from .admin_audit import AdminAuditLog
 from .draft_matches import (
     DraftEloChange,
     DraftMatch,
@@ -40,6 +41,7 @@ from .users import Role, User
 
 __all__ = [
     "VENUES",
+    "AdminAuditLog",
     "Direction",
     "DistanceCategory",
     "DiscordNotificationAttempt",

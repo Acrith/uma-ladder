@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Audit log · Admin · Uma Ladder{% endblock %}
+{% block content %}
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Admin · Audit</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Audit log <span class="text-base font-normal text-slate-500">({{ page.total }})</span></h1>
+      <p class="mt-1 text-xs text-slate-400">Append-only feed of privileged actions. Newest first.</p>
+    </div>
+    <form method="get" class="flex flex-wrap items-center gap-2 text-sm">
+      <select name="action" class="input-base">
+        <option value="">all actions</option>
+        {% for a in distinct_actions %}
+          <option value="{{ a }}" {% if a == action %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn-ghost">Filter</button>
+      {% if action %}
+        <a href="{{ url_for('admin.audit_log') }}" class="text-xs text-slate-400 hover:text-slate-200">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+
+  {% if not page.entries %}
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">
+      {% if action %}No entries match action <span class="text-mono-pill">{{ action }}</span>.{% else %}No audit entries yet.{% endif %}
+    </div>
+  {% else %}
+    {% call card(class="mt-6 overflow-hidden") %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-900/50 text-xs uppercase tracking-wider text-slate-500">
+            <tr class="text-left">
+              <th class="px-4 py-3">When</th>
+              <th class="px-4 py-3">Actor</th>
+              <th class="px-4 py-3">Action</th>
+              <th class="px-4 py-3">Target</th>
+              <th class="px-4 py-3">Change</th>
+              <th class="px-4 py-3">Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in page.entries %}
+              {% set tone = {
+                'role_change': 'cyan',
+                'official_race_cancel': 'rose',
+                'draft_match_cancel': 'rose',
+                'draft_match_forfeit': 'amber',
+              }.get(e.action, 'slate') %}
+              <tr class="border-t border-slate-800 align-top">
+                <td class="px-4 py-2 text-slate-400 whitespace-nowrap">{{ e.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td class="px-4 py-2 text-slate-200">
+                  {% if e.actor %}
+                    <a href="{{ url_for('profiles.public', username=e.actor.username) }}" class="hover:text-cyan-300">@{{ e.actor.username }}</a>
+                  {% else %}<span class="text-slate-600">—</span>{% endif %}
+                </td>
+                <td class="px-4 py-2">{{ chip(e.action, tone) }}</td>
+                <td class="px-4 py-2 text-slate-300">
+                  {% if e.target_user %}
+                    <a href="{{ url_for('profiles.public', username=e.target_user.username) }}" class="hover:text-cyan-300">@{{ e.target_user.username }}</a>
+                  {% elif e.target_kind %}
+                    <span class="text-slate-500">{{ e.target_kind }}</span>
+                    {% if e.target_id %}<span class="text-mono-pill">#{{ e.target_id }}</span>{% endif %}
+                  {% else %}<span class="text-slate-600">—</span>{% endif %}
+                </td>
+                <td class="px-4 py-2 text-xs text-slate-400">
+                  {% if e.before_json or e.after_json %}
+                    {% if e.before_json %}<span class="text-slate-500">{{ e.before_json }}</span>{% endif %}
+                    {% if e.before_json and e.after_json %}<span class="text-slate-700">→</span>{% endif %}
+                    {% if e.after_json %}<span class="text-slate-300">{{ e.after_json }}</span>{% endif %}
+                  {% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-2 text-xs text-slate-400">{{ e.details or '' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endcall %}
+
+    {% if page.pages > 1 %}
+      <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+        <span>Page {{ page.page }} / {{ page.pages }}</span>
+        <div class="flex gap-2">
+          {% if page.page > 1 %}
+            <a class="btn-ghost" href="{{ url_for('admin.audit_log', page=page.page - 1, action=action or none) }}">← Prev</a>
+          {% endif %}
+          {% if page.page < page.pages %}
+            <a class="btn-ghost" href="{{ url_for('admin.audit_log', page=page.page + 1, action=action or none) }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+{% endblock %}

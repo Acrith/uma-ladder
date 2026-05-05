@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from ..extensions import db
 from ..models import DraftMatch, DraftMatchStatus, Role, Season, SeasonStatus, User
 from ..services import admin as admin_service
+from ..services import admin_audit as admin_audit_service
 from ..services import draft as draft_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
@@ -275,6 +276,30 @@ def season_edit(season_id: int) -> object:
         "admin/season_edit.html",
         season=season,
         csrf_form=csrf_form,
+    )
+
+
+@bp.get("/audit")
+@min_role_required(Role.ADMIN)
+def audit_log() -> object:
+    """Paginated audit feed. Filter by exact action verb. Limited to
+    50 per page so the timeline scrolls cleanly without lazy loading."""
+    page = max(1, request.args.get("page", 1, type=int))
+    action = (request.args.get("action") or "").strip() or None
+    page_obj = admin_audit_service.list_recent(
+        page=page, page_size=50, action=action
+    )
+    # Distinct actions for the filter dropdown — derived from the
+    # current rows so the dropdown reflects what's actually been
+    # logged (no static enum to maintain).
+    distinct_actions = sorted({e.action for e in page_obj.entries})
+    if action and action not in distinct_actions:
+        distinct_actions.append(action)
+    return render_template(
+        "admin/audit_log.html",
+        page=page_obj,
+        action=action,
+        distinct_actions=distinct_actions,
     )
 
 
