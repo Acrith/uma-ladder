@@ -230,3 +230,72 @@ def test_card_hidden_when_no_races(
     resp = client.get("/profiles/empty")
     body = resp.data.decode()
     assert "Track strengths" not in body
+
+
+# ---------- Best Track hero tile (PR-A4) ----------
+
+
+def test_best_track_tile_empty_when_below_threshold(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """No data clears the min_races guard → tile shows 'Not enough data'."""
+    make_user(username="alice", role=Role.USER)
+    resp = client.get("/profiles/alice")
+    body = resp.data.decode()
+    # Tile is always visible (it's part of the hero stat-tile grid),
+    # just shows the empty-state copy.
+    assert "Best track" in body
+    assert "Not enough data" in body
+
+
+def test_best_track_tile_combines_distance_and_surface(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Both axes clear the threshold → tile renders 'Distance · Surface'
+    with the worst-of-the-two WR + race count as the subtitle."""
+    user = make_user(username="combo", role=Role.USER)
+    with app.app_context():
+        # Single bucket (Mile/Turf), 3 races, 1 win → best for both axes.
+        mile_turf = _make_preset(app, name="MT", surface="Turf", category="Mile")
+        _seed_official(app, user["id"], mile_turf, [1, 4, 5])
+    resp = client.get("/profiles/combo")
+    body = resp.data.decode()
+    assert "Mile · Turf" in body
+    # 1/3 = 33% WR, 3 races; both axes share the same number here.
+    assert "≥ 33% WR" in body
+    assert "3r min" in body
+
+
+def test_best_track_tile_shows_only_one_axis_when_other_is_below_threshold(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Distance bucket clears, surface bucket doesn't → render the
+    single-axis variant rather than nothing."""
+    user = make_user(username="sparse", role=Role.USER)
+    with app.app_context():
+        # Mile/Turf 3 races + Mile/Dirt 2 races. Distance "Mile" has
+        # 5 races (eligible). Surface buckets: Turf=3 (eligible),
+        # Dirt=2 (not). So both axes have an eligible best, just the
+        # surface side has only one option.
+        # To exercise the single-axis branch: make distance and surface
+        # cardinalities differ. Mile (5 races) is eligible at distance
+        # axis. For surface to be non-eligible we need every individual
+        # surface bucket below 3 races. Use Mile/Turf 2 + Mile/Dirt 2
+        # = 4 distance races (eligible at min_races=3) but Turf=2 and
+        # Dirt=2 individually below threshold.
+        mile_turf = _make_preset(app, name="MT", surface="Turf", category="Mile")
+        mile_dirt = _make_preset(app, name="MD", surface="Dirt", category="Mile")
+        _seed_official(app, user["id"], mile_turf, [1, 5])
+        _seed_official(app, user["id"], mile_dirt, [1, 5])
+    resp = client.get("/profiles/sparse")
+    body = resp.data.decode()
+    # Distance axis renders alone (Mile has 4 races total, 50% WR).
+    assert "Best track" in body
+    assert "Mile" in body
+    # Single-axis subtitle mentions WR + race count without the "≥"/"min"
+    # framing used by the dual-axis branch.
+    assert "50% WR" in body
+    assert "4 races" in body
+    # Combined dual-axis line shouldn't appear.
+    assert "Mile · Turf" not in body
+    assert "Mile · Dirt" not in body

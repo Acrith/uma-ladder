@@ -154,12 +154,30 @@
             </p>
           </div>
 
-          {# Best track — placeholder until PR-A4 wires it from
-             track_strengths_for_user.best_distance/.best_surface. #}
+          {# Best track — combined view of best_distance + best_surface.
+             Each axis is independently sample-size guarded inside the
+             service, so one or both may be None on a sparse profile. #}
           <div class="rounded-xl border border-violet-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
             <p class="label-eyebrow">Best track</p>
-            <p class="mt-1 text-base font-semibold text-slate-300">—</p>
-            <p class="mt-0.5 text-[11px] text-slate-500">Coming soon</p>
+            {% set bd = track_strengths.best_distance %}
+            {% set bs = track_strengths.best_surface %}
+            {% if bd and bs %}
+              <p class="mt-1 text-base font-semibold text-violet-300 truncate">{{ bd.label }} · {{ bs.label }}</p>
+              {# Show the lower of the two WRs as the headline number —
+                 the combined condition is at most as good as the worst
+                 of its parts. Race count is the smaller bucket too. #}
+              {% set worst = bd if bd.win_rate <= bs.win_rate else bs %}
+              <p class="mt-0.5 text-[11px] text-slate-500">≥ {{ '%.0f' % (worst.win_rate * 100) }}% WR · {{ worst.races }}r min</p>
+            {% elif bd %}
+              <p class="mt-1 text-base font-semibold text-violet-300 truncate">{{ bd.label }}</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">{{ '%.0f' % (bd.win_rate * 100) }}% WR · {{ bd.races }} race{{ '' if bd.races == 1 else 's' }}</p>
+            {% elif bs %}
+              <p class="mt-1 text-base font-semibold text-violet-300 truncate">{{ bs.label }}</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">{{ '%.0f' % (bs.win_rate * 100) }}% WR · {{ bs.races }} race{{ '' if bs.races == 1 else 's' }}</p>
+            {% else %}
+              <p class="mt-1 text-base font-semibold text-slate-300">—</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">Not enough data</p>
+            {% endif %}
           </div>
 
           {# Season rank — 1-based ladder position in the active season.
