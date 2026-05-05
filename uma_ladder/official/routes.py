@@ -394,6 +394,21 @@ def result_details_from_ocr(
         abort(404)
 
     parsed = attempt.parsed_json or {}
+    # Pull every enabled skill name for the typeahead datalist. ~1.8k
+    # rows fits in the rendered HTML (≈ 30KB) without JS — modern
+    # browsers handle a datalist of this size fine. Sorted so the
+    # browser's substring-match feels predictable.
+    from sqlalchemy import select as _select
+
+    from ..models import UmaSkill
+
+    skill_names = list(
+        db.session.scalars(
+            _select(UmaSkill.name_en)
+            .where(UmaSkill.enabled.is_(True))
+            .order_by(UmaSkill.name_en.asc())
+        )
+    )
     return render_template(
         "official/result_details_from_ocr.html",
         race=race,
@@ -401,6 +416,7 @@ def result_details_from_ocr(
         attempt=attempt,
         parsed_stats=parsed.get("stats") or {},
         parsed_skills=parsed.get("skills") or [],
+        skill_names=skill_names,
         csrf_form=CsrfOnlyForm(),
     )
 

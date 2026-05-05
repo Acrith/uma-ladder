@@ -351,12 +351,98 @@ def test_step_page_merges_existing_with_newly_parsed_skills(
         f"/official/{race_id}/results/{result_id}/details-from-ocr/{attempt_id_2}"
     )
     body = resp.data.decode()
-    # All three saved skills appear (none dropped). Mock OCR returns the
-    # same set as before, so dedupe must collapse them — there should be
-    # no duplicate skill_name input.
-    assert body.count('value="Warning Shot!"') == 1
-    assert body.count('value="Accelerator X"') == 1
-    assert body.count('value="Made-up Skill"') == 1
+    # All three saved skills appear in the editable form once each.
+    # Count via the input's `name=` attribute rather than raw `value="..."`
+    # since the autocomplete datalist also emits <option value="…">
+    # entries for catalogue skills, which aren't user-editable.
+    import re
+    inputs_with_value = re.findall(
+        r'<input[^>]*name="skill_name_\d+"[^>]*value="([^"]+)"', body
+    )
+    assert inputs_with_value.count("Warning Shot!") == 1
+    assert inputs_with_value.count("Accelerator X") == 1
+    assert inputs_with_value.count("Made-up Skill") == 1
+
+
+def test_step_page_renders_skill_datalist(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The step page should ship a <datalist id='skill-names'>
+    populated from the UmaSkill catalogue, and every editable
+    skill_name_<i> input should opt into it via list='skill-names'."""
+    app.config["OCR_PROVIDER"] = "mock"
+    _seed_skills(app)  # seeds 'Warning Shot!' + 'Accelerator X'
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    _login(client, "org")
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={"image": (io.BytesIO(_png_bytes()), "stat.png")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    attempt_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}/details-from-ocr/{attempt_id}"
+    )
+    body = resp.data.decode()
+    # The datalist exists with the seeded catalogue entries.
+    assert '<datalist id="skill-names">' in body
+    assert '<option value="Warning Shot!">' in body
+    assert '<option value="Accelerator X">' in body
+    # Every editable input opts into the datalist + disables browser
+    # history autocomplete (which would otherwise compete with it).
+    import re
+    inputs = re.findall(r'<input[^>]*name="skill_name_\d+"[^>]*>', body)
+    assert inputs, "expected at least one skill_name input"
+    for tag in inputs:
+        assert 'list="skill-names"' in tag
+        assert 'autocomplete="off"' in tag
+
+
+def test_step_page_datalist_only_lists_enabled_skills(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """A disabled UmaSkill row shouldn't pollute the typeahead — keeps
+    the dropdown focused on the current catalogue."""
+    app.config["OCR_PROVIDER"] = "mock"
+    host = make_user(username="org", role=Role.ORGANIZER)
+    with app.app_context():
+        from uma_ladder.models import UmaSkill
+        db.session.add_all([
+            UmaSkill(
+                gametora_id=10071,
+                name_en="EnabledOne",
+                is_unique=False,
+                is_inherited=False,
+                enabled=True,
+            ),
+            UmaSkill(
+                gametora_id=10072,
+                name_en="DisabledOne",
+                is_unique=False,
+                is_inherited=False,
+                enabled=False,
+            ),
+        ])
+        db.session.commit()
+
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={"image": (io.BytesIO(_png_bytes()), "stat.png")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    attempt_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}/details-from-ocr/{attempt_id}"
+    )
+    body = resp.data.decode()
+    assert '<option value="EnabledOne">' in body
+    assert "DisabledOne" not in body
 
 
 def test_non_organizer_cannot_upload_details(

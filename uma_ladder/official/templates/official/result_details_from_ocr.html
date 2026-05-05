@@ -99,6 +99,8 @@
                 <input type="text"
                        name="skill_name_{{ loop.index0 }}"
                        value="{{ name }}"
+                       list="skill-names"
+                       autocomplete="off"
                        class="input-base w-full" />
                 <button type="button"
                         class="text-xs text-rose-400 hover:text-rose-300"
@@ -109,6 +111,18 @@
           <button type="button"
                   class="btn-ghost mt-2 text-xs"
                   onclick="addSkillRow()">+ Add skill</button>
+
+          {# Typeahead source — the browser renders this as a native
+             dropdown filtered by what the user types. ~1.8k rows is
+             fine for modern browsers (Chromium/Firefox/Safari all
+             virtualize the dropdown). One <datalist> shared by every
+             skill_name_<i> input via the matching list= attribute,
+             including dynamically-added rows from addSkillRow(). #}
+          <datalist id="skill-names">
+            {% for name in skill_names %}
+              <option value="{{ name }}"></option>
+            {% endfor %}
+          </datalist>
         </div>
 
         <div class="flex items-center justify-between">
@@ -128,7 +142,7 @@
         const wrap = document.createElement('div');
         wrap.className = 'flex items-center gap-2';
         wrap.innerHTML =
-          '<input type="text" name="skill_name_' + nextIdx + '" class="input-base w-full" autofocus />' +
+          '<input type="text" name="skill_name_' + nextIdx + '" list="skill-names" autocomplete="off" class="input-base w-full" autofocus />' +
           '<button type="button" class="text-xs text-rose-400 hover:text-rose-300" onclick="this.parentElement.remove()">×</button>';
         container.appendChild(wrap);
         nextIdx++;
