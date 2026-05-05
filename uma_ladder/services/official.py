@@ -365,11 +365,22 @@ def list_upcoming_races(
 ) -> Sequence[OfficialRace]:
     """Races a player can still join or that are about to launch — used
     by the dashboard upcoming-races card. Excludes draft (organiser still
-    setting up), expired, and completed/cancelled."""
+    setting up), expired, and completed/cancelled.
+
+    Sort order: scheduled_at ascending when set (soonest first), with a
+    fallback bucket of unscheduled races ordered by created_at desc.
+    SQLite NULLs sort before non-NULLs by default, so we coalesce to a
+    far-future timestamp to keep unscheduled races below the scheduled
+    ones in the same query.
+    """
+    far_future = datetime(9999, 1, 1, tzinfo=UTC)
     stmt = (
         select(OfficialRace)
         .where(OfficialRace.status.in_(_UPCOMING_STATUSES))
-        .order_by(OfficialRace.created_at.desc())
+        .order_by(
+            func.coalesce(OfficialRace.scheduled_at, far_future).asc(),
+            OfficialRace.created_at.desc(),
+        )
     )
     if season_id is not None:
         stmt = stmt.where(OfficialRace.season_id == season_id)

@@ -11,6 +11,7 @@
         {{ official_status_chip(race.status) }}
         {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
         {% if race.preset %}{{ chip(race.preset.name, "violet") }}{% endif %}
+        {% if race.scheduled_at %}{{ chip("⏰ " + race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC'), "amber") }}{% endif %}
       </div>
     </div>
     {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}

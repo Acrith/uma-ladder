@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField, FileRequired
-from wtforms import IntegerField, StringField, TextAreaField
+from wtforms import DateTimeLocalField, IntegerField, StringField, TextAreaField
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
 
@@ -15,6 +15,14 @@ class CreateOfficialRaceForm(FlaskForm):
     preset_id = IntegerField("Track", validators=[DataRequired()])
     max_players = IntegerField(
         "Max players", validators=[Optional(), NumberRange(min=1, max=64)]
+    )
+    # HTML5 datetime-local field; the browser submits naive local time,
+    # which the route interprets as UTC for storage. Optional — races
+    # without a scheduled time still work; they sort by created_at.
+    scheduled_at = DateTimeLocalField(
+        "Scheduled at",
+        format="%Y-%m-%dT%H:%M",
+        validators=[Optional()],
     )
     notes = TextAreaField("Notes", validators=[Optional(), Length(max=2000)])
 

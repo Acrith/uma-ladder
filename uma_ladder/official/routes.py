@@ -41,6 +41,15 @@ def new() -> object:
     form = CreateOfficialRaceForm()
     seasons = seasons_service.list_seasons()
     if form.validate_on_submit():
+        # Browser submits naive local time via datetime-local; treat the
+        # input as UTC so timestamps round-trip without timezone surprises.
+        # (We could ask the browser for offset later; for now UTC is the
+        # convention everywhere else in this codebase.)
+        scheduled_at = form.scheduled_at.data
+        if scheduled_at is not None and scheduled_at.tzinfo is None:
+            from datetime import UTC
+
+            scheduled_at = scheduled_at.replace(tzinfo=UTC)
         try:
             race = official_service.create_race(
                 official_service.CreateRaceRequest(
@@ -48,6 +57,7 @@ def new() -> object:
                     name=form.name.data or "",
                     organizer_user_id=current_user.id,
                     preset_id=form.preset_id.data or None,
+                    scheduled_at=scheduled_at,
                     max_players=form.max_players.data or None,
                     notes=form.notes.data or None,
                 )

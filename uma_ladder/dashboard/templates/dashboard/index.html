@@ -70,9 +70,15 @@
                   </div>
                   <span class="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-200">{{ race.status.replace('_', ' ') }}</span>
                 </div>
-                <p class="mt-2 text-xs text-slate-500">
-                  <span class="text-slate-300">{{ reg_count }}</span>
-                  {%- if race.max_players %} / {{ race.max_players }}{% endif %} registered
+                <p class="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                  <span>
+                    <span class="text-slate-300">{{ reg_count }}</span>
+                    {%- if race.max_players %} / {{ race.max_players }}{% endif %} registered
+                  </span>
+                  {% if race.scheduled_at %}
+                    <span class="text-slate-700">·</span>
+                    <span class="text-amber-300">⏰ {{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+                  {% endif %}
                 </p>
               </a>
             </li>

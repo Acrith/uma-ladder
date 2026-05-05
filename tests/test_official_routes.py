@@ -223,6 +223,77 @@ def test_create_without_preset_id_rejected(
         assert db.session.query(OfficialRace).count() == 0
 
 
+def test_create_form_persists_scheduled_at(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={
+            "season_id": sid,
+            "name": "Sat 8pm",
+            "preset_id": pid,
+            "scheduled_at": "2026-06-01T20:00",
+        },
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    from uma_ladder.models import OfficialRace
+    with app.app_context():
+        race = db.session.get(OfficialRace, race_id)
+        assert race.scheduled_at is not None
+        assert race.scheduled_at.year == 2026
+        assert race.scheduled_at.month == 6
+        assert race.scheduled_at.day == 1
+        assert race.scheduled_at.hour == 20
+
+
+def test_upcoming_sorts_scheduled_first_then_unscheduled(
+    app: Flask, make_user
+) -> None:
+    """Scheduled races appear ordered by scheduled_at ascending; races
+    without a scheduled time fall to the bottom of the list."""
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", role=Role.ORGANIZER)
+
+    from uma_ladder.models import OfficialRace, OfficialRaceStatus
+    from uma_ladder.services import official as official_service
+
+    with app.app_context():
+        unscheduled = OfficialRace(
+            season_id=sid,
+            organizer_user_id=org["id"],
+            name="Unscheduled",
+            preset_id=pid,
+            status=OfficialRaceStatus.REGISTRATION_OPEN,
+        )
+        soon = OfficialRace(
+            season_id=sid,
+            organizer_user_id=org["id"],
+            name="Soon",
+            preset_id=pid,
+            status=OfficialRaceStatus.REGISTRATION_OPEN,
+            scheduled_at=datetime(2026, 6, 1, 20, 0, tzinfo=UTC),
+        )
+        later = OfficialRace(
+            season_id=sid,
+            organizer_user_id=org["id"],
+            name="Later",
+            preset_id=pid,
+            status=OfficialRaceStatus.REGISTRATION_OPEN,
+            scheduled_at=datetime(2026, 6, 2, 20, 0, tzinfo=UTC),
+        )
+        db.session.add_all([unscheduled, soon, later])
+        db.session.commit()
+
+        names = [r.name for r in official_service.list_upcoming_races()]
+        assert names == ["Soon", "Later", "Unscheduled"]
+
+
 def test_dashboard_shows_upcoming_official_races(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

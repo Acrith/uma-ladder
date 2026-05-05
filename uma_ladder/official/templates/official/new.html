@@ -98,9 +98,17 @@
         </div>
       </div>
 
-      <div>
-        <label class="text-sm text-slate-300">{{ form.max_players.label.text }}</label>
-        {{ form.max_players(class="input-base mt-1", placeholder="e.g. 12 — drives in-game room cap") }}
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="text-sm text-slate-300">{{ form.scheduled_at.label.text }}</label>
+          {{ form.scheduled_at(class="input-base mt-1") }}
+          <p class="mt-1 text-xs text-slate-500">Optional — drives the dashboard sort and the published Discord embed.</p>
+          {% for err in form.scheduled_at.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
+        </div>
+        <div>
+          <label class="text-sm text-slate-300">{{ form.max_players.label.text }}</label>
+          {{ form.max_players(class="input-base mt-1", placeholder="e.g. 12 — drives in-game room cap") }}
+        </div>
       </div>
 
       <div>
