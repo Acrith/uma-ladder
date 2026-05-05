@@ -6,9 +6,18 @@ from flask_wtf import FlaskForm
 from sqlalchemy import func, select
 
 from ..extensions import db
-from ..models import DraftMatch, DraftMatchStatus, Role, Season, SeasonStatus, User
+from ..models import (
+    DraftMatch,
+    DraftMatchStatus,
+    RacePreset,
+    Role,
+    Season,
+    SeasonStatus,
+    User,
+)
 from ..services import admin as admin_service
 from ..services import admin_audit as admin_audit_service
+from ..services import cm as cm_service
 from ..services import draft as draft_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
@@ -318,3 +327,164 @@ def season_set_status(season_id: int) -> object:
     except seasons_service.SeasonError as exc:
         flash(str(exc))
     return redirect(url_for("admin.seasons_list"))
+
+
+# ---- Champions Meeting (PR-G1) ----
+
+
+def _enabled_g1_presets() -> list[RacePreset]:
+    """Surface the dropdown options for the CM form. Sorted venue then
+    distance so a busy admin can scan to the row they want."""
+    return list(
+        db.session.scalars(
+            select(RacePreset)
+            .where(RacePreset.enabled.is_(True))
+            .where(RacePreset.grade == "G1")
+            .order_by(RacePreset.venue.asc(), RacePreset.distance_meters.asc())
+        )
+    )
+
+
+def _parse_date(raw: str) -> object | None:
+    """`<input type="date">` posts ISO `YYYY-MM-DD`. Empty / malformed
+    returns None so the route can flash a friendly message."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        from datetime import date as _date_cls
+
+        return _date_cls.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _build_cm_input(form) -> cm_service.CmInput | str:
+    """Pull a CmInput out of the request form. Returns a string error
+    message when validation fails (empty name, bad date, missing preset)
+    so the route can flash it without duplicating each branch."""
+    from datetime import date as _date_cls
+
+    name = (form.get("name") or "").strip()
+    starts_on_raw = (form.get("starts_on") or "").strip()
+    ends_on_raw = (form.get("ends_on") or "").strip()
+    preset_id_raw = (form.get("preset_id") or "").strip()
+
+    if not name:
+        return "Name is required."
+    starts_on = _parse_date(starts_on_raw)
+    if not isinstance(starts_on, _date_cls):
+        return "Start date is required (YYYY-MM-DD)."
+    ends_on = None
+    if ends_on_raw:
+        parsed_end = _parse_date(ends_on_raw)
+        if not isinstance(parsed_end, _date_cls):
+            return "End date must be YYYY-MM-DD if provided."
+        ends_on = parsed_end
+        if ends_on < starts_on:
+            return "End date cannot be before start date."
+    if not preset_id_raw.isdigit():
+        return "Pick a base race preset."
+
+    def _opt(field: str) -> str | None:
+        v = (form.get(field) or "").strip()
+        return v or None
+
+    distance_override_raw = (form.get("override_distance_meters") or "").strip()
+    distance_override: int | None = None
+    if distance_override_raw:
+        if not distance_override_raw.isdigit():
+            return "Override distance must be a number of metres."
+        distance_override = int(distance_override_raw)
+
+    return cm_service.CmInput(
+        name=name,
+        starts_on=starts_on,
+        ends_on=ends_on,
+        preset_id=int(preset_id_raw),
+        override_venue=_opt("override_venue"),
+        override_surface=_opt("override_surface"),
+        override_distance_meters=distance_override,
+        override_distance_category=_opt("override_distance_category"),
+        override_direction=_opt("override_direction"),
+        notes=_opt("notes"),
+        source_url=_opt("source_url"),
+    )
+
+
+@bp.get("/cm")
+@min_role_required(Role.ADMIN)
+def cm_list() -> object:
+    return render_template(
+        "admin/cm_list.html",
+        upcoming=cm_service.list_all(include_past=False),
+        past=[c for c in cm_service.list_all(include_past=True)
+              if c.starts_on < cm_service._today()],
+        csrf_form=CsrfOnlyForm(),
+    )
+
+
+@bp.route("/cm/new", methods=["GET", "POST"])
+@min_role_required(Role.ADMIN)
+def cm_new() -> object:
+    csrf_form = CsrfOnlyForm()
+    if request.method == "POST":
+        if not csrf_form.validate_on_submit():
+            abort(400)
+        result = _build_cm_input(request.form)
+        if isinstance(result, str):
+            flash(result)
+            return redirect(url_for("admin.cm_new"))
+        try:
+            cm = cm_service.create_cm(result, by_user_id=current_user.id)
+        except cm_service.UnknownPresetError:
+            flash("Selected preset is no longer available.")
+            return redirect(url_for("admin.cm_new"))
+        flash(f"Champions Meeting '{cm.name}' created.")
+        return redirect(url_for("admin.cm_list"))
+    return render_template(
+        "admin/cm_edit.html",
+        cm=None,
+        presets=_enabled_g1_presets(),
+        csrf_form=csrf_form,
+    )
+
+
+@bp.route("/cm/<int:cm_id>", methods=["GET", "POST"])
+@min_role_required(Role.ADMIN)
+def cm_edit(cm_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    cm = cm_service.get_cm(cm_id)
+    if cm is None:
+        abort(404)
+    if request.method == "POST":
+        if not csrf_form.validate_on_submit():
+            abort(400)
+        result = _build_cm_input(request.form)
+        if isinstance(result, str):
+            flash(result)
+            return redirect(url_for("admin.cm_edit", cm_id=cm_id))
+        try:
+            cm_service.update_cm(cm_id, result, by_user_id=current_user.id)
+        except cm_service.UnknownPresetError:
+            flash("Selected preset is no longer available.")
+            return redirect(url_for("admin.cm_edit", cm_id=cm_id))
+        flash("Champions Meeting updated.")
+        return redirect(url_for("admin.cm_list"))
+    return render_template(
+        "admin/cm_edit.html",
+        cm=cm,
+        presets=_enabled_g1_presets(),
+        csrf_form=csrf_form,
+    )
+
+
+@bp.post("/cm/<int:cm_id>/delete")
+@min_role_required(Role.ADMIN)
+def cm_delete(cm_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    cm_service.delete_cm(cm_id, by_user_id=current_user.id)
+    flash("Champions Meeting deleted.")
+    return redirect(url_for("admin.cm_list"))

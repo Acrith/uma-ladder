@@ -3,6 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, render_template
 from flask_login import current_user
 
+from ..services import cm as cm_service
 from ..services import draft as draft_service
 from ..services import official as official_service
 from ..services import seasons as seasons_service
@@ -29,6 +30,7 @@ def index() -> object:
     my_matches = []
     if current_user.is_authenticated:
         my_matches = list(draft_service.list_matches_for_user(current_user.id))[:5]
+    upcoming_cms = list(cm_service.list_upcoming(limit=3))
     return render_template(
         "dashboard/index.html",
         active_season=season,
@@ -36,6 +38,8 @@ def index() -> object:
         elo_top5=draft_top5,
         my_matches=my_matches,
         upcoming_official=upcoming_with_counts,
+        upcoming_cms=upcoming_cms,
+        cm_is_active=cm_service.is_active_now,
     )
 
 

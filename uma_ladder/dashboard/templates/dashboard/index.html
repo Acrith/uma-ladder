@@ -44,6 +44,59 @@
     {{ stat_tile("Your matches", my_matches | length if current_user.is_authenticated else "—", accent="emerald", small="last 5 visible below") }}
   </section>
 
+  {# Champions Meeting · upcoming — admin-managed schedule, visible to everyone #}
+  {% if upcoming_cms %}
+    <section class="mt-6">
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="label-eyebrow">Champions Meeting · upcoming</p>
+            <h2 class="mt-1 text-lg font-semibold text-slate-100">Mark your calendar</h2>
+          </div>
+          {% if current_user.is_authenticated and current_user.role in ('admin', 'superadmin') %}
+            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('admin.cm_list') }}">Manage →</a>
+          {% endif %}
+        </div>
+        <ul class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {% for cm in upcoming_cms %}
+            {% set is_active = cm_is_active(cm) %}
+            <li class="rounded-lg border bg-slate-900/40 p-3 transition
+                       {% if is_active %}border-emerald-500/40 hover:bg-slate-900/70{% else %}border-slate-800 hover:border-fuchsia-500/40 hover:bg-slate-900/70{% endif %}">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-slate-100">{{ cm.name }}</p>
+                  <p class="mt-0.5 text-xs text-slate-400">
+                    {% if is_active %}<span class="font-medium text-emerald-300">Live now</span>
+                    {% else %}~Around {{ cm.starts_on.strftime('%b %d, %Y') }}{% endif %}
+                    {% if cm.ends_on and not is_active %}
+                      <span class="text-slate-600">→</span> {{ cm.ends_on.strftime('%b %d') }}
+                    {% endif %}
+                  </p>
+                </div>
+                <span class="shrink-0 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-fuchsia-200">CM</span>
+              </div>
+              <p class="mt-2 text-xs text-slate-300">
+                <span class="text-slate-200">{{ cm.effective_venue }}</span>
+                · {{ cm.effective_distance_meters }}m {{ cm.effective_surface }}
+              </p>
+              <p class="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
+                <span>{{ cm.effective_distance_category }}</span>
+                <span class="text-slate-700">·</span>
+                {% if cm.effective_direction == 'Right' %}<span class="text-amber-300">↻ Clockwise</span>
+                {% elif cm.effective_direction == 'Left' %}<span class="text-cyan-300">↺ Counterclockwise</span>
+                {% else %}<span>{{ cm.effective_direction }}</span>{% endif %}
+                {% if cm.source_url %}
+                  <span class="text-slate-700">·</span>
+                  <a href="{{ cm.source_url }}" target="_blank" rel="noopener" class="text-cyan-300/80 hover:text-cyan-200">source ↗</a>
+                {% endif %}
+              </p>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    </section>
+  {% endif %}
+
   {# Upcoming official races — visible to everyone, drives registration #}
   {% if upcoming_official %}
     <section class="mt-6">

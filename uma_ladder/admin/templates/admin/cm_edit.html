@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}{{ "Edit" if cm else "New" }} CM · Admin · Uma Ladder{% endblock %}
+{% block content %}
+
+  <p class="label-eyebrow">Admin · Champions Meeting</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">
+    {% if cm %}Edit “{{ cm.name }}”{% else %}New Champions Meeting{% endif %}
+  </h1>
+
+  {% call card(class="mt-6 p-6") %}
+    <form method="post" class="space-y-5">
+      {{ csrf_form.hidden_tag() }}
+
+      <div class="grid gap-4 md:grid-cols-3">
+        <div class="md:col-span-2">
+          <label class="text-sm text-slate-300">Name</label>
+          <input class="input-base mt-1" name="name" value="{{ cm.name if cm else '' }}" placeholder="e.g. October 2026 CM" required />
+        </div>
+        <div>
+          <label class="text-sm text-slate-300">Source URL</label>
+          <input class="input-base mt-1" type="url" name="source_url" value="{{ cm.source_url if cm and cm.source_url else '' }}" placeholder="https://uma.moe/timeline" />
+          <p class="mt-1 text-[11px] text-slate-500">Optional. Where you got the date estimate from.</p>
+        </div>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="text-sm text-slate-300">Starts on (estimated)</label>
+          <input class="input-base mt-1" type="date" name="starts_on" value="{{ cm.starts_on.isoformat() if cm else '' }}" required />
+        </div>
+        <div>
+          <label class="text-sm text-slate-300">Ends on <span class="text-slate-500">(optional)</span></label>
+          <input class="input-base mt-1" type="date" name="ends_on" value="{{ cm.ends_on.isoformat() if cm and cm.ends_on else '' }}" />
+          <p class="mt-1 text-[11px] text-slate-500">Leave blank to use the canonical 5-day CM window.</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-slate-300">Base race preset (G1)</label>
+        <select class="input-base mt-1" name="preset_id" required>
+          <option value="">— pick a G1 race —</option>
+          {% for p in presets %}
+            <option value="{{ p.id }}" {% if cm and cm.preset_id == p.id %}selected{% endif %}>
+              {{ p.name }} · {{ p.venue }} {{ p.distance_meters }}m {{ p.surface }} ({{ p.direction }})
+            </option>
+          {% endfor %}
+        </select>
+        <p class="mt-1 text-[11px] text-slate-500">Track conditions inherit from this preset. Override below if the CM uses non-standard conditions.</p>
+      </div>
+
+      <details {% if cm and (cm.override_venue or cm.override_surface or cm.override_distance_meters or cm.override_distance_category or cm.override_direction) %}open{% endif %}
+               class="rounded-lg border border-slate-800 bg-slate-950/30 p-4">
+        <summary class="cursor-pointer text-sm font-medium text-slate-200">
+          Override conditions
+          <span class="text-xs text-slate-500">(leave blank to inherit)</span>
+        </summary>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <div>
+            <label class="text-xs text-slate-400">Venue</label>
+            <input class="input-base mt-1" name="override_venue" value="{{ cm.override_venue if cm and cm.override_venue else '' }}" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">Surface</label>
+            <select class="input-base mt-1" name="override_surface">
+              <option value="">— inherit —</option>
+              {% for v in ['Turf', 'Dirt'] %}
+                <option value="{{ v }}" {% if cm and cm.override_surface == v %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">Distance (metres)</label>
+            <input class="input-base mt-1" type="number" min="800" max="4000" name="override_distance_meters" value="{{ cm.override_distance_meters if cm and cm.override_distance_meters else '' }}" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">Distance category</label>
+            <select class="input-base mt-1" name="override_distance_category">
+              <option value="">— inherit —</option>
+              {% for v in ['Sprint', 'Mile', 'Medium', 'Long'] %}
+                <option value="{{ v }}" {% if cm and cm.override_distance_category == v %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">Direction</label>
+            <select class="input-base mt-1" name="override_direction">
+              <option value="">— inherit —</option>
+              {% for v in ['Left', 'Right', 'Straight', 'Stretch'] %}
+                <option value="{{ v }}" {% if cm and cm.override_direction == v %}selected{% endif %}>{{ v }}{% if v == 'Right' %} (clockwise){% elif v == 'Left' %} (counterclockwise){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </details>
+
+      <div>
+        <label class="text-sm text-slate-300">Notes <span class="text-slate-500">(optional)</span></label>
+        <textarea class="input-base mt-1" name="notes" rows="3" placeholder="Pickup banners, gimmicks, community meetup time, etc.">{{ cm.notes if cm and cm.notes else '' }}</textarea>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button class="btn-primary">{% if cm %}Save changes{% else %}Create CM{% endif %}</button>
+        <a href="{{ url_for('admin.cm_list') }}" class="btn-ghost">Cancel</a>
+      </div>
+    </form>
+  {% endcall %}
+{% endblock %}
