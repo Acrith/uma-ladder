@@ -12,7 +12,12 @@ from flask import (
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from ..models import OcrParseAttempt, OfficialRaceResult, Role
+from ..models import (
+    OcrParseAttempt,
+    OfficialRaceRegistration,
+    OfficialRaceResult,
+    Role,
+)
 from ..services import ocr as ocr_service
 from ..services import official as official_service
 from ..services import presets as presets_service
@@ -518,16 +523,27 @@ def delete(race_id: int) -> object:
 
 
 @bp.post("/<int:race_id>/registrations/<int:registration_id>/remove")
-@min_role_required(Role.ORGANIZER)
+@login_required
 def remove_registration(race_id: int, registration_id: int) -> object:
+    """Two paths through this route:
+       - Organizer+ removing any registration (existing UI).
+       - A logged-in user unregistering themselves (PR follow-up to
+         registration UX). Anything else is rejected here."""
     form = CsrfOnlyForm()
     if not form.validate_on_submit():
         abort(400)
+    reg = db.session.get(OfficialRaceRegistration, registration_id)
+    if reg is None or reg.official_race_id != race_id:
+        abort(404)
+    is_organizer = current_user.has_at_least(Role.ORGANIZER)
+    is_self = reg.user_id == current_user.id
+    if not (is_organizer or is_self):
+        abort(403)
     try:
         official_service.remove_registration(
             race_id, registration_id, by_user_id=current_user.id
         )
-        flash("Registration removed.")
+        flash("Registration removed." if is_organizer and not is_self else "You're no longer registered.")
     except official_service.RaceNotFoundError:
         abort(404)
     except official_service.OfficialError as exc:

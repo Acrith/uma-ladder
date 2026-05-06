@@ -154,14 +154,17 @@ def register(race_id: int, user_id: int) -> OfficialRaceRegistration:
     if race.status != OfficialRaceStatus.REGISTRATION_OPEN:
         raise InvalidRaceStateError("registration is not open")
 
+    # Look up *any* existing row for this (race, user). The
+    # uq_official_race_registrations_race_user constraint forbids two
+    # rows regardless of status — so a previously-cancelled row needs
+    # to be revived in place rather than re-INSERTed.
     existing = db.session.scalars(
         select(OfficialRaceRegistration).where(
             OfficialRaceRegistration.official_race_id == race_id,
             OfficialRaceRegistration.user_id == user_id,
-            OfficialRaceRegistration.status == RegistrationStatus.REGISTERED,
         )
     ).first()
-    if existing is not None:
+    if existing is not None and existing.status == RegistrationStatus.REGISTERED:
         raise AlreadyRegisteredError()
 
     if race.max_players is not None:
@@ -175,6 +178,14 @@ def register(race_id: int, user_id: int) -> OfficialRaceRegistration:
         )
         if active is not None and active >= race.max_players:
             raise RaceFullError()
+
+    if existing is not None:
+        # Revive a CANCELLED row — re-registering after being kicked
+        # / unregistering. Updates the existing row in place so the
+        # unique constraint is honoured.
+        existing.status = RegistrationStatus.REGISTERED
+        db.session.commit()
+        return existing
 
     reg = OfficialRaceRegistration(
         official_race_id=race_id,

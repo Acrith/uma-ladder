@@ -554,3 +554,127 @@ def test_list_upcoming_races_filters_correctly(app: Flask, make_user) -> None:
         assert "HIDDEN_CXL" not in names
         # OK1 is one of them
         assert ok_id in {r.id for r in upcoming}
+
+
+def test_user_can_unregister_themselves(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Self-unregister flow — the Register button on the detail page
+    flips to a 'You're registered ✓' card with an Unregister button
+    that posts to /registrations/<id>/remove. The route must accept
+    self-removal even though it primarily serves organizer kicks."""
+    from uma_ladder.models import OfficialRaceRegistration, RegistrationStatus
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="alice", password="password123", role=Role.USER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(f"/official/{race_id}/register")
+
+    with app.app_context():
+        reg = (
+            db.session.query(OfficialRaceRegistration)
+            .filter_by(official_race_id=race_id)
+            .first()
+        )
+        reg_id = reg.id
+
+    resp = client.post(
+        f"/official/{race_id}/registrations/{reg_id}/remove",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        reg = db.session.get(OfficialRaceRegistration, reg_id)
+        assert reg.status == RegistrationStatus.CANCELLED
+
+
+def test_user_cannot_remove_other_users_registration(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Non-organizer user trying to kick someone else gets 403."""
+    from uma_ladder.models import OfficialRaceRegistration
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="alice", password="password123", role=Role.USER)
+    make_user(username="bob", password="password123", role=Role.USER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(f"/official/{race_id}/register")
+    with app.app_context():
+        alice_reg = (
+            db.session.query(OfficialRaceRegistration)
+            .filter_by(official_race_id=race_id)
+            .first()
+        )
+        alice_reg_id = alice_reg.id
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    resp = client.post(
+        f"/official/{race_id}/registrations/{alice_reg_id}/remove",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+
+
+def test_re_register_after_being_kicked(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The unique constraint on (race, user) means a previously-
+    cancelled registration row exists. Re-registering must revive
+    that row in place rather than INSERT a duplicate (which would
+    crash with IntegrityError)."""
+    from uma_ladder.models import OfficialRaceRegistration, RegistrationStatus
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="alice", password="password123", role=Role.USER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(f"/official/{race_id}/register")
+    with app.app_context():
+        reg_id = (
+            db.session.query(OfficialRaceRegistration)
+            .filter_by(official_race_id=race_id)
+            .first()
+        ).id
+    client.post(f"/official/{race_id}/registrations/{reg_id}/remove")
+    # Now alice is CANCELLED; re-register should revive the same row.
+    client.post(f"/official/{race_id}/register")
+    with app.app_context():
+        rows = (
+            db.session.query(OfficialRaceRegistration)
+            .filter_by(official_race_id=race_id)
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].status == RegistrationStatus.REGISTERED

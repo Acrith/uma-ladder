@@ -100,10 +100,24 @@
         </ul>
       {% endif %}
       {% if current_user.is_authenticated and race.status == 'registration_open' %}
-        <form method="post" action="{{ url_for('official.register', race_id=race.id) }}" class="mt-4">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <button class="btn-primary w-full justify-center">Register me</button>
-        </form>
+        {% set my_reg = registrations | selectattr('user_id', 'equalto', current_user.id) | first %}
+        {% if my_reg %}
+          <div class="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-200">
+            ✓ You're registered for this race.
+          </div>
+          <form method="post"
+                action="{{ url_for('official.remove_registration', race_id=race.id, registration_id=my_reg.id) }}"
+                class="mt-2"
+                onsubmit="return confirm('Unregister from this race?');">
+            {{ csrf_form.hidden_tag() }}
+            <button class="text-xs text-rose-400 hover:text-rose-300">Unregister</button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url_for('official.register', race_id=race.id) }}" class="mt-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn-primary w-full justify-center">Register me</button>
+          </form>
+        {% endif %}
       {% endif %}
     {% endcall %}
 
