@@ -491,39 +491,71 @@ class TrackStrengths:
     total_races: int
 
 
+@dataclass(frozen=True)
+class TrackStrengthsByMode:
+    """Per-mode track-strengths breakdown so each card on the
+    profile uses the metric appropriate to its format:
+
+    - ``draft.wins`` counts MATCHES the user won (winner_user_id ==
+      user_id, including forfeit wins). 1v1-team format → 50%
+      baseline, so "win rate" is a meaningful primary signal.
+    - ``official.wins`` counts PODIUM finishes (placement <= 3).
+      12-18 player fields → 8-25% baseline for placement-1, which
+      structurally undersells skilled players. Top-3 captures the
+      "consistently competitive" signal at a comparable scale.
+
+    Either side can be empty (`total_races == 0`) when the user
+    hasn't raced that format; the template shows only the
+    populated section(s).
+    """
+
+    draft: TrackStrengths
+    official: TrackStrengths
+
+
 def track_strengths_for_user(
     user_id: int,
     *,
     min_races: int = 3,
-) -> TrackStrengths:
-    """Aggregate placement counts grouped by ``preset.distance_category``
-    and ``preset.surface`` across BOTH official races and draft matches.
-
-    Combines the two sources because they're the same physical race
-    conditions — players want one picture of "where do I do well." A
-    win is placement==1 in either source. The sample-size guard
-    (`min_races`) hides best-* picks for buckets that haven't seen
-    enough data; full breakdown lists still surface every observed
-    bucket so the player can see why something says "not enough data."
-    """
+) -> TrackStrengthsByMode:
+    """Per-mode aggregation grouped by preset's distance_category +
+    surface. PR-I5: draft and official no longer share a single
+    "win = placement 1" bucket — each card uses a metric scaled
+    to its format. See TrackStrengthsByMode for definitions."""
     from ..models import (
         DraftMatch,
-        DraftRaceResult,
+        DraftMatchStatus,
         OfficialRace,
         OfficialRaceResult,
         RacePreset,
     )
 
-    distance_counts: dict[str, dict[str, int]] = {}
-    surface_counts: dict[str, dict[str, int]] = {}
+    # ---- Draft side: per-MATCH (deduped by match_id), win = match win ----
+    draft_distance: dict[str, dict[str, int]] = {}
+    draft_surface: dict[str, dict[str, int]] = {}
+    draft_rows = db.session.execute(
+        select(
+            RacePreset.distance_category,
+            RacePreset.surface,
+            DraftMatch.winner_user_id,
+        )
+        .join(RacePreset, RacePreset.id == DraftMatch.selected_preset_id)
+        .where(
+            (DraftMatch.host_user_id == user_id)
+            | (DraftMatch.opponent_user_id == user_id)
+        )
+        .where(DraftMatch.status == DraftMatchStatus.COMPLETED)
+    ).all()
+    for cat, surf, winner_id in draft_rows:
+        won = winner_id == user_id
+        if cat:
+            _bump_bucket(draft_distance, cat, won)
+        if surf:
+            _bump_bucket(draft_surface, surf, won)
 
-    def _bump(table: dict[str, dict[str, int]], key: str, won: bool) -> None:
-        slot = table.setdefault(key, {"races": 0, "wins": 0})
-        slot["races"] += 1
-        if won:
-            slot["wins"] += 1
-
-    # Official: result → race → preset.
+    # ---- Official side: per-result row, "win" = podium (placement <= 3) ----
+    official_distance: dict[str, dict[str, int]] = {}
+    official_surface: dict[str, dict[str, int]] = {}
     official_rows = db.session.execute(
         select(
             RacePreset.distance_category,
@@ -535,31 +567,40 @@ def track_strengths_for_user(
         .where(OfficialRaceResult.user_id == user_id)
     ).all()
     for cat, surf, place in official_rows:
-        won = place == 1
+        podium = place is not None and place <= 3
         if cat:
-            _bump(distance_counts, cat, won)
+            _bump_bucket(official_distance, cat, podium)
         if surf:
-            _bump(surface_counts, surf, won)
+            _bump_bucket(official_surface, surf, podium)
 
-    # Draft: result → match → preset (selected_preset_id).
-    draft_rows = db.session.execute(
-        select(
-            RacePreset.distance_category,
-            RacePreset.surface,
-            DraftRaceResult.placement,
-        )
-        .join(DraftMatch, DraftMatch.id == DraftRaceResult.draft_match_id)
-        .join(RacePreset, RacePreset.id == DraftMatch.selected_preset_id)
-        .where(DraftRaceResult.user_id == user_id)
-    ).all()
-    for cat, surf, place in draft_rows:
-        won = place == 1
-        if cat:
-            _bump(distance_counts, cat, won)
-        if surf:
-            _bump(surface_counts, surf, won)
+    return TrackStrengthsByMode(
+        draft=_assemble_track_strengths(
+            draft_distance, draft_surface, min_races=min_races
+        ),
+        official=_assemble_track_strengths(
+            official_distance, official_surface, min_races=min_races
+        ),
+    )
 
-    # Stable display order for the breakdowns.
+
+def _bump_bucket(
+    table: dict[str, dict[str, int]], key: str, won: bool
+) -> None:
+    slot = table.setdefault(key, {"races": 0, "wins": 0})
+    slot["races"] += 1
+    if won:
+        slot["wins"] += 1
+
+
+def _assemble_track_strengths(
+    distance_counts: dict[str, dict[str, int]],
+    surface_counts: dict[str, dict[str, int]],
+    *,
+    min_races: int,
+) -> TrackStrengths:
+    """Stable display order + best-bucket pick. Same shape for both
+    modes; the *meaning* of `wins` is set by the caller (matches
+    won for draft, podiums for official)."""
     distance_order = ("Sprint", "Mile", "Medium", "Long")
     surface_order = ("Turf", "Dirt")
 
@@ -570,7 +611,6 @@ def track_strengths_for_user(
             for k in order
             if k in seen
         ]
-        # Anything not in the canonical order list (defensive) appended.
         for k in seen - set(order):
             out.append(
                 TrackBucket(label=k, races=table[k]["races"], wins=table[k]["wins"])

@@ -167,26 +167,33 @@
             </p>
           </div>
 
-          {# Best track — combined view of best_distance + best_surface.
-             Each axis is independently sample-size guarded inside the
-             service, so one or both may be None on a sparse profile. #}
+          {# Best track — picks from the mode the player has more
+             data in. Draft preferred when both are populated since
+             that's where most players spend time; the metric label
+             ("WR" vs "podium") follows from which mode supplied it. #}
           <div class="rounded-xl border border-violet-500/20 bg-slate-950/40 p-3 backdrop-blur-sm">
             <p class="label-eyebrow">Best track</p>
-            {% set bd = track_strengths.best_distance %}
-            {% set bs = track_strengths.best_surface %}
+            {% if track_strengths.draft.total_races >= track_strengths.official.total_races %}
+              {% set bd = track_strengths.draft.best_distance %}
+              {% set bs = track_strengths.draft.best_surface %}
+              {% set metric_label = "WR" %}
+              {% set unit = "m" %}
+            {% else %}
+              {% set bd = track_strengths.official.best_distance %}
+              {% set bs = track_strengths.official.best_surface %}
+              {% set metric_label = "podium" %}
+              {% set unit = "r" %}
+            {% endif %}
             {% if bd and bs %}
               <p class="mt-1 text-base font-semibold text-violet-300 truncate">{{ bd.label }} · {{ bs.label }}</p>
-              {# Show the lower of the two WRs as the headline number —
-                 the combined condition is at most as good as the worst
-                 of its parts. Race count is the smaller bucket too. #}
               {% set worst = bd if bd.win_rate <= bs.win_rate else bs %}
-              <p class="mt-0.5 text-[11px] text-slate-500">≥ {{ '%.0f' % (worst.win_rate * 100) }}% WR · {{ worst.races }}r min</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">≥ {{ '%.0f' % (worst.win_rate * 100) }}% {{ metric_label }} · {{ worst.races }}{{ unit }} min</p>
             {% elif bd %}
               <p class="mt-1 text-base font-semibold text-violet-300 truncate">{{ bd.label }}</p>
-              <p class="mt-0.5 text-[11px] text-slate-500">{{ '%.0f' % (bd.win_rate * 100) }}% WR · {{ bd.races }} race{{ '' if bd.races == 1 else 's' }}</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">{{ '%.0f' % (bd.win_rate * 100) }}% {{ metric_label }} · {{ bd.races }}{{ unit }}</p>
             {% elif bs %}
               <p class="mt-1 text-base font-semibold text-violet-300 truncate">{{ bs.label }}</p>
-              <p class="mt-0.5 text-[11px] text-slate-500">{{ '%.0f' % (bs.win_rate * 100) }}% WR · {{ bs.races }} race{{ '' if bs.races == 1 else 's' }}</p>
+              <p class="mt-0.5 text-[11px] text-slate-500">{{ '%.0f' % (bs.win_rate * 100) }}% {{ metric_label }} · {{ bs.races }}{{ unit }}</p>
             {% else %}
               <p class="mt-1 text-base font-semibold text-slate-300">—</p>
               <p class="mt-0.5 text-[11px] text-slate-500">Not enough data</p>
@@ -337,66 +344,140 @@
       {% endcall %}
     {% endif %}
 
-    {# Track Strengths — combined Official + Draft view. The card
-       only renders when there's at least one race recorded; the
-       sample-size guard inside the service is what gates the
-       best-distance / best-surface picks (not the card visibility).
-       Buckets without enough data still appear in the breakdown so
-       the player can see why they're not eligible for "best." #}
-    {% if track_strengths.total_races > 0 %}
+    {# Track Strengths — per-mode breakdown (PR-I5). Draft uses
+       match-win-rate (1v1-team format, ~50% baseline). Official
+       uses podium rate (12-18 player fields, top-3 captures
+       "consistently competitive" without the structural penalty
+       of placement-1-only). Each section renders only when its
+       mode has data; the whole card hides if neither has any. #}
+    {% set ts_draft = track_strengths.draft %}
+    {% set ts_off = track_strengths.official %}
+    {% if ts_draft.total_races > 0 or ts_off.total_races > 0 %}
       {% call card(class="p-5") %}
         <p class="label-eyebrow">Track strengths</p>
-        <h2 class="mt-1 text-base font-semibold text-slate-100">{{ track_strengths.total_races }} race{{ '' if track_strengths.total_races == 1 else 's' }} across both kinds</h2>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
-            <p class="text-[10px] uppercase tracking-wider text-slate-500">Best distance</p>
-            {% if track_strengths.best_distance %}
-              <p class="mt-0.5 text-base font-semibold text-cyan-300">{{ track_strengths.best_distance.label }}</p>
-              <p class="text-xs text-slate-400">{{ '%.0f' % (track_strengths.best_distance.win_rate * 100) }}% WR · {{ track_strengths.best_distance.races }} race{{ '' if track_strengths.best_distance.races == 1 else 's' }}</p>
-            {% else %}
-              <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
-            {% endif %}
-          </div>
-          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
-            <p class="text-[10px] uppercase tracking-wider text-slate-500">Best surface</p>
-            {% if track_strengths.best_surface %}
-              <p class="mt-0.5 text-base font-semibold text-fuchsia-300">{{ track_strengths.best_surface.label }}</p>
-              <p class="text-xs text-slate-400">{{ '%.0f' % (track_strengths.best_surface.win_rate * 100) }}% WR · {{ track_strengths.best_surface.races }} race{{ '' if track_strengths.best_surface.races == 1 else 's' }}</p>
-            {% else %}
-              <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
-            {% endif %}
-          </div>
-        </div>
+        {# Draft section — players spend most of their time here,
+           render first. #}
+        {% if ts_draft.total_races > 0 %}
+          <section>
+            <h2 class="mt-1 text-base font-semibold text-fuchsia-300">
+              Draft · {{ ts_draft.total_races }} match{{ '' if ts_draft.total_races == 1 else 'es' }}
+            </h2>
+            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best distance</p>
+                {% if ts_draft.best_distance %}
+                  <p class="mt-0.5 text-base font-semibold text-cyan-300">{{ ts_draft.best_distance.label }}</p>
+                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_draft.best_distance.win_rate * 100) }}% wins · {{ ts_draft.best_distance.races }} match{{ '' if ts_draft.best_distance.races == 1 else 'es' }}</p>
+                {% else %}
+                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
+                {% endif %}
+              </div>
+              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best surface</p>
+                {% if ts_draft.best_surface %}
+                  <p class="mt-0.5 text-base font-semibold text-fuchsia-300">{{ ts_draft.best_surface.label }}</p>
+                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_draft.best_surface.win_rate * 100) }}% wins · {{ ts_draft.best_surface.races }} match{{ '' if ts_draft.best_surface.races == 1 else 'es' }}</p>
+                {% else %}
+                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
+                {% endif %}
+              </div>
+            </div>
+            <div class="mt-3 grid gap-4 sm:grid-cols-2">
+              {% if ts_draft.by_distance %}
+                <div>
+                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Distance · win rate</p>
+                  <ul class="mt-2 space-y-1.5">
+                    {% for b in ts_draft.by_distance %}
+                      <li class="flex items-center justify-between text-xs">
+                        <span class="text-slate-300">{{ b.label }}</span>
+                        <span class="text-slate-500">{{ b.races }}m · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
+              {% if ts_draft.by_surface %}
+                <div>
+                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Surface · win rate</p>
+                  <ul class="mt-2 space-y-1.5">
+                    {% for b in ts_draft.by_surface %}
+                      <li class="flex items-center justify-between text-xs">
+                        <span class="text-slate-300">{{ b.label }}</span>
+                        <span class="text-slate-500">{{ b.races }}m · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
+            </div>
+          </section>
+        {% endif %}
 
-        <div class="mt-4 grid gap-4 sm:grid-cols-2">
-          {% if track_strengths.by_distance %}
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500">Distance</p>
-              <ul class="mt-2 space-y-1.5">
-                {% for b in track_strengths.by_distance %}
-                  <li class="flex items-center justify-between text-xs">
-                    <span class="text-slate-300">{{ b.label }}</span>
-                    <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
-                  </li>
-                {% endfor %}
-              </ul>
+        {# Visual divider between modes only when both render. #}
+        {% if ts_draft.total_races > 0 and ts_off.total_races > 0 %}
+          <div class="my-5 h-px bg-slate-800"></div>
+        {% endif %}
+
+        {# Official section — podium-rate metric (top-3) instead of
+           literal placement-1, since 12-18 player fields make
+           strict win rate a too-noisy signal. #}
+        {% if ts_off.total_races > 0 %}
+          <section>
+            <h2 class="text-base font-semibold text-amber-300">
+              Official · {{ ts_off.total_races }} race{{ '' if ts_off.total_races == 1 else 's' }}
+            </h2>
+            <p class="mt-0.5 text-[11px] text-slate-500">"Wins" here means top-3 finish (podium).</p>
+            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best distance</p>
+                {% if ts_off.best_distance %}
+                  <p class="mt-0.5 text-base font-semibold text-cyan-300">{{ ts_off.best_distance.label }}</p>
+                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_off.best_distance.win_rate * 100) }}% podium · {{ ts_off.best_distance.races }} race{{ '' if ts_off.best_distance.races == 1 else 's' }}</p>
+                {% else %}
+                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
+                {% endif %}
+              </div>
+              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best surface</p>
+                {% if ts_off.best_surface %}
+                  <p class="mt-0.5 text-base font-semibold text-amber-300">{{ ts_off.best_surface.label }}</p>
+                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_off.best_surface.win_rate * 100) }}% podium · {{ ts_off.best_surface.races }} race{{ '' if ts_off.best_surface.races == 1 else 's' }}</p>
+                {% else %}
+                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
+                {% endif %}
+              </div>
             </div>
-          {% endif %}
-          {% if track_strengths.by_surface %}
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500">Surface</p>
-              <ul class="mt-2 space-y-1.5">
-                {% for b in track_strengths.by_surface %}
-                  <li class="flex items-center justify-between text-xs">
-                    <span class="text-slate-300">{{ b.label }}</span>
-                    <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
-                  </li>
-                {% endfor %}
-              </ul>
+            <div class="mt-3 grid gap-4 sm:grid-cols-2">
+              {% if ts_off.by_distance %}
+                <div>
+                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Distance · podium rate</p>
+                  <ul class="mt-2 space-y-1.5">
+                    {% for b in ts_off.by_distance %}
+                      <li class="flex items-center justify-between text-xs">
+                        <span class="text-slate-300">{{ b.label }}</span>
+                        <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
+              {% if ts_off.by_surface %}
+                <div>
+                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Surface · podium rate</p>
+                  <ul class="mt-2 space-y-1.5">
+                    {% for b in ts_off.by_surface %}
+                      <li class="flex items-center justify-between text-xs">
+                        <span class="text-slate-300">{{ b.label }}</span>
+                        <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
             </div>
-          {% endif %}
-        </div>
+          </section>
+        {% endif %}
       {% endcall %}
     {% endif %}
 
