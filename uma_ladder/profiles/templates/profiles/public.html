@@ -18,6 +18,15 @@
      left column carries identity + chips + a 4-up stat tile grid that
      fills the previously empty lower-left space. #}
   <article class="surface-card relative overflow-hidden min-h-[34rem]">
+    {# Owner-only edit affordance — sits above the hero gradient in
+       the top-right corner so it doesn't fight the identity row's
+       avatar / name layout. #}
+    {% if current_user.is_authenticated and current_user.id == user.id %}
+      <a href="{{ url_for('profiles.me') }}"
+         class="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-3 py-1.5 text-xs font-medium text-cyan-200 backdrop-blur hover:border-cyan-400/60 hover:text-cyan-100">
+        ✎ Edit profile
+      </a>
+    {% endif %}
     {% if oshi_image %}
       <img src="{{ oshi_image }}"
            alt="{{ profile.oshi.name_en if profile.oshi else '' }}"

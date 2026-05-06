@@ -114,3 +114,42 @@ def test_update_profile_unknown_oshi_raises(app: Flask, make_user) -> None:
             profiles_service.update_profile(
                 user, profiles_service.ProfileUpdate(oshi_character_id=9999)
             )
+
+
+def test_nav_points_to_public_profile_not_edit(
+    client: FlaskClient, make_user
+) -> None:
+    """Clicking the user's own name in the nav opens the public profile
+    page, not the edit form. The edit form is reachable from the
+    page's Edit affordance."""
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert 'href="/profiles/alice"' in body
+    assert 'href="/profiles/me"' not in body
+
+
+def test_public_profile_shows_edit_button_for_owner(
+    client: FlaskClient, make_user
+) -> None:
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    resp = client.get("/profiles/alice")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Edit profile" in body
+    assert 'href="/profiles/me"' in body
+
+
+def test_public_profile_hides_edit_button_for_other_users(
+    client: FlaskClient, make_user
+) -> None:
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+    _login(client, "bob", "password123")
+    resp = client.get("/profiles/alice")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Edit profile" not in body
