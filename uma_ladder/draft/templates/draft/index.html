@@ -13,6 +13,40 @@
   </div>
 
   {% if current_user.is_authenticated %}
+    {# PR-I7 — Layer-A invite banner. Only renders when somebody
+       has invited the current user to a match they haven't
+       responded to yet. Accept jumps straight into the match;
+       Decline clears the invite without changing match state. #}
+    {% if pending_invites %}
+      <div class="mt-6 space-y-2">
+        {% for invite in pending_invites %}
+          <div class="rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/5 p-3">
+            <p class="text-sm">
+              <span class="font-medium text-fuchsia-200">@{{ invite.inviter.username }}</span>
+              <span class="text-slate-300">invited you to</span>
+              <a href="{{ url_for('draft.detail', match_id=invite.draft_match_id) }}"
+                 class="font-medium text-cyan-300 hover:text-cyan-200">
+                draft match #{{ invite.draft_match_id }}
+              </a>
+              <span class="text-slate-500">· {{ invite.match.umas_per_player }}v{{ invite.match.umas_per_player }}</span>
+            </p>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <form method="post"
+                    action="{{ url_for('draft.accept_invite', invite_id=invite.id) }}">
+                {{ csrf_form.hidden_tag() }}
+                <button class="btn-primary">Accept</button>
+              </form>
+              <form method="post"
+                    action="{{ url_for('draft.decline_invite', invite_id=invite.id) }}">
+                {{ csrf_form.hidden_tag() }}
+                <button class="text-slate-400 hover:text-rose-300">Decline</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
     {% call card(class="mt-6 p-4 md:p-5") %}
       <p class="label-eyebrow">Join with code</p>
       <form method="post" action="{{ url_for('draft.join_by_code') }}" class="mt-2 flex gap-2">

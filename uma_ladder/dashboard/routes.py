@@ -28,9 +28,18 @@ def index() -> object:
         for r in upcoming_official
     ]
     my_matches = []
+    pending_invites = []
     if current_user.is_authenticated:
         my_matches = list(draft_service.list_matches_for_user(current_user.id))[:5]
+        pending_invites = draft_service.list_pending_invites_for_user(
+            current_user.id
+        )
     upcoming_cms = list(cm_service.list_upcoming(limit=3))
+    from flask_wtf import FlaskForm
+
+    class _CsrfOnlyForm(FlaskForm):
+        pass
+
     return render_template(
         "dashboard/index.html",
         active_season=season,
@@ -40,6 +49,8 @@ def index() -> object:
         upcoming_official=upcoming_with_counts,
         upcoming_cms=upcoming_cms,
         cm_is_active=cm_service.is_active_now,
+        pending_invites=pending_invites,
+        csrf_form=_CsrfOnlyForm(),
     )
 
 

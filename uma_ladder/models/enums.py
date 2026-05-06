@@ -48,6 +48,18 @@ class GroundCondition(StrEnum):
     HEAVY = "Heavy"
 
 
+class DraftInviteStatus(StrEnum):
+    """Layer-A invite states. PENDING is the only active one — the
+    rest are terminal. EXPIRED is reserved for a future TTL sweeper
+    (not yet implemented; pending invites just linger)."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
 class PresetSource(StrEnum):
     G1_IMPORT = "g1_import"
     CUSTOM_BUILTIN = "custom_builtin"

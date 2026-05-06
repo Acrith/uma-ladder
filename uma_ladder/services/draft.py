@@ -30,12 +30,15 @@ from ..extensions import db
 from ..models import (
     DraftBanType,
     DraftEloChange,
+    DraftInviteStatus,
     DraftMatch,
     DraftMatchBan,
+    DraftMatchInvite,
     DraftMatchStatus,
     DraftRaceResult,
     RacePreset,
     UmaCharacter,
+    User,
 )
 from .elo import DEFAULT_K, DEFAULT_RATING, apply_match
 from .randomizer import Bans, RandomizerError, filter_presets, pick_preset
@@ -139,6 +142,14 @@ class BanWouldEmptyPoolError(DraftError):
 
 
 class BannedCharacterUsedError(DraftError):
+    pass
+
+
+class InviteError(DraftError):
+    """Layer-A invite-flow exceptions (PR-I7)."""
+
+
+class InviteNotFoundError(InviteError):
     pass
 
 
@@ -1313,5 +1324,150 @@ def list_matches_for_user(user_id: int) -> Sequence[DraftMatch]:
                 | (DraftMatch.opponent_user_id == user_id)
             )
             .order_by(DraftMatch.created_at.desc())
+        )
+    )
+
+
+# ---- Layer-A invites (PR-I7) ----
+
+
+def invite_to_match(
+    match_id: int,
+    *,
+    inviter_user_id: int,
+    invitee_username: str,
+) -> DraftMatchInvite:
+    """Host invites a specific player by username. Refuses when:
+       - match isn't WAITING_FOR_OPPONENT (someone already joined),
+       - inviter isn't the match host (only the opener invites),
+       - invitee doesn't exist or is the inviter themselves,
+       - the invitee already has a pending invite to this match.
+    """
+    match = get_match(match_id)
+    if match.status != DraftMatchStatus.WAITING_FOR_OPPONENT:
+        raise InvalidMatchStateError(
+            f"cannot invite — match status is {match.status}"
+        )
+    if match.host_user_id != inviter_user_id:
+        raise InviteError("only the match host can invite players")
+
+    target = db.session.scalars(
+        select(User).where(User.username == invitee_username.strip().lower())
+    ).first()
+    if target is None:
+        raise InviteError(f"no user named {invitee_username!r}")
+    if target.id == inviter_user_id:
+        raise InviteError("you can't invite yourself")
+
+    existing = db.session.scalars(
+        select(DraftMatchInvite).where(
+            DraftMatchInvite.draft_match_id == match_id,
+            DraftMatchInvite.invitee_user_id == target.id,
+            DraftMatchInvite.status == DraftInviteStatus.PENDING,
+        )
+    ).first()
+    if existing is not None:
+        raise InviteError(
+            f"{target.username} already has a pending invite to this match"
+        )
+
+    invite = DraftMatchInvite(
+        draft_match_id=match_id,
+        inviter_user_id=inviter_user_id,
+        invitee_user_id=target.id,
+    )
+    db.session.add(invite)
+    db.session.commit()
+    return invite
+
+
+def accept_invite(invite_id: int, *, by_user_id: int) -> DraftMatchInvite:
+    """Invitee accepts → standard join_match runs and the match
+    transitions to READY_CHECK. Other pending invites for the same
+    match get cancelled (the seat is taken)."""
+    invite = db.session.get(DraftMatchInvite, invite_id)
+    if invite is None:
+        raise InviteNotFoundError(str(invite_id))
+    if invite.invitee_user_id != by_user_id:
+        raise InviteError("not your invite")
+    if invite.status != DraftInviteStatus.PENDING:
+        raise InviteError(f"invite is already {invite.status}")
+
+    join_match(invite.draft_match_id, by_user_id)
+    invite.status = DraftInviteStatus.ACCEPTED
+    invite.responded_at = _utcnow()
+    db.session.commit()
+
+    # Cancel sibling pending invites — the match seat is now filled.
+    siblings = db.session.scalars(
+        select(DraftMatchInvite).where(
+            DraftMatchInvite.draft_match_id == invite.draft_match_id,
+            DraftMatchInvite.id != invite_id,
+            DraftMatchInvite.status == DraftInviteStatus.PENDING,
+        )
+    ).all()
+    now = _utcnow()
+    for s in siblings:
+        s.status = DraftInviteStatus.CANCELLED
+        s.responded_at = now
+    if siblings:
+        db.session.commit()
+    return invite
+
+
+def decline_invite(invite_id: int, *, by_user_id: int) -> DraftMatchInvite:
+    invite = db.session.get(DraftMatchInvite, invite_id)
+    if invite is None:
+        raise InviteNotFoundError(str(invite_id))
+    if invite.invitee_user_id != by_user_id:
+        raise InviteError("not your invite")
+    if invite.status != DraftInviteStatus.PENDING:
+        raise InviteError(f"invite is already {invite.status}")
+    invite.status = DraftInviteStatus.DECLINED
+    invite.responded_at = _utcnow()
+    db.session.commit()
+    return invite
+
+
+def cancel_invite(invite_id: int, *, by_user_id: int) -> DraftMatchInvite:
+    invite = db.session.get(DraftMatchInvite, invite_id)
+    if invite is None:
+        raise InviteNotFoundError(str(invite_id))
+    if invite.inviter_user_id != by_user_id:
+        raise InviteError("only the inviter can cancel an invite")
+    if invite.status != DraftInviteStatus.PENDING:
+        raise InviteError(f"invite is already {invite.status}")
+    invite.status = DraftInviteStatus.CANCELLED
+    invite.responded_at = _utcnow()
+    db.session.commit()
+    return invite
+
+
+def list_pending_invites_for_user(user_id: int) -> list[DraftMatchInvite]:
+    """Pending invites WHERE the user is the invitee AND the match
+    is still in waiting state. Hides invites that became stale
+    because someone else joined or the match got cancelled."""
+    return list(
+        db.session.scalars(
+            select(DraftMatchInvite)
+            .join(DraftMatch, DraftMatch.id == DraftMatchInvite.draft_match_id)
+            .where(
+                DraftMatchInvite.invitee_user_id == user_id,
+                DraftMatchInvite.status == DraftInviteStatus.PENDING,
+                DraftMatch.status == DraftMatchStatus.WAITING_FOR_OPPONENT,
+            )
+            .order_by(DraftMatchInvite.created_at.desc())
+        )
+    )
+
+
+def list_outgoing_invites_for_match(match_id: int) -> list[DraftMatchInvite]:
+    """All invites for a match, newest first. Used on the host's
+    detail view to show outstanding pending invites + history."""
+    return list(
+        db.session.scalars(
+            select(DraftMatchInvite)
+            .where(DraftMatchInvite.draft_match_id == match_id)
+            .order_by(DraftMatchInvite.created_at.desc())
         )
     )

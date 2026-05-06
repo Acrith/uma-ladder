@@ -1,5 +1,6 @@
 from .admin_audit import AdminAuditLog
 from .champions_meeting import ChampionsMeeting
+from .draft_invite import DraftMatchInvite
 from .draft_matches import (
     DraftEloChange,
     DraftMatch,
@@ -11,6 +12,7 @@ from .enums import (
     Direction,
     DistanceCategory,
     DraftBanType,
+    DraftInviteStatus,
     DraftMatchStatus,
     GroundCondition,
     NotificationEvent,
@@ -52,8 +54,10 @@ __all__ = [
     "DiscordNotificationAttempt",
     "DraftBanType",
     "DraftEloChange",
+    "DraftInviteStatus",
     "DraftMatch",
     "DraftMatchBan",
+    "DraftMatchInvite",
     "DraftMatchStatus",
     "DraftRaceResult",
     "GroundCondition",

@@ -50,10 +50,18 @@ TRACK_BAN_OPTIONS: dict[str, list[str]] = {
 @bp.get("/")
 def index() -> object:
     matches = []
+    pending_invites = []
     if current_user.is_authenticated:
         matches = draft_service.list_matches_for_user(current_user.id)
+        pending_invites = draft_service.list_pending_invites_for_user(
+            current_user.id
+        )
     return render_template(
-        "draft/index.html", matches=matches, join_form=JoinDraftForm()
+        "draft/index.html",
+        matches=matches,
+        join_form=JoinDraftForm(),
+        pending_invites=pending_invites,
+        csrf_form=CsrfOnlyForm(),
     )
 
 
@@ -80,6 +88,91 @@ def new() -> object:
         else:
             return redirect(url_for("draft.detail", match_id=match.id))
     return render_template("draft/new.html", form=form)
+
+
+@bp.post("/<int:match_id>/invite")
+@login_required
+def invite_player(match_id: int) -> object:
+    """Layer-A invite (PR-I7) — host invites a specific user by
+    username. The username field shares CSRF with the rest of the
+    detail page; we just read request.form directly."""
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    username = (request.form.get("invitee_username") or "").strip()
+    if not username:
+        flash("Enter a username to invite.")
+        return redirect(url_for("draft.detail", match_id=match_id))
+    try:
+        draft_service.invite_to_match(
+            match_id,
+            inviter_user_id=current_user.id,
+            invitee_username=username,
+        )
+        flash(f"Invite sent to @{username}.")
+    except draft_service.DraftNotFoundError:
+        abort(404)
+    except draft_service.InviteError as exc:
+        flash(str(exc))
+    except draft_service.InvalidMatchStateError as exc:
+        flash(str(exc))
+    return redirect(url_for("draft.detail", match_id=match_id))
+
+
+@bp.post("/invites/<int:invite_id>/accept")
+@login_required
+def accept_invite(invite_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    try:
+        invite = draft_service.accept_invite(
+            invite_id, by_user_id=current_user.id
+        )
+    except draft_service.InviteNotFoundError:
+        abort(404)
+    except draft_service.InviteError as exc:
+        flash(str(exc))
+        return redirect(url_for("draft.index"))
+    except draft_service.DraftError as exc:
+        flash(str(exc))
+        return redirect(url_for("draft.index"))
+    return redirect(url_for("draft.detail", match_id=invite.draft_match_id))
+
+
+@bp.post("/invites/<int:invite_id>/decline")
+@login_required
+def decline_invite(invite_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    try:
+        draft_service.decline_invite(invite_id, by_user_id=current_user.id)
+        flash("Invite declined.")
+    except draft_service.InviteNotFoundError:
+        abort(404)
+    except draft_service.InviteError as exc:
+        flash(str(exc))
+    return redirect(request.referrer or url_for("draft.index"))
+
+
+@bp.post("/invites/<int:invite_id>/cancel")
+@login_required
+def cancel_invite(invite_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    try:
+        invite = draft_service.cancel_invite(
+            invite_id, by_user_id=current_user.id
+        )
+        flash("Invite cancelled.")
+    except draft_service.InviteNotFoundError:
+        abort(404)
+    except draft_service.InviteError as exc:
+        flash(str(exc))
+        return redirect(request.referrer or url_for("draft.index"))
+    return redirect(url_for("draft.detail", match_id=invite.draft_match_id))
 
 
 @bp.post("/join")
@@ -184,6 +277,11 @@ def detail(match_id: int) -> object:
         if match.status == DraftMatchStatus.COMPLETED
         else []
     )
+    outgoing_invites = (
+        draft_service.list_outgoing_invites_for_match(match.id)
+        if match.status == DraftMatchStatus.WAITING_FOR_OPPONENT
+        else []
+    )
     return render_template(
         "draft/detail.html",
         match=match,
@@ -201,6 +299,7 @@ def detail(match_id: int) -> object:
         banned_outfit_ids=banned_outfit_ids,
         completed_results=completed_results,
         completed_elo=completed_elo,
+        outgoing_invites=outgoing_invites,
     )
 
 

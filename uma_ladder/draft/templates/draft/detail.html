@@ -246,6 +246,42 @@
             <p class="label-eyebrow">Waiting</p>
             <h2 class="mt-1 text-lg font-semibold text-slate-100">Send the join code to your opponent</h2>
             <p class="mt-2 text-sm text-slate-400">They'll see your match on their <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">draft page</a> after pasting <span class="text-mono-pill">{{ match.join_code }}</span>.</p>
+
+            {# Layer-A invite (PR-I7): host can also DM-style invite a
+               specific user by username — the invitee gets a banner
+               on their dashboard + draft index with Accept/Decline. #}
+            {% if current_user.is_authenticated and current_user.id == match.host_user_id %}
+              <div class="mt-4 border-t border-slate-800 pt-4">
+                <p class="label-eyebrow">Or invite a specific player</p>
+                <form method="post"
+                      action="{{ url_for('draft.invite_player', match_id=match.id) }}"
+                      class="mt-2 flex flex-wrap items-center gap-2">
+                  {{ csrf_form.hidden_tag() }}
+                  <input name="invitee_username"
+                         class="input-base"
+                         placeholder="username"
+                         maxlength="64"
+                         autocomplete="off" />
+                  <button class="btn-ghost text-xs">Send invite</button>
+                </form>
+                {% set pending_outgoing = outgoing_invites|selectattr('status', 'equalto', 'pending')|list %}
+                {% if pending_outgoing %}
+                  <p class="mt-3 label-eyebrow">Outstanding invites</p>
+                  <ul class="mt-1 space-y-1.5">
+                    {% for inv in pending_outgoing %}
+                      <li class="flex items-center justify-between gap-3 text-xs text-slate-300">
+                        <span>@{{ inv.invitee.username }}</span>
+                        <form method="post"
+                              action="{{ url_for('draft.cancel_invite', invite_id=inv.id) }}">
+                          {{ csrf_form.hidden_tag() }}
+                          <button class="text-rose-400 hover:text-rose-300">Cancel</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </div>
+            {% endif %}
           {% endcall %}
         {% endif %}
 
