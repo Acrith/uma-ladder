@@ -9,6 +9,7 @@ it goes through these functions so the payload shape stays in one place.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 from ..models import (
@@ -19,10 +20,73 @@ from ..models import (
     NotificationTarget,
     OfficialRace,
     OfficialRaceRegistration,
+    RacePreset,
 )
 from ..services.official import LadderRow
 from .discord import send_event
 from .mentions import mention_prefix
+
+
+def _ts(dt: datetime | None, *, style: str = "F", relative: bool = False) -> str:
+    """Discord dynamic-timestamp tag — `<t:unix:style>`.
+
+    Discord renders these in each viewer's local timezone + locale.
+    Style codes:
+      F  — full date+time, e.g. "Sunday, 10 May 2026 17:44"
+      f  — short date+time, "10 May 2026 17:44"
+      D  — long date, "10 May 2026"
+      d  — short date, "05/10/2026"
+      T  — long time, "17:44:30"
+      t  — short time, "17:44"
+      R  — relative, "in 4 days" / "3 hours ago"
+
+    Pass `relative=True` to append a `· <t:…:R>` block, useful for
+    "Scheduled" fields where both the absolute and relative readings
+    add value. Returns a literal "—" for None inputs so callers can
+    drop the field guard.
+    """
+    if dt is None:
+        return "—"
+    # SQLite strips tzinfo on read; rest of the codebase treats naive
+    # datetimes as UTC (cf. services/official._as_utc). Mirror that
+    # so the epoch we hand Discord matches the wall-clock the user
+    # entered.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    epoch = int(dt.timestamp())
+    out = f"<t:{epoch}:{style}>"
+    if relative:
+        out += f" · <t:{epoch}:R>"
+    return out
+
+
+def _format_track(preset: RacePreset | None) -> str | None:
+    """Compact one-block track description for embed fields.
+
+    Returns None when preset is missing — the caller should skip the
+    field entirely rather than render an empty box.
+    """
+    if preset is None:
+        return None
+    lines = [
+        f"**{preset.name}**",
+        f"{preset.venue} · {preset.distance_meters}m {preset.surface} ({preset.direction})",
+    ]
+    if preset.max_runners:
+        lines.append(f"Max runners: {preset.max_runners}")
+    return "\n".join(lines)
+
+
+def _format_conditions(
+    *,
+    race_season: str | None,
+    weather: str | None,
+    ground_condition: str | None,
+) -> str | None:
+    """`Spring · Cloudy · Good` style summary, or None when nothing
+    has been declared so the caller can skip the field."""
+    parts = [v for v in (race_season, weather, ground_condition) if v]
+    return " · ".join(parts) if parts else None
 
 
 def _embed(
@@ -61,12 +125,21 @@ def _field(name: str, value: Any, *, inline: bool = True) -> dict[str, Any]:
 def notify_official_race_published(race: OfficialRace) -> DiscordNotificationAttempt:
     fields = [
         _field("Season", race.season.name if race.season else "?"),
-        _field("Status", race.status, inline=True),
     ]
     if race.scheduled_at is not None:
-        fields.append(_field("Scheduled", race.scheduled_at.isoformat()))
-    if race.preset is not None:
-        fields.append(_field("Preset", race.preset.name, inline=False))
+        fields.append(
+            _field("Scheduled", _ts(race.scheduled_at, relative=True), inline=False)
+        )
+    track = _format_track(race.preset)
+    if track is not None:
+        fields.append(_field("Track", track, inline=False))
+    conditions = _format_conditions(
+        race_season=race.race_season,
+        weather=race.weather,
+        ground_condition=race.ground_condition,
+    )
+    if conditions is not None:
+        fields.append(_field("Conditions", conditions, inline=False))
     return send_event(
         event_type=NotificationEvent.OFFICIAL_RACE_PUBLISHED,
         target=NotificationTarget.RACE_REGISTRATION,
@@ -81,7 +154,9 @@ def notify_official_room_code(
         _field("Code", f"`{race.room_code}`"),
     ]
     if race.room_code_expires_at is not None:
-        fields.append(_field("Expires at", race.room_code_expires_at.isoformat()))
+        fields.append(
+            _field("Expires", _ts(race.room_code_expires_at, relative=True))
+        )
     if registrations:
         names = ", ".join(r.user.username for r in registrations)
         fields.append(_field("Registered", names, inline=False))
@@ -188,7 +263,9 @@ def notify_draft_room_code(match: DraftMatch) -> DiscordNotificationAttempt:
     if match.selected_preset is not None:
         fields.append(_field("Preset", match.selected_preset.name, inline=False))
     if match.room_code_expires_at is not None:
-        fields.append(_field("Expires at", match.room_code_expires_at.isoformat()))
+        fields.append(
+            _field("Expires", _ts(match.room_code_expires_at, relative=True))
+        )
     mention = mention_prefix([match.host_user_id, match.opponent_user_id])
     return send_event(
         event_type=NotificationEvent.DRAFT_ROOM_CODE,

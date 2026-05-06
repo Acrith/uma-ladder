@@ -144,3 +144,95 @@ def test_failure_does_not_break_caller(app: Flask) -> None:
         # transport — and crucially, the race state still updated.
         assert len(rows) == 2
         assert all(r.status == NotificationStatus.FAILED for r in rows)
+
+
+# ---------- dynamic timestamp + track-info helpers ----------
+
+
+def test_ts_emits_discord_timestamp_tag() -> None:
+    from datetime import UTC, datetime
+
+    from uma_ladder.notifications.services import _ts
+
+    dt = datetime(2026, 5, 10, 15, 44, 0, tzinfo=UTC)
+    assert _ts(dt, style="F") == f"<t:{int(dt.timestamp())}:F>"
+    # Relative variant appends the :R tag.
+    out = _ts(dt, style="F", relative=True)
+    assert ":F>" in out and ":R>" in out
+
+
+def test_ts_handles_none() -> None:
+    from uma_ladder.notifications.services import _ts
+
+    assert _ts(None) == "—"
+
+
+def test_format_track_returns_none_for_missing_preset() -> None:
+    from uma_ladder.notifications.services import _format_track
+
+    assert _format_track(None) is None
+
+
+def test_publish_embed_includes_track_and_dynamic_timestamp(
+    app: Flask,
+) -> None:
+    """The Race Published embed must:
+       1. carry a Track field built from the preset
+       2. render scheduled_at as a Discord <t:unix:F> tag (not ISO)
+    """
+    from datetime import timedelta
+
+    from uma_ladder.models import PresetSource, RacePreset
+    from uma_ladder.notifications.discord import FakeTransport, set_transport
+
+    with app.app_context():
+        app.config["DISCORD_WEBHOOK_RACE_REGISTRATION_URL"] = "https://x"
+        transport = FakeTransport()
+        set_transport(transport)
+
+        preset = RacePreset(
+            source=PresetSource.G1_IMPORT,
+            name="Tokyo Yushun",
+            grade="G1",
+            venue="Tokyo",
+            surface="Turf",
+            distance_meters=2400,
+            distance_category="Medium",
+            direction="Left",
+            course_variant=None,
+            max_runners=18,
+            enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+
+        s = _season()
+        org = _user("org", role=Role.ORGANIZER)
+        scheduled_at = datetime.now(UTC) + timedelta(days=4)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=s.id,
+                name="Spring G1",
+                organizer_user_id=org,
+                preset_id=preset.id,
+                scheduled_at=scheduled_at,
+                race_season="Spring",
+                weather="Cloudy",
+                ground_condition="Good",
+            )
+        )
+        official_service.open_registration(race.id)
+
+        publish_payload = next(
+            p for _, p in transport.calls if "Race published" in str(p)
+        )
+        body = str(publish_payload)
+        # Track field carries preset name + venue/distance/surface.
+        assert "Tokyo Yushun" in body
+        assert "2400m" in body
+        assert "Turf" in body
+        # Scheduled rendered as <t:unix:F> tag, not ISO.
+        epoch = int(scheduled_at.timestamp())
+        assert f"<t:{epoch}:F>" in body
+        # Conditions field present.
+        assert "Spring" in body and "Cloudy" in body and "Good" in body
