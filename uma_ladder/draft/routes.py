@@ -459,6 +459,23 @@ def cancel(match_id: int) -> object:
     return redirect(url_for("draft.detail", match_id=match_id))
 
 
+@bp.post("/<int:match_id>/delete")
+@login_required
+@min_role_required("admin")
+def delete(match_id: int) -> object:
+    """Admin-only hard delete — cancel is the right tool 99% of the
+    time; this exists for smoke-test cleanup."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        draft_service.delete_match(match_id, by_user_id=current_user.id)
+        flash(f"Match #{match_id} permanently deleted.")
+    except draft_service.DraftNotFoundError:
+        abort(404)
+    return redirect(url_for("draft.index"))
+
+
 @bp.get("/ladder/<int:season_id>")
 def ladder(season_id: int) -> object:
     rows = draft_service.season_elo_ladder(season_id)

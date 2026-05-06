@@ -500,6 +500,23 @@ def cancel(race_id: int) -> object:
     return redirect(url_for("official.detail", race_id=race_id))
 
 
+@bp.post("/<int:race_id>/delete")
+@min_role_required(Role.ADMIN)
+def delete(race_id: int) -> object:
+    """Hard-delete the race and everything FK'd to it. Admin-only —
+    cancel is the right tool 99% of the time; this exists for
+    smoke-test cleanup."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        official_service.delete_race(race_id, by_user_id=current_user.id)
+        flash(f"Race #{race_id} permanently deleted.")
+    except official_service.RaceNotFoundError:
+        abort(404)
+    return redirect(url_for("official.index"))
+
+
 @bp.post("/<int:race_id>/registrations/<int:registration_id>/remove")
 @min_role_required(Role.ORGANIZER)
 def remove_registration(race_id: int, registration_id: int) -> object:

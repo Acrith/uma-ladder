@@ -35,7 +35,7 @@
           </thead>
           <tbody>
             {% for u in users %}
-              {% set tone = {'user': 'slate', 'organizer': 'cyan', 'editor': 'violet', 'admin': 'amber', 'superadmin': 'rose'}.get(u.role, 'slate') %}
+              {% set tone = {'user': 'slate', 'organizer': 'cyan', 'senior_organizer': 'violet', 'admin': 'amber', 'superadmin': 'rose'}.get(u.role, 'slate') %}
               <tr class="border-t border-slate-800">
                 <td class="px-4 py-2 text-slate-500">{{ u.id }}</td>
                 <td class="px-4 py-2 font-medium text-slate-200">

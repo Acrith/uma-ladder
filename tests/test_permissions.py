@@ -52,7 +52,7 @@ def test_role_required_allowed_role_passes(client: FlaskClient, app: Flask, make
 
 def test_min_role_required_allows_higher_role(client: FlaskClient, app: Flask, make_user) -> None:
     _attach_protected_routes(app)
-    make_user(username="ed", password="password123", role=Role.EDITOR)
+    make_user(username="ed", password="password123", role=Role.SENIOR_ORGANIZER)
     _login(client, "ed", "password123")
     resp = client.get("/_test/at-least-organizer")
     assert resp.status_code == 200

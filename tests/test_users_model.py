@@ -24,8 +24,8 @@ def test_password_round_trip(app: Flask) -> None:
     "lower, higher",
     [
         (Role.USER, Role.ORGANIZER),
-        (Role.ORGANIZER, Role.EDITOR),
-        (Role.EDITOR, Role.ADMIN),
+        (Role.ORGANIZER, Role.SENIOR_ORGANIZER),
+        (Role.SENIOR_ORGANIZER, Role.ADMIN),
         (Role.ADMIN, Role.SUPERADMIN),
     ],
 )
@@ -35,9 +35,9 @@ def test_role_hierarchy_is_monotonic(lower: str, higher: str) -> None:
 
 def test_user_has_at_least(app: Flask) -> None:
     with app.app_context():
-        editor = User(username="ed", role=Role.EDITOR)
+        editor = User(username="ed", role=Role.SENIOR_ORGANIZER)
         editor.set_password("x" * 8)
 
         assert editor.has_at_least(Role.USER)
-        assert editor.has_at_least(Role.EDITOR)
+        assert editor.has_at_least(Role.SENIOR_ORGANIZER)
         assert not editor.has_at_least(Role.ADMIN)

@@ -1042,6 +1042,38 @@ def _notify_match_cancelled(match: DraftMatch, by_user_id: int) -> None:
         pass
 
 
+def delete_match(match_id: int, *, by_user_id: int) -> None:
+    """Hard-delete a draft match and its bans / results / elo changes
+    via the existing CASCADE FKs.
+
+    Admin-only — caller verifies the role. Distinct from `cancel_match`
+    in that it removes the audit history of the match entirely; use
+    only for smoke-test / mistake cleanup.
+
+    Audit row written BEFORE delete so target_id still references a
+    real row when the audit log is read back.
+    """
+    match = get_match(match_id)
+    try:
+        from . import admin_audit
+
+        admin_audit.log_action(
+            actor_user_id=by_user_id,
+            action="draft_match_delete",
+            target_kind="draft_match",
+            target_id=match.id,
+            details=(
+                f"host_user_id={match.host_user_id} "
+                f"opponent_user_id={match.opponent_user_id} "
+                f"status={match.status}"
+            ),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    db.session.delete(match)
+    db.session.commit()
+
+
 def list_matches_for_user(user_id: int) -> Sequence[DraftMatch]:
     return list(
         db.session.scalars(

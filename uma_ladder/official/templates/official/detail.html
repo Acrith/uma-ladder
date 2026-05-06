@@ -47,6 +47,16 @@
             <button type="submit" class="text-xs text-rose-400 hover:text-rose-300">Cancel race</button>
           </form>
         {% endif %}
+        {# Hard delete — admin+. Distinct from cancel: removes the row
+           and every result/registration tied to it. Smoke-test only. #}
+        {% if current_user.has_at_least('admin') %}
+          <form method="post"
+                action="{{ url_for('official.delete', race_id=race.id) }}"
+                onsubmit="return confirm('PERMANENTLY DELETE race \'{{ race.name }}\' and all results / registrations? This cannot be undone.');">
+            {{ csrf_form.hidden_tag() }}
+            <button type="submit" class="text-xs text-rose-400 underline decoration-dotted hover:text-rose-300">Delete race</button>
+          </form>
+        {% endif %}
       </div>
     {% endif %}
   </div>

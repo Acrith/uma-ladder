@@ -14,7 +14,10 @@ from ..extensions import db
 class Role(StrEnum):
     USER = "user"
     ORGANIZER = "organizer"
-    EDITOR = "editor"
+    # Senior organizer (formerly EDITOR — renamed in PR-G4 to better
+    # reflect the role's actual scope: organizer-plus, not "editor"
+    # of any data). Outranks ORGANIZER, can cancel races + matches.
+    SENIOR_ORGANIZER = "senior_organizer"
     ADMIN = "admin"
     SUPERADMIN = "superadmin"
 
@@ -22,7 +25,7 @@ class Role(StrEnum):
 _ROLE_ORDER: dict[str, int] = {
     Role.USER: 0,
     Role.ORGANIZER: 1,
-    Role.EDITOR: 2,
+    Role.SENIOR_ORGANIZER: 2,
     Role.ADMIN: 3,
     Role.SUPERADMIN: 4,
 }

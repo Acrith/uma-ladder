@@ -48,6 +48,16 @@
             <button type="submit" class="text-xs text-rose-400 hover:text-rose-300">Cancel match</button>
           </form>
         {% endif %}
+        {# Hard delete — admin+. Removes bans / results / elo changes too. #}
+        {% if current_user.is_authenticated and current_user.has_at_least('admin') %}
+          <form method="post"
+                action="{{ url_for('draft.delete', match_id=match.id) }}"
+                class="mt-1"
+                onsubmit="return confirm('PERMANENTLY DELETE match #{{ match.id }} and its bans / results / Elo changes? This cannot be undone.');">
+            {{ csrf_form.hidden_tag() }}
+            <button type="submit" class="text-xs text-rose-400 underline decoration-dotted hover:text-rose-300">Delete match</button>
+          </form>
+        {% endif %}
       </div>
     </header>
 

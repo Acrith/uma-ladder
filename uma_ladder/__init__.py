@@ -20,6 +20,7 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
     os.makedirs(app.instance_path, exist_ok=True)
 
     db.init_app(app)
+    _enable_sqlite_foreign_keys(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
@@ -64,6 +65,35 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(ocr_bp, url_prefix="/ocr")
     app.register_blueprint(skills_bp, url_prefix="/skills")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+
+
+def _enable_sqlite_foreign_keys(app: Flask) -> None:
+    """SQLite ships with FKs OFF by default — `ondelete='CASCADE'` is
+    silently ignored unless we set `PRAGMA foreign_keys = ON` on every
+    new connection. Postgres ignores this hook (DB-API doesn't expose
+    `enable_load_extension`).
+
+    Without this, deleting a parent row leaves orphan children behind
+    instead of cascading — both in tests and production (Fly's volume
+    runs SQLite). PR-G4 added this when implementing hard-delete.
+    """
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    @event.listens_for(Engine, "connect")
+    def _on_connect(dbapi_connection, _connection_record):
+        if not hasattr(dbapi_connection, "execute"):
+            return
+        # Only sqlite3.Connection has `enable_load_extension`; using it
+        # as a duck-type marker so the listener is a no-op for
+        # Postgres / other engines.
+        if not hasattr(dbapi_connection, "enable_load_extension"):
+            return
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys = ON")
+        finally:
+            cursor.close()
 
 
 def _register_health(app: Flask) -> None:

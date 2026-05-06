@@ -678,6 +678,38 @@ def _notify_registration_removed(
         pass
 
 
+def delete_race(race_id: int, *, by_user_id: int) -> None:
+    """Hard-delete a race and everything tied to it (registrations,
+    results, result skills) via the existing CASCADE FKs.
+
+    Admin-only action — caller is responsible for verifying the role.
+    Distinct from `cancel_race`, which leaves the row intact for audit
+    and ladder-history purposes. Use this only for smoke-test / mistake
+    cleanup; cancel is the right tool for "this race won't happen."
+
+    Writes an audit row before the delete so the trail still references
+    the race name + id even though the row is about to disappear.
+    """
+    race = _get_race(race_id)
+    name = race.name
+    # Audit BEFORE delete — once the row is gone, target_id refers to
+    # nothing and the action becomes hard to reconstruct from logs.
+    try:
+        from . import admin_audit
+
+        admin_audit.log_action(
+            actor_user_id=by_user_id,
+            action="official_race_delete",
+            target_kind="official_race",
+            target_id=race_id,
+            details=f"name={name!r}",
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    db.session.delete(race)
+    db.session.commit()
+
+
 def _get_race(race_id: int) -> OfficialRace:
     race = db.session.get(OfficialRace, race_id)
     if race is None:

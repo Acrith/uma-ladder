@@ -233,12 +233,25 @@ def test_elo_summary_reflects_latest_change(app: Flask, make_user) -> None:
         )
         db.session.add(s)
         db.session.commit()
-        # Synthesize two changes — services-level submit_results would
-        # write these via the standard flow, but for a pure read test
-        # we don't need the full match scaffolding.
+        # Two real DraftMatch parents — FK constraints (PR-G4) require
+        # the parent row to exist before child elo-change rows insert.
+        from uma_ladder.services import draft as draft_service
+
+        m1 = draft_service.create_match(
+            draft_service.CreateMatchRequest(
+                season_id=s.id, host_user_id=user["id"],
+                umas_per_player=2, preset_pool="custom",
+            )
+        )
+        m2 = draft_service.create_match(
+            draft_service.CreateMatchRequest(
+                season_id=s.id, host_user_id=user["id"],
+                umas_per_player=2, preset_pool="custom",
+            )
+        )
         db.session.add_all([
             DraftEloChange(
-                draft_match_id=1,
+                draft_match_id=m1.id,
                 season_id=s.id,
                 user_id=user["id"],
                 opponent_user_id=opp["id"],
@@ -248,7 +261,7 @@ def test_elo_summary_reflects_latest_change(app: Flask, make_user) -> None:
                 outcome=1.0,
             ),
             DraftEloChange(
-                draft_match_id=2,
+                draft_match_id=m2.id,
                 season_id=s.id,
                 user_id=user["id"],
                 opponent_user_id=opp["id"],
