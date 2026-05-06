@@ -28,6 +28,7 @@
         <p class="label-eyebrow">Draft match</p>
         <h1 class="mt-1 text-2xl font-semibold text-slate-100">#{{ match.id }}</h1>
         <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+          {{ chip("Draft", "fuchsia") }}
           {{ draft_status_chip(match.status) }}
           {{ chip("Pool · " + match.preset_pool, "violet") }}
           {{ chip(match.umas_per_player|string + " Umas/player") }}

@@ -87,5 +87,20 @@
     "completed": "slate",
     "cancelled": "rose",
   }[status] | default("slate") %}
-  {{ chip(status.replace("_", " "), tone) }}
+  {# Friendly labels — `draft` is rephrased to avoid colliding with
+     Draft PvP terminology elsewhere in the app, and the rest become
+     proper sentence-case so chips read like UI, not field values. #}
+  {% set label = {
+    "draft": "Unpublished",
+    "registration_open": "Registration open",
+    "registration_closed": "Registration closed",
+    "room_code_pending": "Room code pending",
+    "room_code_available": "Room code available",
+    "room_code_expired": "Room code expired",
+    "results_pending": "Results pending",
+    "results_submitted": "Results submitted",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+  }.get(status, status.replace("_", " ")) %}
+  {{ chip(label, tone) }}
 {% endmacro %}
