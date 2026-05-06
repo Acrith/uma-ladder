@@ -488,6 +488,24 @@ def results_from_ocr(match_id: int, attempt_id: int) -> object:
         abort(404)
     parsed_rows = (attempt.parsed_json or {}).get("rows", []) or []
 
+    # Split rows so the review page leads with the ones that actually
+    # represent race entrants. Vision picks up header chrome / button
+    # labels / footer totals as their own clusters, and they all
+    # arrive here without a placement digit. Hiding them under a
+    # collapsible avoids drowning the user in 20 review rows when the
+    # screen has 9 race entrants.
+    placement_rows: list[dict] = []
+    placement_row_indices: list[int] = []
+    other_rows: list[dict] = []
+    other_row_indices: list[int] = []
+    for idx, row in enumerate(parsed_rows):
+        if row.get("placement") is not None:
+            placement_rows.append(row)
+            placement_row_indices.append(idx)
+        else:
+            other_rows.append(row)
+            other_row_indices.append(idx)
+
     if request.method == "POST":
         form = CsrfOnlyForm()
         if not form.validate_on_submit():
@@ -567,7 +585,10 @@ def results_from_ocr(match_id: int, attempt_id: int) -> object:
         "draft/results_from_ocr.html",
         match=match,
         attempt=attempt,
-        parsed_rows=parsed_rows,
+        placement_rows=placement_rows,
+        placement_row_indices=placement_row_indices,
+        other_rows=other_rows,
+        other_row_indices=other_row_indices,
         csrf_form=CsrfOnlyForm(),
     )
 

@@ -272,6 +272,8 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
             }
         )
 
+    parsed_rows = _merge_orphan_followups(parsed_rows)
+
     overall = (
         sum(r["confidence"] for r in parsed_rows) / len(parsed_rows)
         if parsed_rows
@@ -288,6 +290,72 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
         skills=skill_candidates,
         confidence={"overall": round(overall, 3)},
     )
+
+
+# Cap how many follow-up rows can be absorbed into one placement row.
+# Game UI typically has 1-3 lines of metadata per player (uma name,
+# epithet, stats blob); higher caps risk eating an unrelated footer.
+_MAX_FOLLOWUP_ABSORPTIONS = 3
+
+
+def _merge_orphan_followups(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collapse non-placement rows into the preceding placement row.
+
+    Vision's clusterer puts each visual line into its own Y-cluster.
+    On the Uma Musume result-summary screen each player produces 2-4
+    visual lines (uma portrait tag, uma name, epithet, sometimes a
+    stats / time line) which arrive here as 2-4 separate rows — one
+    with the placement digit, the rest with no placement and just
+    text. This pass walks rows in OCR order and absorbs the text of
+    the trailing non-placement rows into the placement row's
+    `uma_name` so consumers see one row per actual race entrant.
+
+    Stops absorbing on:
+      - the next row with a placement (next entrant)
+      - end of list
+      - cap reached (`_MAX_FOLLOWUP_ABSORPTIONS`)
+
+    The dropped non-placement rows are *not* returned — they're
+    redundant with the merged uma_name. The route layer can still
+    surface them by re-parsing raw_text if forensic review is needed.
+    """
+    if not rows:
+        return rows
+    out: list[dict[str, Any]] = []
+    i = 0
+    while i < len(rows):
+        cur = rows[i]
+        if cur.get("placement") is None:
+            # Pre-placement noise — keep it visible so a UI that
+            # filters to placement-only rows doesn't silently lose
+            # the data, but it doesn't get merged into anything.
+            out.append(cur)
+            i += 1
+            continue
+        absorbed = 0
+        merged = dict(cur)
+        j = i + 1
+        while (
+            j < len(rows)
+            and rows[j].get("placement") is None
+            and absorbed < _MAX_FOLLOWUP_ABSORPTIONS
+        ):
+            extra = (rows[j].get("raw_line") or "").strip()
+            if extra:
+                if merged.get("uma_name"):
+                    merged["uma_name"] = f"{merged['uma_name']} {extra}".strip()
+                else:
+                    merged["uma_name"] = extra
+                merged["raw_line"] = (
+                    f"{merged.get('raw_line', '')} {rows[j].get('raw_line', '')}"
+                ).strip()
+            absorbed += 1
+            j += 1
+        out.append(merged)
+        i = j
+    return out
 
 
 _STAT_VALUE_RE = re.compile(r"\b(\d{1,4})\b")

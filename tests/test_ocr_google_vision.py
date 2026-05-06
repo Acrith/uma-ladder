@@ -407,3 +407,84 @@ def test_placement_screen_parse_unchanged_by_stat_extraction() -> None:
     assert parse.rows[0]["uma_name"] == "Special Week"
     assert parse.stats == {}
     assert parse.skills == []
+
+
+# ---------- PR-I1 follow-up: orphan-followup merge ----------
+
+
+def test_orphan_lines_after_placement_are_absorbed_into_uma_name() -> None:
+    """When a placement row is followed by lines that don't carry a
+    placement, those lines get absorbed into the placement row's
+    uma_name. Mirrors how Uma Musume's result-summary screen renders
+    a single race entrant across 2-3 visual lines (uma name, epithet,
+    stats)."""
+    ann = _annotation(
+        [
+            # Player 1: placement digit + uma name on row 1, epithet
+            # on row 2, stats blob on row 3.
+            [_word("1", 10, 10), _word("Special", 50, 10), _word("Week", 130, 10)],
+            [_word("[Princess", 50, 60), _word("of", 130, 60), _word("Pink]", 165, 60)],
+            [_word("S+", 50, 110), _word("speed", 80, 110)],
+            # Player 2 starts a new placement row.
+            [_word("2", 10, 200), _word("Gold", 50, 200), _word("Ship", 130, 200)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    # Two race entrants, not five rows.
+    assert len(parse.rows) == 2
+    p1 = parse.rows[0]
+    assert p1["placement"] == 1
+    assert "Special Week" in p1["uma_name"]
+    assert "[Princess of Pink]" in p1["uma_name"]
+    assert "S+ speed" in p1["uma_name"]
+    p2 = parse.rows[1]
+    assert p2["placement"] == 2
+    assert p2["uma_name"] == "Gold Ship"
+
+
+def test_absorption_caps_at_three_followups() -> None:
+    """A runaway tail (e.g. footer / total lines below the last
+    entrant) should not all merge into the last placement row."""
+    ann = _annotation(
+        [
+            [_word("1", 10, 10), _word("Special", 50, 10), _word("Week", 130, 10)],
+            [_word("epithet", 50, 60)],
+            [_word("stats", 50, 110)],
+            [_word("more", 50, 160)],
+            [_word("footer", 50, 210)],  # 4th orphan — should not merge
+            [_word("totals", 50, 260)],  # 5th orphan — should not merge
+        ]
+    )
+    parse = _parse_annotation(ann)
+    # 1 placement row + the leftover orphans (2 of them after the cap).
+    assert parse.rows[0]["placement"] == 1
+    absorbed = parse.rows[0]["uma_name"]
+    assert "Special Week" in absorbed
+    assert "epithet" in absorbed
+    assert "stats" in absorbed
+    assert "more" in absorbed
+    # Cap reached — these stay as their own rows.
+    assert "footer" not in absorbed
+    assert "totals" not in absorbed
+    leftover_names = [r["uma_name"] for r in parse.rows[1:]]
+    assert "footer" in " ".join(leftover_names)
+    assert "totals" in " ".join(leftover_names)
+
+
+def test_pre_placement_orphans_are_kept_not_dropped() -> None:
+    """Header chrome (rows above the first placement) survives the
+    merge pass — it lives as its own non-placement row so the route
+    layer can hide it under "Other detected text" rather than
+    silently dropping it."""
+    ann = _annotation(
+        [
+            [_word("Result", 10, 10), _word("Summary", 80, 10)],  # pre-placement header
+            [_word("1", 10, 100), _word("Special", 50, 100), _word("Week", 130, 100)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    placements = [r for r in parse.rows if r.get("placement") is not None]
+    others = [r for r in parse.rows if r.get("placement") is None]
+    assert len(placements) == 1
+    assert len(others) == 1
+    assert "Result" in others[0]["uma_name"]

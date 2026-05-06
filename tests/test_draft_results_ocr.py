@@ -256,6 +256,47 @@ def test_confirm_parse_rejects_duplicate_placements(
         assert match.status == DraftMatchStatus.ROOM_CODE_AVAILABLE
 
 
+def test_review_page_collapses_non_placement_rows_under_other(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Header / footer text without a placement digit should land in
+    the "Other detected text" collapsible, not the main row list, so
+    the user only triages real race entrants by default."""
+    host = make_user(username="host")
+    opp = make_user(username="opp")
+    with app.app_context():
+        match_id = _setup_match_in_room_code_phase(host["id"], opp["id"])
+        image = ocr_service.save_uploaded_image(
+            _file_storage(), uploader_user_id=host["id"]
+        )
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="mock",
+            status=OcrParseStatus.PARSED,
+            parsed_json={
+                "rows": [
+                    {"placement": None, "uma_name": "Result Summary", "raw_line": "Result Summary", "confidence": 0.9},
+                    {"placement": 1, "uma_name": "Player Uma A", "raw_line": "1 Player Uma A", "confidence": 0.9},
+                    {"placement": None, "uma_name": "(c) Cygames footer", "raw_line": "(c) Cygames footer", "confidence": 0.9},
+                ]
+            },
+            confidence_json={"overall": 0.9},
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+    _login(client, "host")
+    resp = client.get(f"/draft/{match_id}/results-from-ocr/{attempt_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Placement row visible in the main list.
+    assert "Player Uma A" in body
+    # Non-placement rows live inside the <details> wrapper.
+    assert "Other detected text" in body
+    assert "Result Summary" in body
+    assert "Cygames footer" in body
+
+
 def test_confirm_parse_rejects_no_rows_assigned(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
