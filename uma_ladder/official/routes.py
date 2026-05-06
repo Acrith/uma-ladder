@@ -23,7 +23,7 @@ from ..services import official as official_service
 from ..services import presets as presets_service
 from ..services import seasons as seasons_service
 from ..services import track_conditions as track_conditions_service
-from ..services.permissions import min_role_required
+from ..services.permissions import PermissionDeniedError, min_role_required
 from .forms import (
     CreateOfficialRaceForm,
     CsrfOnlyForm,
@@ -159,9 +159,11 @@ def detail(race_id: int) -> object:
 @min_role_required(Role.ORGANIZER)
 def open_registration(race_id: int) -> object:
     try:
-        official_service.open_registration(race_id)
+        official_service.open_registration(race_id, by_user_id=current_user.id)
     except official_service.RaceNotFoundError:
         abort(404)
+    except PermissionDeniedError:
+        abort(403)
     except official_service.InvalidRaceStateError as exc:
         flash(str(exc))
     return redirect(url_for("official.detail", race_id=race_id))
@@ -171,9 +173,11 @@ def open_registration(race_id: int) -> object:
 @min_role_required(Role.ORGANIZER)
 def close_registration(race_id: int) -> object:
     try:
-        official_service.close_registration(race_id)
+        official_service.close_registration(race_id, by_user_id=current_user.id)
     except official_service.RaceNotFoundError:
         abort(404)
+    except PermissionDeniedError:
+        abort(403)
     except official_service.InvalidRaceStateError as exc:
         flash(str(exc))
     return redirect(url_for("official.detail", race_id=race_id))
@@ -201,9 +205,13 @@ def room_code(race_id: int) -> object:
     form = RoomCodeForm()
     if form.validate_on_submit():
         try:
-            official_service.set_room_code(race_id, form.room_code.data or "")
+            official_service.set_room_code(
+                race_id, form.room_code.data or "", by_user_id=current_user.id
+            )
         except official_service.RaceNotFoundError:
             abort(404)
+        except PermissionDeniedError:
+            abort(403)
         except official_service.InvalidRaceStateError as exc:
             flash(str(exc))
     return redirect(url_for("official.detail", race_id=race_id))
@@ -248,6 +256,8 @@ def submit_results(race_id: int) -> object:
         official_service.submit_results(
             race_id, lines, confirmed_by_user_id=current_user.id
         )
+    except PermissionDeniedError:
+        abort(403)
     except official_service.DuplicatePlacementError:
         flash("Two players cannot share the same placement.")
     return redirect(url_for("official.detail", race_id=race.id))
@@ -500,6 +510,8 @@ def cancel(race_id: int) -> object:
         flash(f"Race #{race_id} cancelled.")
     except official_service.RaceNotFoundError:
         abort(404)
+    except PermissionDeniedError:
+        abort(403)
     except official_service.OfficialError as exc:
         flash(str(exc))
     return redirect(url_for("official.detail", race_id=race_id))

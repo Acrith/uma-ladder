@@ -25,6 +25,7 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
     csrf.init_app(app)
+    _warn_if_tailwind_built_but_missing(app)
 
     from . import models  # noqa: F401 — register mappers for Alembic + tests
     from .models import User
@@ -65,6 +66,39 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(ocr_bp, url_prefix="/ocr")
     app.register_blueprint(skills_bp, url_prefix="/skills")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+
+
+def _warn_if_tailwind_built_but_missing(app: Flask) -> None:
+    """Belt-and-suspenders for the Docker build (PR-F3).
+
+    When `TAILWIND_BUILT=1` is set we trust the Dockerfile's stage-1
+    `make tailwind` to have produced
+    `uma_ladder/static/css/output.css`. If that build silently
+    failed (npm flake, config typo, network blip), the runtime
+    flips to "expect built CSS" mode and the page loads with no
+    styling — pages look like raw HTML and nothing in `flask run`
+    or `gunicorn` complains.
+
+    Log a loud error at startup so the next deploy line in `fly
+    logs` makes the failure obvious. Doesn't refuse to boot — the
+    app is still functional, just unstyled. CDN-fallback (DEBUG
+    path) is unaffected: this only fires when TAILWIND_BUILT is on.
+    """
+    if not app.config.get("TAILWIND_BUILT"):
+        return
+    from pathlib import Path
+
+    css_path = Path(app.static_folder) / "css" / "output.css"
+    try:
+        size = css_path.stat().st_size if css_path.exists() else 0
+    except OSError:
+        size = 0
+    if size == 0:
+        app.logger.error(
+            "TAILWIND_BUILT=1 but %s is missing or empty — UI will be "
+            "unstyled. Check the Dockerfile stage-1 build.",
+            css_path,
+        )
 
 
 def _enable_sqlite_foreign_keys(app: Flask) -> None:

@@ -678,3 +678,116 @@ def test_re_register_after_being_kicked(
         )
         assert len(rows) == 1
         assert rows[0].status == RegistrationStatus.REGISTERED
+
+
+# ---------- PR-J1: ownership-gated permissions ----------
+
+
+def _create_race_as(client, app, name="R", organizer_username="orgA") -> int:
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    _login(client, organizer_username, "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": name, "preset_id": pid},
+        follow_redirects=False,
+    )
+    return int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+
+def test_organizer_cannot_cancel_another_organizers_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Two organizers, two races. Organizer-B can't cancel
+    organizer-A's race."""
+    make_user(username="orgA", password="password123", role=Role.ORGANIZER)
+    make_user(username="orgB", password="password123", role=Role.ORGANIZER)
+    race_id = _create_race_as(client, app, organizer_username="orgA")
+
+    # Switch to orgB and try to cancel orgA's race.
+    client.post("/auth/logout")
+    _login(client, "orgB", "password123")
+    resp = client.post(
+        f"/official/{race_id}/cancel",
+        data={"csrf_token": "x"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+
+
+def test_organizer_cannot_open_or_close_another_organizers_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="orgA", password="password123", role=Role.ORGANIZER)
+    make_user(username="orgB", password="password123", role=Role.ORGANIZER)
+    race_id = _create_race_as(client, app, organizer_username="orgA")
+    client.post("/auth/logout")
+    _login(client, "orgB", "password123")
+    assert client.post(f"/official/{race_id}/open").status_code == 403
+    assert client.post(f"/official/{race_id}/close").status_code == 403
+
+
+def test_organizer_cannot_set_room_code_on_another_organizers_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="orgA", password="password123", role=Role.ORGANIZER)
+    make_user(username="orgB", password="password123", role=Role.ORGANIZER)
+    race_id = _create_race_as(client, app, organizer_username="orgA")
+    # orgA opens the race so room-code is reachable.
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "orgB", "password123")
+    resp = client.post(
+        f"/official/{race_id}/room-code",
+        data={"room_code": "RC-X"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+
+
+def test_senior_organizer_can_act_on_any_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Senior organizer is the moderator-of-organizers tier — they
+    can cancel any race regardless of who created it."""
+    make_user(username="orgA", password="password123", role=Role.ORGANIZER)
+    make_user(
+        username="senior", password="password123", role=Role.SENIOR_ORGANIZER
+    )
+    race_id = _create_race_as(client, app, organizer_username="orgA")
+    client.post("/auth/logout")
+    _login(client, "senior", "password123")
+    resp = client.post(
+        f"/official/{race_id}/cancel",
+        data={"csrf_token": "x"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302  # success → redirect to detail
+
+
+def test_admin_can_act_on_any_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="orgA", password="password123", role=Role.ORGANIZER)
+    make_user(username="adm", password="password123", role=Role.ADMIN)
+    race_id = _create_race_as(client, app, organizer_username="orgA")
+    client.post("/auth/logout")
+    _login(client, "adm", "password123")
+    resp = client.post(
+        f"/official/{race_id}/cancel",
+        data={"csrf_token": "x"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+
+def test_race_organizer_can_still_act_on_their_own_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Sanity: the existing flow for an organizer working their own
+    race must still succeed under the ownership check."""
+    make_user(username="orgA", password="password123", role=Role.ORGANIZER)
+    race_id = _create_race_as(client, app, organizer_username="orgA")
+    # orgA still logged in from the create call.
+    assert client.post(f"/official/{race_id}/open").status_code == 302
+    assert client.post(f"/official/{race_id}/close").status_code == 302

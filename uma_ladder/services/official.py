@@ -113,8 +113,14 @@ def create_race(req: CreateRaceRequest) -> OfficialRace:
     return race
 
 
-def open_registration(race_id: int) -> OfficialRace:
+def open_registration(
+    race_id: int, *, by_user_id: int | None = None
+) -> OfficialRace:
     race = _get_race(race_id)
+    if by_user_id is not None:
+        from .permissions import assert_can_act_on_race
+
+        assert_can_act_on_race(race, by_user_id=by_user_id)
     if race.status not in (
         OfficialRaceStatus.DRAFT,
         OfficialRaceStatus.REGISTRATION_CLOSED,
@@ -140,8 +146,14 @@ def _notify_race_published(race: OfficialRace) -> None:
         pass
 
 
-def close_registration(race_id: int) -> OfficialRace:
+def close_registration(
+    race_id: int, *, by_user_id: int | None = None
+) -> OfficialRace:
     race = _get_race(race_id)
+    if by_user_id is not None:
+        from .permissions import assert_can_act_on_race
+
+        assert_can_act_on_race(race, by_user_id=by_user_id)
     if race.status != OfficialRaceStatus.REGISTRATION_OPEN:
         raise InvalidRaceStateError(f"cannot close registration from {race.status}")
     race.status = OfficialRaceStatus.REGISTRATION_CLOSED
@@ -214,10 +226,15 @@ def set_room_code(
     race_id: int,
     code: str,
     *,
+    by_user_id: int | None = None,
     now: datetime | None = None,
     notify: bool = True,
 ) -> OfficialRace:
     race = _get_race(race_id)
+    if by_user_id is not None:
+        from .permissions import assert_can_act_on_race
+
+        assert_can_act_on_race(race, by_user_id=by_user_id)
     if race.status not in (
         OfficialRaceStatus.REGISTRATION_OPEN,
         OfficialRaceStatus.REGISTRATION_CLOSED,
@@ -266,6 +283,10 @@ def submit_results(
     notify: bool = True,
 ) -> Sequence[OfficialRaceResult]:
     race = _get_race(race_id)
+    # confirmed_by_user_id doubles as the actor for ownership.
+    from .permissions import assert_can_act_on_race
+
+    assert_can_act_on_race(race, by_user_id=confirmed_by_user_id)
     if not lines:
         raise OfficialError("no result lines provided")
     placements = [line.placement for line in lines]
@@ -591,11 +612,14 @@ def _match_skill_names(
 
 
 def cancel_race(race_id: int, *, by_user_id: int) -> OfficialRace:
-    """Organiser-or-higher action — wipes a race short of completion.
-    Refuses to touch already-completed or already-cancelled races.
-    Caller is responsible for verifying the organiser role; this layer
-    only guards state."""
+    """Cancel an in-flight race. Allowed actors per
+    docs/permissions.md: the race's own organizer, plus any
+    senior-organizer+. Refuses on already-completed / already-
+    cancelled races."""
     race = _get_race(race_id)
+    from .permissions import assert_can_act_on_race
+
+    assert_can_act_on_race(race, by_user_id=by_user_id)
     if race.status == OfficialRaceStatus.COMPLETED:
         raise InvalidRaceStateError("cannot cancel a completed race")
     if race.status == OfficialRaceStatus.CANCELLED:
