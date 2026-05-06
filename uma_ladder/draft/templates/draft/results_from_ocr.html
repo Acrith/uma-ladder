@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Results from OCR · Match #{{ match.id }} · Uma Ladder{% endblock %}
+{% block content %}
+  <p class="label-eyebrow">
+    <a class="hover:text-cyan-300" href="{{ url_for('draft.detail', match_id=match.id) }}">Match #{{ match.id }}</a> · OCR
+  </p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Confirm parsed results</h1>
+  <p class="mt-1 text-sm text-slate-400">
+    Uma Musume rooms hold 9 entrants — bots fill empty seats. Mark each row as
+    <span class="text-rose-300">skip</span>,
+    <span class="text-cyan-300">{{ match.host.username }}</span>'s, or
+    <span class="text-fuchsia-300">{{ match.opponent.username if match.opponent else 'opponent' }}</span>'s
+    before saving.
+  </p>
+
+  {% if attempt.status == 'failed' %}
+    <div class="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/5 p-3">
+      <p class="text-sm font-semibold text-rose-200">⚠ OCR failed</p>
+      <p class="mt-1 text-xs text-rose-100/80">
+        {{ attempt.error_message or 'The provider rejected the image or returned an unparseable response.' }}
+      </p>
+      <p class="mt-2 text-xs text-slate-400">
+        Fall back to manual entry on the match page.
+      </p>
+    </div>
+  {% endif %}
+
+  <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
+    {% call card(class="p-3") %}
+      <p class="label-eyebrow">Source screenshot</p>
+      <img src="{{ url_for('ocr.serve_image', image_id=attempt.image.id) }}"
+           alt="result screenshot"
+           class="mt-2 w-full rounded border border-slate-800" />
+      <p class="mt-2 text-xs text-slate-500">
+        Provider: <span class="text-slate-300">{{ attempt.provider }}</span>
+        {% if attempt.confidence_json and attempt.confidence_json.get('overall') is not none %}
+          · confidence
+          <span class="text-slate-300">{{ '%.0f' % (attempt.confidence_json['overall'] * 100) }}%</span>
+        {% endif %}
+      </p>
+    {% endcall %}
+
+    {% call card(class="p-5") %}
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Parsed rows</h2>
+
+      {% if not parsed_rows %}
+        <p class="mt-3 text-sm text-slate-500">
+          OCR returned no rows. Fall back to manual entry on the match page.
+        </p>
+      {% else %}
+        <form method="post" class="mt-4 space-y-2">
+          {{ csrf_form.hidden_tag() }}
+
+          {% for row in parsed_rows %}
+            {% set i = loop.index0 %}
+            <fieldset class="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+              <div class="grid gap-2 md:grid-cols-[auto_5rem_1fr_auto] md:items-center">
+                <span class="text-xs text-slate-500">#{{ loop.index }}</span>
+                <input type="number"
+                       min="1"
+                       max="18"
+                       name="placement_{{ i }}"
+                       value="{{ row.placement if row.placement is not none else '' }}"
+                       class="input-base text-center"
+                       placeholder="—" />
+                <input name="uma_name_{{ i }}"
+                       value="{{ row.uma_name or row.raw_line or '' }}"
+                       class="input-base text-sm"
+                       placeholder="(Uma name)" />
+                <select name="assign_{{ i }}" class="input-base text-sm">
+                  <option value="skip" selected>— skip (bot) —</option>
+                  <option value="host">{{ match.host.username }}</option>
+                  {% if match.opponent %}
+                    <option value="opp">{{ match.opponent.username }}</option>
+                  {% endif %}
+                </select>
+              </div>
+              {% if row.confidence is not none %}
+                <p class="mt-1 text-[10px] text-slate-600">
+                  raw: <span class="font-mono text-slate-500">{{ row.raw_line }}</span>
+                  · confidence {{ '%.0f' % (row.confidence * 100) }}%
+                </p>
+              {% endif %}
+            </fieldset>
+          {% endfor %}
+
+          <div class="flex items-center justify-between gap-2 pt-2">
+            <p class="text-xs text-slate-500">All rows default to <span class="text-rose-300">skip</span> — toggle to a player to count them.</p>
+            <button class="btn-primary">Save results</button>
+          </div>
+        </form>
+      {% endif %}
+    {% endcall %}
+  </section>
+
+{% endblock %}

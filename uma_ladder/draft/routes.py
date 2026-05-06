@@ -12,9 +12,10 @@ from flask import (
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from ..models import DraftBanType, DraftMatchStatus, UmaOutfit
+from ..models import DraftBanType, DraftMatchStatus, OcrParseAttempt, UmaOutfit
 from ..models.enums import VENUES, Direction, DistanceCategory, Surface
 from ..services import draft as draft_service
+from ..services import ocr as ocr_service
 from ..services import profiles as profiles_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
@@ -23,7 +24,13 @@ from ..services.profiles import (
     list_outfits_for_character,
 )
 from ..services.randomizer import RandomizerError
-from .forms import CreateDraftForm, CsrfOnlyForm, JoinDraftForm, RoomCodeForm
+from .forms import (
+    CreateDraftForm,
+    CsrfOnlyForm,
+    JoinDraftForm,
+    ResultsScreenshotForm,
+    RoomCodeForm,
+)
 
 bp = Blueprint("draft", __name__, template_folder="templates")
 
@@ -174,6 +181,7 @@ def detail(match_id: int) -> object:
         sides=sides,
         room_code_form=RoomCodeForm(),
         csrf_form=CsrfOnlyForm(),
+        results_screenshot_form=ResultsScreenshotForm(),
         room_code_expired=draft_service.is_room_code_expired(match),
         characters=list_enabled_characters(),
         track_ban_options=track_ban_options,
@@ -410,6 +418,158 @@ def submit_results(match_id: int) -> object:
     except draft_service.DraftError as exc:
         flash(str(exc))
     return redirect(url_for("draft.detail", match_id=match_id))
+
+
+# ---- OCR-driven results entry (PR-I1) ----
+
+
+def _user_can_submit_results(match) -> bool:
+    """Anyone in the match (host or opponent) plus organizer+ may
+    upload results screenshots. Same audience that can submit them
+    manually via /results."""
+    if not current_user.is_authenticated:
+        return False
+    if current_user.has_at_least("organizer"):
+        return True
+    return current_user.id in (match.host_user_id, match.opponent_user_id)
+
+
+@bp.post("/<int:match_id>/results-screenshot")
+@login_required
+def upload_result_screenshot(match_id: int) -> object:
+    """Step 1 of OCR-driven results: upload, parse, redirect to
+    review. The screen is the standard 9-row Uma Musume result
+    summary — bots fill empty seats and are dismissed in step 2."""
+    try:
+        match = draft_service.get_match(match_id)
+    except draft_service.DraftNotFoundError:
+        abort(404)
+    if not _user_can_submit_results(match):
+        abort(403)
+    form = ResultsScreenshotForm()
+    if not form.validate_on_submit():
+        for errs in form.errors.values():
+            for err in errs:
+                flash(err)
+        return redirect(url_for("draft.detail", match_id=match_id))
+    try:
+        image = ocr_service.save_uploaded_image(
+            form.image.data, uploader_user_id=current_user.id
+        )
+    except ocr_service.OcrError as exc:
+        flash(str(exc))
+        return redirect(url_for("draft.detail", match_id=match_id))
+    attempt = ocr_service.run_parse(image)
+    return redirect(
+        url_for(
+            "draft.results_from_ocr",
+            match_id=match_id,
+            attempt_id=attempt.id,
+        )
+    )
+
+
+@bp.route("/<int:match_id>/results-from-ocr/<int:attempt_id>", methods=["GET", "POST"])
+@login_required
+def results_from_ocr(match_id: int, attempt_id: int) -> object:
+    """Step 2: review parsed rows, assign each to host / opp / skip
+    (bot), then submit. Multi-uma rows per player are supported —
+    the placement-sum aggregation in submit_results (PR-I2) handles
+    2v2/3v3 cleanly.
+    """
+    try:
+        match = draft_service.get_match(match_id)
+    except draft_service.DraftNotFoundError:
+        abort(404)
+    if not _user_can_submit_results(match):
+        abort(403)
+    attempt = db.session.get(OcrParseAttempt, attempt_id)
+    if attempt is None:
+        abort(404)
+    parsed_rows = (attempt.parsed_json or {}).get("rows", []) or []
+
+    if request.method == "POST":
+        form = CsrfOnlyForm()
+        if not form.validate_on_submit():
+            abort(400)
+        lines: list[draft_service.DraftResultLine] = []
+        seen_placements: set[int] = set()
+        for i, _row in enumerate(parsed_rows):
+            assign = (request.form.get(f"assign_{i}") or "").strip()
+            if assign == "skip" or assign == "":
+                continue
+            placement_raw = (request.form.get(f"placement_{i}") or "").strip()
+            if not placement_raw.isdigit():
+                flash("Each kept row needs a placement.")
+                return redirect(
+                    url_for(
+                        "draft.results_from_ocr",
+                        match_id=match_id,
+                        attempt_id=attempt.id,
+                    )
+                )
+            placement = int(placement_raw)
+            if placement in seen_placements:
+                flash(f"Duplicate placement {placement}.")
+                return redirect(
+                    url_for(
+                        "draft.results_from_ocr",
+                        match_id=match_id,
+                        attempt_id=attempt.id,
+                    )
+                )
+            seen_placements.add(placement)
+            user_id_raw = (
+                str(match.host_user_id)
+                if assign == "host"
+                else str(match.opponent_user_id)
+            )
+            if not user_id_raw or user_id_raw == "None":
+                flash("Match has no opponent yet — can't assign results.")
+                return redirect(url_for("draft.detail", match_id=match_id))
+            uma_name = (request.form.get(f"uma_name_{i}") or "").strip() or None
+            lines.append(
+                draft_service.DraftResultLine(
+                    user_id=int(user_id_raw),
+                    placement=placement,
+                    custom_uma_name=uma_name,
+                )
+            )
+        if not lines:
+            flash("No rows assigned to a player.")
+            return redirect(
+                url_for(
+                    "draft.results_from_ocr",
+                    match_id=match_id,
+                    attempt_id=attempt.id,
+                )
+            )
+        try:
+            draft_service.submit_results(
+                match_id, lines, confirmed_by_user_id=current_user.id
+            )
+            ocr_service.confirm_parse(
+                attempt.id, confirmed_by_user_id=current_user.id
+            )
+        except draft_service.DraftError as exc:
+            flash(str(exc))
+            return redirect(
+                url_for(
+                    "draft.results_from_ocr",
+                    match_id=match_id,
+                    attempt_id=attempt.id,
+                )
+            )
+        flash("Results saved.")
+        return redirect(url_for("draft.detail", match_id=match_id))
+
+    return render_template(
+        "draft/results_from_ocr.html",
+        match=match,
+        attempt=attempt,
+        parsed_rows=parsed_rows,
+        csrf_form=CsrfOnlyForm(),
+    )
 
 
 @bp.post("/<int:match_id>/forfeit")

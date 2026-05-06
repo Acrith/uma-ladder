@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileAllowed, FileField, FileRequired
 from wtforms import IntegerField, SelectField, StringField
 from wtforms.validators import AnyOf, DataRequired, Length, NumberRange
 
@@ -30,3 +31,19 @@ class RoomCodeForm(FlaskForm):
 
 class CsrfOnlyForm(FlaskForm):
     """Empty form just for CSRF-protecting POST endpoints with custom payloads."""
+
+
+class ResultsScreenshotForm(FlaskForm):
+    """Step 1 of the OCR draft-results flow — uploads a single result
+    screenshot. Mirrors the official-race form so the deploy story
+    (file size limits, allowed types) stays consistent."""
+
+    image = FileField(
+        "Result screenshot",
+        validators=[
+            FileRequired(),
+            FileAllowed(
+                ("png", "jpg", "jpeg", "webp"), "Use a PNG / JPG / WEBP image."
+            ),
+        ],
+    )
