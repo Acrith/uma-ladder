@@ -348,3 +348,71 @@ def test_publish_embed_includes_track_and_dynamic_timestamp(
         assert f"<t:{epoch}:F>" in body
         # Conditions field present.
         assert "Spring" in body and "Cloudy" in body and "Good" in body
+
+
+# ---------- PR-I4: draft results placements field ----------
+
+
+def test_draft_results_embed_includes_placements_field(app: Flask) -> None:
+    """The Discord embed for a completed draft match must list each
+    finishing position with the player it belongs to. PR-I4 added the
+    `placements` kwarg on notify_draft_results; this test guards that
+    the field actually renders in the payload."""
+    from collections import namedtuple
+
+    from uma_ladder.notifications.discord import FakeTransport, set_transport
+    from uma_ladder.notifications.services import notify_draft_results
+
+    with app.app_context():
+        app.config["DISCORD_WEBHOOK_DRAFT_RESULTS_URL"] = "https://x"
+        transport = FakeTransport()
+        set_transport(transport)
+
+        _season()  # stage an active season; host_id/opp_id need it
+        host_id = _user("host")
+        opp_id = _user("opp")
+
+        # Minimal stand-in for DraftMatch — we only need the fields
+        # notify_draft_results reads.
+        FakeUser = namedtuple("FakeUser", ["username"])
+        FakeMatch = namedtuple(
+            "FakeMatch",
+            ["id", "host_user_id", "opponent_user_id", "host", "opponent",
+             "selected_preset"],
+        )
+        match = FakeMatch(
+            id=42,
+            host_user_id=host_id,
+            opponent_user_id=opp_id,
+            host=FakeUser("host"),
+            opponent=FakeUser("opp"),
+            selected_preset=None,
+        )
+
+        FakePlacement = namedtuple(
+            "FakePlacement", ["user_id", "placement", "custom_uma_name"]
+        )
+        placements = [
+            FakePlacement(host_id, 1, "Gold Ship"),
+            FakePlacement(opp_id, 2, "Biwa Hayahide"),
+            FakePlacement(host_id, 3, "Tamamo Cross"),
+            FakePlacement(opp_id, 4, "Daiwa Scarlet"),
+        ]
+        notify_draft_results(
+            match,
+            winner_username="host",
+            loser_username="opp",
+            winner_delta=24,
+            loser_delta=-24,
+            placements=placements,
+        )
+        assert len(transport.calls) == 1
+        body = str(transport.calls[0][1])
+        # The Placements field renders one bullet per row, ordered
+        # by finish, with the team label and the uma name.
+        assert "Placements" in body
+        assert "#1" in body and "Gold Ship" in body
+        assert "#2" in body and "Biwa Hayahide" in body
+        assert "#3" in body and "Tamamo Cross" in body
+        assert "#4" in body and "Daiwa Scarlet" in body
+        assert "**host**" in body and "**opp**" in body

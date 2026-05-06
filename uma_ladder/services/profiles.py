@@ -278,11 +278,26 @@ def _all_history_for_user(
     entries: list[HistoryEntry] = []
 
     if kind in (None, "draft"):
-        for r in db.session.scalars(
-            select(DraftRaceResult)
-            .where(DraftRaceResult.user_id == user_id)
-            .order_by(DraftRaceResult.created_at.desc())
-        ).all():
+        # In 2v2 / 3v3 each player owns N DraftRaceResult rows per
+        # match (one per uma they ran). Profile history is a per-
+        # MATCH timeline, not a per-uma timeline — so group rows by
+        # draft_match_id and keep just the BEST placement (lowest
+        # number) for the row that represents the match. Otherwise
+        # a single match shows up N times on the player's history
+        # page, which is what the user flagged.
+        rows = list(
+            db.session.scalars(
+                select(DraftRaceResult)
+                .where(DraftRaceResult.user_id == user_id)
+                .order_by(DraftRaceResult.created_at.desc())
+            )
+        )
+        best_per_match: dict[int, DraftRaceResult] = {}
+        for r in rows:
+            current = best_per_match.get(r.draft_match_id)
+            if current is None or r.placement < current.placement:
+                best_per_match[r.draft_match_id] = r
+        for r in best_per_match.values():
             match = db.session.get(DraftMatch, r.draft_match_id)
             title = (
                 match.selected_preset.name

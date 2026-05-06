@@ -596,3 +596,66 @@ def test_public_profile_view_all_link_to_kind_filtered_view(
     assert "Last 5 of 12" in body
     assert "kind=official" in body
     assert "View all" in body
+
+
+def test_draft_history_groups_multi_uma_match_into_single_entry(
+    app: Flask, make_user
+) -> None:
+    """A 2v2 draft match means each player owns 2 DraftRaceResult
+    rows. Profile race history is per-MATCH, not per-uma — so the
+    match should appear ONCE, with the user's best (lowest) placement
+    of their two umas. Without this dedup the same match shows twice
+    in the timeline."""
+    user = make_user(username="alice", role=Role.USER)
+    with app.app_context():
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=10),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        p = RacePreset(
+            source=PresetSource.G1_IMPORT,
+            name="Tokyo G1",
+            venue="Tokyo",
+            surface="Turf",
+            distance_meters=2000,
+            distance_category="Medium",
+            direction="Left",
+            course_variant=None,
+            max_runners=18,
+            enabled=True,
+        )
+        db.session.add_all([s, p])
+        db.session.commit()
+
+        match = DraftMatch(
+            season_id=s.id,
+            host_user_id=user["id"],
+            join_code="ABCD1234",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+            selected_preset_id=p.id,
+        )
+        db.session.add(match)
+        db.session.commit()
+        # User owns two umas in the match — placements 1 and 4.
+        for placement in (1, 4):
+            r = DraftRaceResult(
+                draft_match_id=match.id,
+                user_id=user["id"],
+                placement=placement,
+            )
+            r.created_at = now - timedelta(hours=2)
+            db.session.add(r)
+        db.session.commit()
+
+        page = profiles_service.list_recent_history_for_user(user["id"])
+        # Exactly one history entry — not two.
+        assert page.total == 1
+        assert len(page.entries) == 1
+        # The kept placement is the BEST (lowest) of the two.
+        assert page.entries[0].placement == 1
+        assert page.entries[0].kind == "draft"

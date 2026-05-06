@@ -662,14 +662,27 @@
               {% endif %}
             </p>
 
-            {# ELO deltas — one row per side. #}
+            {# ELO deltas — one row per side, team-coloured (host
+               cyan, opp fuchsia) so the result row matches the
+               panel/results-table colour scheme at a glance. #}
             {% if completed_elo %}
               <div class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                 {% for change in completed_elo %}
-                  {% set who_id = change.user_id %}
-                  {% set who_name = match.host.username if who_id == match.host_user_id else (match.opponent.username if match.opponent and who_id == match.opponent_user_id else 'user ' ~ who_id) %}
-                  <div class="rounded border border-slate-800 bg-slate-900/40 p-2">
-                    <p class="font-medium text-slate-200">@{{ who_name }}</p>
+                  {% if change.user_id == match.host_user_id %}
+                    {% set who_name = match.host.username %}
+                    {% set border = "border-cyan-500/30" %}
+                    {% set name_class = "text-cyan-300" %}
+                  {% elif match.opponent and change.user_id == match.opponent_user_id %}
+                    {% set who_name = match.opponent.username %}
+                    {% set border = "border-fuchsia-500/30" %}
+                    {% set name_class = "text-fuchsia-300" %}
+                  {% else %}
+                    {% set who_name = 'user ' ~ change.user_id %}
+                    {% set border = "border-slate-800" %}
+                    {% set name_class = "text-slate-200" %}
+                  {% endif %}
+                  <div class="rounded border {{ border }} bg-slate-900/40 p-2">
+                    <p class="font-medium {{ name_class }}">@{{ who_name }}</p>
                     <p class="mt-0.5 text-slate-400">
                       {{ change.rating_before }} → <span class="text-slate-200">{{ change.rating_after }}</span>
                       <span class="ml-1 {% if change.delta >= 0 %}text-emerald-300{% else %}text-rose-300{% endif %}">({{ '%+d' % change.delta }})</span>
@@ -679,7 +692,11 @@
               </div>
             {% endif %}
 
-            {# Placement table — one row per uma, ordered by finish. #}
+            {# Placement table — one row per uma, ordered by finish.
+               Player column inherits the canonical team colour:
+               host = cyan, opponent = fuchsia. Same scheme as the
+               left/right player panels above so a glance at the
+               table matches the visual layout. #}
             {% if completed_results %}
               <div class="mt-3 overflow-x-auto">
                 <table class="w-full text-sm">
@@ -692,10 +709,19 @@
                   </thead>
                   <tbody>
                     {% for r in completed_results %}
-                      {% set who_name = match.host.username if r.user_id == match.host_user_id else (match.opponent.username if match.opponent and r.user_id == match.opponent_user_id else 'user ' ~ r.user_id) %}
+                      {% if r.user_id == match.host_user_id %}
+                        {% set who_name = match.host.username %}
+                        {% set who_class = "text-cyan-300" %}
+                      {% elif match.opponent and r.user_id == match.opponent_user_id %}
+                        {% set who_name = match.opponent.username %}
+                        {% set who_class = "text-fuchsia-300" %}
+                      {% else %}
+                        {% set who_name = 'user ' ~ r.user_id %}
+                        {% set who_class = "text-slate-300" %}
+                      {% endif %}
                       <tr class="border-t border-slate-800">
                         <td class="px-3 py-2 font-medium {% if r.placement == 1 %}text-amber-300{% else %}text-slate-300{% endif %}">{{ r.placement }}</td>
-                        <td class="px-3 py-2 text-slate-200">@{{ who_name }}</td>
+                        <td class="px-3 py-2 font-medium {{ who_class }}">@{{ who_name }}</td>
                         <td class="px-3 py-2 text-slate-300">
                           {{ r.custom_uma_name or (r.uma_character.name_en if r.uma_character else '—') }}
                           {% if r.uma_outfit %}<span class="text-slate-500">· {{ r.uma_outfit.display_title }}</span>{% endif %}
