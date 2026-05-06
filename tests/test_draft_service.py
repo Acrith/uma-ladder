@@ -327,6 +327,9 @@ def test_full_happy_path_with_elo(app: Flask) -> None:
         )
 
         draft_service.set_room_code(m_id, "RC-1")
+        # 2v2 max-margin sweep: host (1,2) vs opp (3,4) → sum 3 vs 7,
+        # margin 4 of max 4 → K-multiplier 1.5 → effective K 48 →
+        # delta = 48 * (1 - 0.5) = 24.
         m = draft_service.submit_results(
             m_id,
             [
@@ -334,15 +337,21 @@ def test_full_happy_path_with_elo(app: Flask) -> None:
                     user_id=host, placement=1, uma_character_id=c_used.id
                 ),
                 draft_service.DraftResultLine(
-                    user_id=opp, placement=2, custom_uma_name="Some Custom"
+                    user_id=host, placement=2, custom_uma_name="Host Second"
+                ),
+                draft_service.DraftResultLine(
+                    user_id=opp, placement=3, custom_uma_name="Opp First"
+                ),
+                draft_service.DraftResultLine(
+                    user_id=opp, placement=4, custom_uma_name="Opp Second"
                 ),
             ],
             confirmed_by_user_id=host,
         )
         assert m.status == DraftMatchStatus.COMPLETED
         assert m.winner_user_id == host
-        assert draft_service.current_rating(host, s.id) == DEFAULT_RATING + 16
-        assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 16
+        assert draft_service.current_rating(host, s.id) == DEFAULT_RATING + 24
+        assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 24
         assert db.session.query(DraftEloChange).count() == 2
 
 
@@ -480,3 +489,132 @@ def test_elo_ladder_orders_by_rating(app: Flask) -> None:
             ("carol", 1010),
             ("bob", 950),
         ]
+
+
+# ---------- PR-I2: placement-aware ELO for 2v2 / 3v3 ----------
+
+
+def _drive_to_results_phase(match_id: int, host: int, opp: int) -> None:
+    """Walk a match through ban → randomize → room-code so submit_results
+    is reachable. Picks the cheapest deterministic path."""
+    _drive_to_track_ban(match_id, host, opp)
+    _preset(name="K", venue="Sapporo")
+    _preset(name="X", venue="Tokyo")
+    draft_service.submit_track_ban(
+        match_id, host, ban_type=DraftBanType.VENUE, condition_key="Tokyo"
+    )
+    draft_service.submit_track_ban(
+        match_id, opp, ban_type=DraftBanType.VENUE, condition_key="__skip__"
+    )
+    draft_service.randomize_preset(match_id, rng=random.Random(0))
+    c_h = _character("h-uma")
+    o_h = _outfit(c_h)
+    c_o = _character("o-uma")
+    o_o = _outfit(c_o)
+    draft_service.submit_uma_ban(match_id, host, c_h.id, uma_outfit_id=o_h.id)
+    draft_service.submit_uma_ban(match_id, opp, c_o.id, uma_outfit_id=o_o.id)
+    draft_service.set_room_code(match_id, "RC")
+
+
+def _line(user_id: int, placement: int) -> draft_service.DraftResultLine:
+    return draft_service.DraftResultLine(
+        user_id=user_id,
+        placement=placement,
+        custom_uma_name=f"u{user_id}-{placement}",
+    )
+
+
+def test_2v2_max_margin_decisive_win_gives_15x_k(app: Flask) -> None:
+    """Host (1,2) vs opp (3,4) — sum 3 vs 7, max possible margin.
+    K-multiplier 1.5 → effective K=48 → ±24 swing."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        _drive_to_results_phase(m_id, host, opp)
+        draft_service.submit_results(
+            m_id,
+            [_line(host, 1), _line(host, 2), _line(opp, 3), _line(opp, 4)],
+            confirmed_by_user_id=host,
+        )
+        assert draft_service.current_rating(host, s.id) == DEFAULT_RATING + 24
+        assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 24
+
+
+def test_2v2_split_placements_mid_margin(app: Flask) -> None:
+    """Host (1,3) vs opp (2,4) — sum 4 vs 6, margin 2 of max 4.
+    K-multiplier 1.0 → effective K=32 → ±16 swing."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        _drive_to_results_phase(m_id, host, opp)
+        draft_service.submit_results(
+            m_id,
+            [_line(host, 1), _line(host, 3), _line(opp, 2), _line(opp, 4)],
+            confirmed_by_user_id=host,
+        )
+        assert draft_service.current_rating(host, s.id) == DEFAULT_RATING + 16
+        assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 16
+
+
+def test_2v2_tied_sums_tiebreak_on_best_individual(app: Flask) -> None:
+    """Host (1,4) vs opp (2,3) — sums tied at 5. Tiebreak: host has
+    placement 1 → host wins. Margin 0 → K-multiplier 0.5 →
+    effective K=16 → ±8 swing."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        _drive_to_results_phase(m_id, host, opp)
+        m = draft_service.submit_results(
+            m_id,
+            [_line(host, 1), _line(host, 4), _line(opp, 2), _line(opp, 3)],
+            confirmed_by_user_id=host,
+        )
+        assert m.winner_user_id == host
+        assert draft_service.current_rating(host, s.id) == DEFAULT_RATING + 8
+        assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 8
+
+
+def test_3v3_max_margin_sweep(app: Flask) -> None:
+    """Host (1,2,3) vs opp (4,5,6) — sum 6 vs 15, margin 9 of max 9.
+    K-multiplier 1.5 → effective K=48 → ±24 swing."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=3)
+        _drive_to_results_phase(m_id, host, opp)
+        draft_service.submit_results(
+            m_id,
+            [
+                _line(host, 1), _line(host, 2), _line(host, 3),
+                _line(opp, 4), _line(opp, 5), _line(opp, 6),
+            ],
+            confirmed_by_user_id=host,
+        )
+        assert draft_service.current_rating(host, s.id) == DEFAULT_RATING + 24
+        assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 24
+
+
+def test_sum_winner_overrides_old_best_placement_logic(app: Flask) -> None:
+    """Pre-PR-I2 the player with the #1 finisher always won. Now sum
+    decides — host (1,6) loses to opp (2,3) because team scores are
+    7 vs 5 even though host has the single best uma."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        _drive_to_results_phase(m_id, host, opp)
+        m = draft_service.submit_results(
+            m_id,
+            [_line(host, 1), _line(host, 6), _line(opp, 2), _line(opp, 3)],
+            confirmed_by_user_id=host,
+        )
+        assert m.winner_user_id == opp
+        assert m.loser_user_id == host

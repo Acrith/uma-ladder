@@ -54,6 +54,33 @@ _TRACK_BAN_TYPES = frozenset(
 )
 
 
+def _k_multiplier(host_score: int, opp_score: int, umas_per_player: int) -> float:
+    """Scale K by team-placement spread. 1v1 stays at 1.0 so the
+    rating math is unchanged from the pre-PR-I2 era; 2v2 / 3v3 see
+    K swing 0.5x → 1.5x of DEFAULT_K depending on how decisive the
+    placement combo was.
+
+    Max possible margin for n umas per side is `n * n` (best-case
+    [1..n] vs worst-case [n+1..2n] in a tightly packed race), so we
+    normalise abs(margin) by that and map to [0.5, 1.5].
+
+      2v2  1+2 vs 3+4 → margin 4, max 4, mult 1.50
+      2v2  1+3 vs 2+4 → margin 2, max 4, mult 1.00
+      2v2  1+4 vs 2+3 → margin 0 (tiebreak), mult 0.50
+      3v3  1+2+3 vs 4+5+6 → margin 9, max 9, mult 1.50
+      3v3  1+3+5 vs 2+4+6 → margin 3, max 9, mult ~0.83
+
+    Tunable; the constants live here on purpose so a future tweak
+    only touches one site.
+    """
+    if umas_per_player <= 1:
+        return 1.0
+    margin = abs(opp_score - host_score)
+    max_margin = umas_per_player * umas_per_player
+    normalized = margin / max_margin if max_margin else 0.0
+    return 0.5 + normalized
+
+
 class DraftError(Exception):
     pass
 
@@ -656,27 +683,44 @@ def submit_results(
                 f"outfit {line.uma_outfit_id} was banned"
             )
 
-    by_user_best: dict[int, int] = {}
+    # Aggregate placements per side. PR-I2: in a 2v2 / 3v3 draft each
+    # player owns multiple umas, so the "team score" is the sum of
+    # their umas' placements (lower = better). This rewards strong
+    # placement spreads — 1+2 vs 3+4 (sum 3 vs 7) is a decisive win;
+    # 1+4 vs 2+3 (sum 5 vs 5) is a near-tie even though one side has
+    # the #1 finisher. Tiebreak on best individual placement so a
+    # match is never undecidable when sums collide.
+    by_user_lines: dict[int, list[int]] = {}
     for line in lines:
-        prev = by_user_best.get(line.user_id)
-        if prev is None or line.placement < prev:
-            by_user_best[line.user_id] = line.placement
+        by_user_lines.setdefault(line.user_id, []).append(line.placement)
 
     if (
-        match.host_user_id not in by_user_best
-        or match.opponent_user_id not in by_user_best
+        match.host_user_id not in by_user_lines
+        or match.opponent_user_id not in by_user_lines
     ):
         raise DraftError("each player must have at least one placement")
 
-    host_best = by_user_best[match.host_user_id]
-    opp_best = by_user_best[match.opponent_user_id]
-    if host_best == opp_best:
-        raise DraftError("best placements are tied; cannot determine winner")
-    winner_id, loser_id = (
-        (match.host_user_id, match.opponent_user_id)
-        if host_best < opp_best
-        else (match.opponent_user_id, match.host_user_id)
-    )
+    host_score = sum(by_user_lines[match.host_user_id])
+    opp_score = sum(by_user_lines[match.opponent_user_id])
+    if host_score == opp_score:
+        host_best = min(by_user_lines[match.host_user_id])
+        opp_best = min(by_user_lines[match.opponent_user_id])
+        if host_best == opp_best:
+            # Mathematically only reachable when a placement is shared,
+            # which the dedupe check above already rejects — but keep
+            # the guard so we never silently pick the wrong winner.
+            raise DraftError("placements yield a tie even after tiebreaker")
+        winner_id, loser_id = (
+            (match.host_user_id, match.opponent_user_id)
+            if host_best < opp_best
+            else (match.opponent_user_id, match.host_user_id)
+        )
+    else:
+        winner_id, loser_id = (
+            (match.host_user_id, match.opponent_user_id)
+            if host_score < opp_score
+            else (match.opponent_user_id, match.host_user_id)
+        )
 
     for line in lines:
         db.session.add(
@@ -693,8 +737,10 @@ def submit_results(
 
     winner_rating = current_rating(winner_id, match.season_id)
     loser_rating = current_rating(loser_id, match.season_id)
+    multiplier = _k_multiplier(host_score, opp_score, match.umas_per_player)
+    effective_k = max(1, int(round(DEFAULT_K * multiplier)))
     winner_change, loser_change = apply_match(
-        winner_rating, loser_rating, outcome_a=1.0, k=DEFAULT_K
+        winner_rating, loser_rating, outcome_a=1.0, k=effective_k
     )
     db.session.add(
         DraftEloChange(

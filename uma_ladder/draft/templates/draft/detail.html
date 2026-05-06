@@ -158,11 +158,14 @@
             </div>
 
             {# Oshi pill on its own full-width row so long names like
-               "Kawakami Princess · [Princess of Pink]" don't fight the
-               avatar column for space and don't wrap awkwardly. #}
+               "Kawakami Princess · [Sound of Frenzy]" don't fight the
+               avatar column for space. `max-w-full truncate` clips
+               the text with an ellipsis instead of wrapping the pill
+               into two lines and pushing the bans below it offscreen. #}
             {% if side.profile and side.profile.oshi %}
-              <p class="mt-2 text-xs">
-                <span class="inline-flex items-center rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-200">
+              <p class="mt-2 min-w-0 text-xs">
+                <span class="inline-flex max-w-full items-center truncate rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-200"
+                      title="{{ side.profile.oshi.name_en }}{% if side.profile.oshi_outfit %} · {{ side.profile.oshi_outfit.display_title }}{% endif %}">
                   {{ side.profile.oshi.name_en }}{% if side.profile.oshi_outfit %} · {{ side.profile.oshi_outfit.display_title }}{% endif %}
                 </span>
               </p>
