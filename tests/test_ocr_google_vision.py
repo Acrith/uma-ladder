@@ -554,6 +554,46 @@ def test_epithet_line_attaches_to_next_entrant_not_previous() -> None:
     assert "White Lightning" in p3["uma_name"]
 
 
+def test_tightens_punctuation_spacing() -> None:
+    """Vision tokenises punctuation as standalone words, so cluster
+    join produces spaces around `:` `!` `.` etc. Tighten them back so
+    "3 : 43.8" reads as "3:43.8" and "Lightning ! End" as "Lightning! End"."""
+    from uma_ladder.services.ocr_google_vision import _tighten_punctuation
+
+    assert _tighten_punctuation("Hello !") == "Hello!"
+    assert _tighten_punctuation("Now That's White Lightning ! End") == (
+        "Now That's White Lightning! End"
+    )
+    assert _tighten_punctuation("3 : 43.8") == "3:43.8"
+    assert _tighten_punctuation("No . 1 Fav") == "No. 1 Fav"
+    assert _tighten_punctuation("foo , bar ; baz .") == "foo, bar; baz."
+    # Non-numeric colons (sentence-style) stay unchanged.
+    assert _tighten_punctuation("Subject: foo bar") == "Subject: foo bar"
+    # Empty / None.
+    assert _tighten_punctuation("") == ""
+
+
+def test_punctuation_tightening_applies_in_real_parse() -> None:
+    """End-to-end: a placement row produced via _parse_annotation
+    should have already-tightened punctuation in uma_name."""
+    ann = _annotation(
+        [
+            [
+                _word("1st", 10, 10),
+                _word("8", 50, 10),
+                _word("Gold", 80, 10),
+                _word("Ship", 130, 10),
+                _word("3", 200, 10),
+                _word(":", 215, 10),
+                _word("43.8", 230, 10),
+            ],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert "3:43.8" in parse.rows[0]["uma_name"]
+    assert "3 : 43.8" not in parse.rows[0]["uma_name"]
+
+
 def test_pre_placement_orphans_are_kept_not_dropped() -> None:
     """Header chrome (rows above the first placement) survives the
     merge pass — it lives as its own non-placement row so the route

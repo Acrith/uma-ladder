@@ -70,6 +70,31 @@ _EPITHET_RE = re.compile(
 def _looks_like_epithet(text: str) -> bool:
     return bool(_EPITHET_RE.match(text.strip()))
 
+
+def _tighten_punctuation(text: str) -> str:
+    """Glue Vision-tokenised punctuation back to the preceding word.
+
+    Vision OCR tokenises punctuation as standalone "words", so when
+    we join cluster words with spaces we end up with artifacts:
+
+      "Now That's White Lightning ! End" → "Now That's White Lightning! End"
+      "3 : 43.8"                         → "3:43.8"
+      "No . 1 Fav"                       → "No. 1 Fav"
+
+    Only tightens patterns that are unambiguous:
+      - Terminal punctuation (.,;:!?) glued to preceding word.
+        Note ":" is excluded here since "Subject: foo" reads naturally
+        with a trailing space.
+      - ":" between digits (race times like "3 : 43.8").
+      - "." between digits (decimal artifacts; defensive).
+    """
+    if not text:
+        return text
+    text = re.sub(r"\s+([!?,;.])", r"\1", text)
+    text = re.sub(r"(\d)\s*:\s*(\d)", r"\1:\2", text)
+    text = re.sub(r"(\d)\s*\.\s*(\d)", r"\1.\2", text)
+    return text
+
 # Stat-screen detection: lowercased labels we recognise as Uma stats.
 # The label appears once per row; the value is the closest plausible
 # number on the same row (or directly below).
@@ -278,7 +303,7 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
     line_texts: list[str] = []
     for row in rows:
         row.sort(key=lambda w: w["x"])
-        line = " ".join(w["text"] for w in row)
+        line = _tighten_punctuation(" ".join(w["text"] for w in row))
         line_texts.append(line)
         avg_conf = (
             sum(w.get("confidence", 0.0) for w in row) / len(row) if row else 0.0
@@ -298,7 +323,9 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
                 if _PLACEMENT_MIN <= n <= _PLACEMENT_MAX:
                     placement = n
         if placement is not None:
-            uma_name = " ".join(w["text"] for w in row[1:]).strip() or None
+            uma_name = _tighten_punctuation(
+                " ".join(w["text"] for w in row[1:]).strip()
+            ) or None
         else:
             uma_name = line or None
         parsed_rows.append(
@@ -381,10 +408,10 @@ def _merge_orphan_followups(
             if target.get("placement") is None:
                 continue
             existing_name = (target.get("uma_name") or "").strip()
-            target["uma_name"] = (
+            target["uma_name"] = _tighten_punctuation(
                 f"{raw} {existing_name}".strip() if existing_name else raw
             )
-            target["raw_line"] = (
+            target["raw_line"] = _tighten_punctuation(
                 f"{raw} {(target.get('raw_line') or '').strip()}".strip()
             )
             consumed.add(i)
@@ -421,12 +448,14 @@ def _merge_orphan_followups(
                 break
             if raw_j and raw_j.lower() not in _NOISE_TOKENS:
                 if merged.get("uma_name"):
-                    merged["uma_name"] = f"{merged['uma_name']} {raw_j}".strip()
+                    merged["uma_name"] = _tighten_punctuation(
+                        f"{merged['uma_name']} {raw_j}".strip()
+                    )
                 else:
-                    merged["uma_name"] = raw_j
-                merged["raw_line"] = (
-                    f"{merged.get('raw_line', '')} {rows[j].get('raw_line', '')}"
-                ).strip()
+                    merged["uma_name"] = _tighten_punctuation(raw_j)
+                merged["raw_line"] = _tighten_punctuation(
+                    f"{merged.get('raw_line', '')} {rows[j].get('raw_line', '')}".strip()
+                )
             absorbed += 1
             j += 1
         out.append(merged)
