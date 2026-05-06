@@ -337,3 +337,139 @@ def test_uma_ban_tile_picker_marks_oshi_and_banned(
     assert "Oshi" in body
     # The Banned marker is on the bob-banned tile (char_c).
     assert "Banned" in body
+
+
+# ---------- PR-I6: room-code phase polish ----------
+
+
+def test_opponent_can_post_room_code(client: FlaskClient, app: Flask, make_user) -> None:
+    """Either match participant — not just the match host — can
+    submit the in-game room code. Use case: opponent has stronger
+    umas trained for the rolled track, so they host the lobby."""
+    from uma_ladder.models import DraftMatch, DraftMatchStatus
+
+    _season(app)
+    make_user(username="alice", password="password123")  # host
+    make_user(username="bob", password="password123")    # opponent
+
+    # Set up a match in ROOM_CODE_PENDING directly (skipping the ban
+    # phase scaffolding — service layer is the contract under test).
+    with app.app_context():
+        preset = RacePreset(
+            source=PresetSource.G1_IMPORT,
+            name="Tokyo G1",
+            grade="G1",
+            venue="Tokyo",
+            surface="Turf",
+            distance_meters=2000,
+            distance_category="Medium",
+            direction="Left",
+            course_variant=None,
+            max_runners=18,
+            enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        from uma_ladder.services import auth as auth_service
+
+        host_id = auth_service.find_user_by_username("alice").id
+        opp_id = auth_service.find_user_by_username("bob").id
+        s = db.session.query(Season).first()
+        m = DraftMatch(
+            season_id=s.id,
+            host_user_id=host_id,
+            opponent_user_id=opp_id,
+            join_code="JOINCODE1",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.ROOM_CODE_PENDING,
+            selected_preset_id=preset.id,
+        )
+        db.session.add(m)
+        db.session.commit()
+        match_id = m.id
+
+    # Bob (opponent) submits the room code.
+    _login(client, "bob", "password123")
+    resp = client.post(
+        f"/draft/{match_id}/room-code",
+        data={"room_code": "FROM-OPP"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        match = db.session.get(DraftMatch, match_id)
+        assert match.room_code == "FROM-OPP"
+        assert match.status == DraftMatchStatus.ROOM_CODE_AVAILABLE
+
+
+def test_room_code_card_shows_setup_walkthrough(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Once a preset is rolled, the room-code card carries a
+    collapsible walkthrough of the in-game setup steps with values
+    pulled from the rolled preset + race conditions."""
+    from uma_ladder.models import DraftMatch, DraftMatchStatus
+
+    _season(app)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+    with app.app_context():
+        preset = RacePreset(
+            source=PresetSource.CUSTOM_BUILTIN,
+            name="Sapporo Long Custom",
+            venue="Sapporo",
+            surface="Turf",
+            distance_meters=3600,
+            distance_category="Long",
+            direction="Right",
+            course_variant="Inner",
+            max_runners=14,
+            enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        from uma_ladder.services import auth as auth_service
+
+        host_id = auth_service.find_user_by_username("alice").id
+        opp_id = auth_service.find_user_by_username("bob").id
+        s = db.session.query(Season).first()
+        m = DraftMatch(
+            season_id=s.id,
+            host_user_id=host_id,
+            opponent_user_id=opp_id,
+            join_code="JOINCODE2",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.ROOM_CODE_PENDING,
+            selected_preset_id=preset.id,
+            race_season="Winter",
+            weather="Snowy",
+            ground_condition="Heavy",
+        )
+        db.session.add(m)
+        db.session.commit()
+        match_id = m.id
+
+    _login(client, "alice", "password123")
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Walkthrough heading.
+    assert "In-game room setup walkthrough" in body
+    # Custom-track branch — the user picks Trainers Cup tab.
+    assert "Trainers Cup (Custom)" in body
+    # Track conditions echoed exactly so host can copy across.
+    assert "Sapporo" in body
+    assert "3600m" in body
+    assert "Long" in body
+    assert "Right" in body
+    assert "Inner" in body
+    # Race-day conditions appear in advanced-mode steps.
+    assert "Winter" in body
+    assert "Snowy" in body
+    assert "Heavy" in body
+    # umas_per_player echoed.
+    assert "<strong class=\"text-cyan-200\">2</strong>" in body
+    # Public-off warning.
+    assert "Make public: Off" in body

@@ -400,14 +400,74 @@
                 {% if room_code_expired %}<span class="text-xs text-rose-300">expired</span>{% endif %}
               </p>
             {% endif %}
-            {% if current_user.id == match.host_user_id %}
+
+            {# In-game setup walkthrough — shown to whichever player
+               ends up hosting the lobby. Values are pulled from the
+               rolled preset + race conditions so the host can copy
+               them straight into the game UI. Collapsible so
+               returning players can skim past it. #}
+            {% if match.selected_preset %}
+              {% set preset = match.selected_preset %}
+              {% set is_g1 = preset.source == 'g1_import' %}
+              <details class="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3" {% if not match.room_code %}open{% endif %}>
+                <summary class="cursor-pointer text-xs font-medium text-cyan-200">
+                  📋 In-game room setup walkthrough
+                </summary>
+                <ol class="mt-3 list-decimal space-y-2 pl-5 text-xs text-slate-300">
+                  <li>Race → Exhibition → Room Match → tap <strong>Host</strong>.</li>
+                  <li>
+                    {% if is_g1 %}
+                      Select <strong class="text-cyan-200">{{ preset.name }}</strong> from the G1 list.
+                    {% else %}
+                      Tab over to <strong class="text-cyan-200">Trainers Cup (Custom)</strong> and set:
+                      <ul class="mt-1 ml-4 list-disc space-y-0.5 text-[11px] text-slate-400">
+                        <li>Track: <span class="text-slate-200">{{ preset.surface }}</span></li>
+                        <li>Distance: <span class="text-slate-200">{{ preset.distance_category }}</span> ({{ preset.distance_meters }}m)</li>
+                        <li>Location: <span class="text-slate-200">{{ preset.venue }}</span></li>
+                        <li>Turn Direction: <span class="text-slate-200">{{ preset.direction }}</span></li>
+                        {% if preset.course_variant %}
+                          <li>Inner / Outer: <span class="text-slate-200">{{ preset.course_variant }}</span></li>
+                        {% endif %}
+                      </ul>
+                      <p class="mt-1 text-[11px] text-slate-500">After tapping confirm, the summary should read: <span class="text-slate-200">{{ preset.venue }} {{ preset.surface }} {{ preset.distance_meters }}m ({{ preset.distance_category }}) {{ preset.direction }}{% if preset.course_variant %} / {{ preset.course_variant }}{% endif %} · Max Runners: {{ preset.max_runners }}</span>.</p>
+                    {% endif %}
+                  </li>
+                  <li>
+                    Tap <strong>Advanced Mode</strong> and set:
+                    <ul class="mt-1 ml-4 list-disc space-y-0.5 text-[11px] text-slate-400">
+                      <li>Field Size: <span class="text-slate-200">9</span></li>
+                      <li>Race Time: <span class="text-slate-200">24 hours from now</span></li>
+                      {% if match.race_season %}
+                        <li>Season: <span class="text-slate-200">{{ match.race_season }}</span></li>
+                      {% endif %}
+                      {% if match.weather %}
+                        <li>Weather: <span class="text-slate-200">{{ match.weather }}</span></li>
+                      {% endif %}
+                      {% if match.ground_condition %}
+                        <li>Ground Condition: <span class="text-slate-200">{{ match.ground_condition }}</span></li>
+                      {% endif %}
+                      <li>Mood: <span class="text-slate-200">Great</span></li>
+                    </ul>
+                  </li>
+                  <li>Set up your <strong class="text-cyan-200">{{ match.umas_per_player }}</strong> uma{{ '' if match.umas_per_player == 1 else 's' }}, then copy the Race ID and paste it below.</li>
+                  <li class="text-amber-200">⚠ Make sure <strong>Make public: Off</strong> before confirming the room.</li>
+                </ol>
+              </details>
+            {% endif %}
+            {# Either match participant can submit the room code.
+               Whoever has stronger umas trained for the rolled
+               preset hosts the in-game room — the match-host vs
+               opponent distinction stops mattering once we're
+               past the ban phase. #}
+            {% if current_user.is_authenticated and current_user.id in (match.host_user_id, match.opponent_user_id) %}
               <form method="post" action="{{ url_for('draft.room_code', match_id=match.id) }}" class="mt-3 flex gap-2">
                 {{ room_code_form.hidden_tag() }}
-                {{ room_code_form.room_code(class="input-base", placeholder="paste host code") }}
+                {{ room_code_form.room_code(class="input-base", placeholder="paste room code") }}
                 <button class="btn-primary">Set</button>
               </form>
+              <p class="mt-2 text-[11px] text-slate-500">Either player can host the in-game room — whoever's better trained for the rolled track. Pasting the code here starts the 24-hour expiry countdown for both of you.</p>
             {% else %}
-              <p class="mt-2 text-xs text-slate-500">Host pastes the room code from the in-game lobby.</p>
+              <p class="mt-2 text-xs text-slate-500">Match participants paste the room code from the in-game lobby.</p>
             {% endif %}
           {% endcall %}
 
