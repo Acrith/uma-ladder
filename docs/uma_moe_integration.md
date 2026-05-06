@@ -37,7 +37,7 @@ Confirmed via direct probe + frontend chunk inspection. Last verified
 ### v4 cluster
 
 ```
-GET /api/v4/user/profile/<viewer_id>     — full trainer JSON (~19KB, public, no auth)
+GET /api/v4/user/profile/<viewer_id>     — full trainer JSON (~19KB)
 GET /api/v4/rankings/monthly?page=…      — paginated monthly fan-gain rankings
 GET /api/v4/rankings/alltime             — all-time leaderboard
 GET /api/v4/rankings/gains               — recent fan gains
@@ -45,6 +45,19 @@ GET /api/v4/rankings/gains               — recent fan gains
 
 Error format: `{"error": "<message>", "status": <code>}` for invalid
 trainer ids. Non-routed paths return bare 404 (Cloudflare layer).
+
+### Authentication (added 2026-05-06)
+
+The operator published a Swagger UI at
+[uma.moe/api/docs](https://uma.moe/api/docs) and confirmed the auth
+shape: pass `X-API-Key: <key>` on every request. **Optional today**
+(usage tracking only); the operator signalled it'll become required
+at some future cutover.
+
+Configure via `UMA_MOE_API_KEY` env var. `services/uma_moe.UrllibUmaMoeTransport`
+attaches the header automatically when the key is set; omits it
+when unset. On Fly the secret is set via
+`fly secrets set UMA_MOE_API_KEY="..."`.
 
 ### v3 cluster (legacy, still operational)
 

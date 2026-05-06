@@ -27,6 +27,10 @@ class BaseConfig:
     APP_BASE_URL: str | None = None
     UMA_MOE_BASE_URL: str = "https://uma.moe"
     UMA_MOE_CACHE_TTL_HOURS: int = 12
+    # Optional API key for uma.moe — currently powers usage tracking
+    # only; the upstream operator has signalled it'll become required
+    # at some future cutover. Send via `X-API-Key` header when set.
+    UMA_MOE_API_KEY: str | None = None
     # Set to True in production where Tailwind has been built into
     # uma_ladder/static/css/output.css. Dev defaults to False so the CDN
     # fallback in base.html avoids a build step on every reload.
@@ -52,6 +56,7 @@ class DevConfig(BaseConfig):
     OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
     GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
     APP_BASE_URL = _env_or_none("APP_BASE_URL")
+    UMA_MOE_API_KEY = _env_or_none("UMA_MOE_API_KEY")
     TAILWIND_BUILT = os.environ.get("TAILWIND_BUILT", "").lower() in ("1", "true", "yes")
 
 
@@ -89,6 +94,7 @@ class ProdConfig(BaseConfig):
         cls.OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
         cls.GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
         cls.APP_BASE_URL = _env_or_none("APP_BASE_URL")
+        cls.UMA_MOE_API_KEY = _env_or_none("UMA_MOE_API_KEY")
         cls.TAILWIND_BUILT = os.environ.get("TAILWIND_BUILT", "1").lower() in (
             "1",
             "true",

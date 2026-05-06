@@ -63,14 +63,26 @@ class UmaMoeTransport(ABC):
 
 
 class UrllibUmaMoeTransport(UmaMoeTransport):
-    def __init__(self, *, user_agent: str = USER_AGENT) -> None:
+    def __init__(
+        self,
+        *,
+        user_agent: str = USER_AGENT,
+        api_key: str | None = None,
+    ) -> None:
         self.user_agent = user_agent
+        self.api_key = api_key
 
     def get(self, url: str, *, timeout: float = DEFAULT_TIMEOUT) -> HttpResponse:
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": self.user_agent, "Accept": "application/json"},
-        )
+        headers = {
+            "User-Agent": self.user_agent,
+            "Accept": "application/json",
+        }
+        if self.api_key:
+            # uma.moe API spec: optional today (usage tracking only),
+            # signalled to become required. See
+            # https://uma.moe/api/docs (X-API-Key header).
+            headers["X-API-Key"] = self.api_key
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 body = resp.read()
@@ -113,12 +125,14 @@ class FakeUmaMoeTransport(UmaMoeTransport):
         )
 
 
-def get_transport() -> UmaMoeTransport:
+def get_transport() -> UmaMoeTransport:  # noqa: D401
     """Resolve transport from the Flask app extensions, defaulting to
-    UrllibUmaMoeTransport. Tests inject via ``set_transport``."""
+    UrllibUmaMoeTransport with the configured X-API-Key (if any).
+    Tests inject via ``set_transport`` to bypass the cache."""
     transport = current_app.extensions.get("uma_ladder.uma_moe_transport")
     if transport is None:
-        transport = UrllibUmaMoeTransport()
+        api_key = current_app.config.get("UMA_MOE_API_KEY") or None
+        transport = UrllibUmaMoeTransport(api_key=api_key)
         current_app.extensions["uma_ladder.uma_moe_transport"] = transport
     return transport
 

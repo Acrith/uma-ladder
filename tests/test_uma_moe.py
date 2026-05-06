@@ -273,3 +273,82 @@ def test_public_profile_silent_on_uma_moe_404(
     assert "Not linked" in body
     assert "via uma.moe" not in body
     assert "Global rank" not in body
+
+
+# ---------- API-key authentication header (PR-I8) ----------
+
+
+def test_urllib_transport_attaches_x_api_key_when_configured(monkeypatch) -> None:
+    """When UMA_MOE_API_KEY is set, every outbound request carries
+    `X-API-Key`. uma.moe uses it for usage tracking today and has
+    signalled it'll become required at some future cutover."""
+    import urllib.request
+
+    from uma_ladder.services.uma_moe import UrllibUmaMoeTransport
+
+    captured: dict[str, dict[str, str]] = {}
+
+    class _FakeResp:
+        status = 200
+
+        def read(self):
+            return b'{"ok": true}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    def _fake_urlopen(req, timeout=None):  # noqa: ARG001
+        captured["headers"] = dict(req.headers)
+        return _FakeResp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    UrllibUmaMoeTransport(api_key="secret-key").get("https://uma.moe/x")
+    headers = captured["headers"]
+    assert headers.get("X-api-key") == "secret-key"
+
+
+def test_urllib_transport_omits_x_api_key_when_unset(monkeypatch) -> None:
+    """No env var → no header. Don't send a literal empty key."""
+    import urllib.request
+
+    from uma_ladder.services.uma_moe import UrllibUmaMoeTransport
+
+    captured: dict[str, dict[str, str]] = {}
+
+    class _FakeResp:
+        status = 200
+
+        def read(self):
+            return b'{}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    def _fake_urlopen(req, timeout=None):  # noqa: ARG001
+        captured["headers"] = dict(req.headers)
+        return _FakeResp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    UrllibUmaMoeTransport(api_key=None).get("https://uma.moe/x")
+    assert "X-api-key" not in captured["headers"]
+
+
+def test_get_transport_threads_config_api_key(app: Flask) -> None:
+    """The cached transport built by get_transport() reads the API
+    key from app.config. Tests using set_transport bypass this;
+    production boots once and the cached transport carries the key
+    on every subsequent request."""
+    from uma_ladder.services import uma_moe as uma_moe_service
+
+    with app.app_context():
+        uma_moe_service.set_transport(None)
+        app.config["UMA_MOE_API_KEY"] = "boot-time-key"
+        transport = uma_moe_service.get_transport()
+        assert isinstance(transport, uma_moe_service.UrllibUmaMoeTransport)
+        assert transport.api_key == "boot-time-key"
