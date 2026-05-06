@@ -53,6 +53,23 @@ _ORDINAL_RE = re.compile(r"^(\d+)(?:st|nd|rd|th)$", re.IGNORECASE)
 # case-insensitive comparison.
 _NOISE_TOKENS: frozenset[str] = frozenset({"rank"})
 
+# Skill-rank prefix on an "epithet" line. Each Uma Musume entrant
+# block starts with one of these visually above the placement row:
+#   "SS Unpredictable End"
+#   "S Now That's White Lightning ! End"
+#   "A+ <text>"
+# Used to detect rows that introduce the *next* entrant so the
+# forward merge stops before stealing them. Order matters: longer
+# prefixes ("SS", "S+", "A+", ...) tested before single-letter ones.
+_EPITHET_RE = re.compile(
+    r"^(SS|S\+|S|A\+|A|B\+|B|C\+|C|D\+|D|F|G)\s+\S",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_epithet(text: str) -> bool:
+    return bool(_EPITHET_RE.match(text.strip()))
+
 # Stat-screen detection: lowercased labels we recognise as Uma stats.
 # The label appears once per row; the value is the closest plausible
 # number on the same row (or directly below).
@@ -322,36 +339,68 @@ _MAX_FOLLOWUP_ABSORPTIONS = 3
 def _merge_orphan_followups(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Collapse non-placement rows into the preceding placement row.
+    """Collapse multi-line entrant blocks into one placement row each.
 
-    Vision's clusterer puts each visual line into its own Y-cluster.
-    On the Uma Musume result-summary screen each player produces 2-4
-    visual lines (uma portrait tag, uma name, epithet, sometimes a
-    stats / time line) which arrive here as 2-4 separate rows — one
-    with the placement digit, the rest with no placement and just
-    text. This pass walks rows in OCR order and absorbs the text of
-    the trailing non-placement rows into the placement row's
-    `uma_name` so consumers see one row per actual race entrant.
+    The Uma Musume result-summary screen renders each entrant across
+    THREE visual lines, in order top-to-bottom:
 
-    Stops absorbing on:
-      - the next row with a placement (next entrant)
-      - end of list
-      - cap reached (`_MAX_FOLLOWUP_ABSORPTIONS`)
+      [skill-rank + epithet + position-tag]   "SS Unpredictable End"
+      [ordinal + gate + uma + time/lengths]   "1st 8 Gold Ship 3:43.8"
+      [player-name + fav-rank]                "Yuuta No. 1 Fav"
 
-    The dropped non-placement rows are *not* returned — they're
-    redundant with the merged uma_name. The route layer can still
-    surface them by re-parsing raw_text if forensic review is needed.
+    Vision's Y-clusterer emits each as its own row. A naive forward-
+    only merge ("absorb the next N orphans into this placement row")
+    *steals* the next entrant's epithet line because it sits between
+    placement N's player line and placement N+1's main line.
+
+    Two-pass merge:
+      1. Route every epithet-like orphan FORWARD to the next
+         placement row in the OCR sequence — that's where it
+         visually belongs.
+      2. For each placement row, absorb following non-epithet,
+         non-noise orphans into uma_name (capped at
+         `_MAX_FOLLOWUP_ABSORPTIONS`).
+
+    Pre-placement noise that doesn't look like an epithet (header
+    chrome, etc.) survives as its own non-placement row so the
+    route layer can hide it under "Other detected text".
     """
     if not rows:
         return rows
+
+    consumed: set[int] = set()
+    # Pass 1 — epithet routing. Mutates target placement rows in place.
+    for i, row in enumerate(rows):
+        if row.get("placement") is not None:
+            continue
+        raw = (row.get("raw_line") or "").strip()
+        if not _looks_like_epithet(raw):
+            continue
+        for j in range(i + 1, len(rows)):
+            target = rows[j]
+            if target.get("placement") is None:
+                continue
+            existing_name = (target.get("uma_name") or "").strip()
+            target["uma_name"] = (
+                f"{raw} {existing_name}".strip() if existing_name else raw
+            )
+            target["raw_line"] = (
+                f"{raw} {(target.get('raw_line') or '').strip()}".strip()
+            )
+            consumed.add(i)
+            break
+
+    # Pass 2 — forward absorb non-epithet, non-noise orphans into the
+    # preceding placement row. Stops at: next placement, epithet
+    # (it's the next entrant's intro), end, or absorption cap.
     out: list[dict[str, Any]] = []
     i = 0
     while i < len(rows):
+        if i in consumed:
+            i += 1
+            continue
         cur = rows[i]
         if cur.get("placement") is None:
-            # Pre-placement noise — keep it visible so a UI that
-            # filters to placement-only rows doesn't silently lose
-            # the data, but it doesn't get merged into anything.
             out.append(cur)
             i += 1
             continue
@@ -363,23 +412,25 @@ def _merge_orphan_followups(
             and rows[j].get("placement") is None
             and absorbed < _MAX_FOLLOWUP_ABSORPTIONS
         ):
-            extra = (rows[j].get("raw_line") or "").strip()
-            # Skip column-header / chrome rows so a "RANK" cluster
-            # sitting between two entrants doesn't get glued to the
-            # previous entrant's uma_name. The cap still increments
-            # so a stretch of pure-noise rows eventually breaks out.
-            if extra and extra.lower() not in _NOISE_TOKENS:
+            if j in consumed:
+                j += 1
+                continue
+            raw_j = (rows[j].get("raw_line") or "").strip()
+            if _looks_like_epithet(raw_j):
+                # Belongs to the next entrant — back off.
+                break
+            if raw_j and raw_j.lower() not in _NOISE_TOKENS:
                 if merged.get("uma_name"):
-                    merged["uma_name"] = f"{merged['uma_name']} {extra}".strip()
+                    merged["uma_name"] = f"{merged['uma_name']} {raw_j}".strip()
                 else:
-                    merged["uma_name"] = extra
+                    merged["uma_name"] = raw_j
                 merged["raw_line"] = (
                     f"{merged.get('raw_line', '')} {rows[j].get('raw_line', '')}"
                 ).strip()
             absorbed += 1
             j += 1
         out.append(merged)
-        i = j
+        i = j if j > i + 1 else i + 1
     return out
 
 

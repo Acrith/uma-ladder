@@ -413,30 +413,29 @@ def test_placement_screen_parse_unchanged_by_stat_extraction() -> None:
 
 
 def test_orphan_lines_after_placement_are_absorbed_into_uma_name() -> None:
-    """When a placement row is followed by lines that don't carry a
-    placement, those lines get absorbed into the placement row's
-    uma_name. Mirrors how Uma Musume's result-summary screen renders
-    a single race entrant across 2-3 visual lines (uma name, epithet,
-    stats)."""
+    """When a placement row is followed by non-epithet lines without
+    a placement, those lines get absorbed into the placement row's
+    uma_name. Trailing lines starting with a skill rank ("SS", "S+",
+    "A+"...) are NOT absorbed — those are the next entrant's epithet
+    intro, handled by separate epithet routing."""
     ann = _annotation(
         [
-            # Player 1: placement digit + uma name on row 1, epithet
-            # on row 2, stats blob on row 3.
+            # Player 1: placement + uma, then player-info line, then
+            # a generic descriptor — no skill rank prefix.
             [_word("1", 10, 10), _word("Special", 50, 10), _word("Week", 130, 10)],
-            [_word("[Princess", 50, 60), _word("of", 130, 60), _word("Pink]", 165, 60)],
-            [_word("S+", 50, 110), _word("speed", 80, 110)],
+            [_word("Yuuta", 50, 60), _word("No.", 110, 60), _word("1", 150, 60), _word("Fav", 175, 60)],
+            [_word("Time", 50, 110), _word("3:43.8", 100, 110)],
             # Player 2 starts a new placement row.
             [_word("2", 10, 200), _word("Gold", 50, 200), _word("Ship", 130, 200)],
         ]
     )
     parse = _parse_annotation(ann)
-    # Two race entrants, not five rows.
     assert len(parse.rows) == 2
     p1 = parse.rows[0]
     assert p1["placement"] == 1
     assert "Special Week" in p1["uma_name"]
-    assert "[Princess of Pink]" in p1["uma_name"]
-    assert "S+ speed" in p1["uma_name"]
+    assert "Yuuta" in p1["uma_name"]
+    assert "Time 3:43.8" in p1["uma_name"]
     p2 = parse.rows[1]
     assert p2["placement"] == 2
     assert p2["uma_name"] == "Gold Ship"
@@ -511,6 +510,48 @@ def test_rank_column_header_does_not_pollute_uma_name() -> None:
     assert "Gold Ship" in p1["uma_name"]
     assert "Yuuta" in p1["uma_name"]
     assert "RANK" not in p1["uma_name"]
+
+
+def test_epithet_line_attaches_to_next_entrant_not_previous() -> None:
+    """Mirrors the real Uma Musume result screen — three entrants,
+    each rendered as [skill-rank epithet][placement+uma][player info].
+    Without epithet-aware routing the forward merge stole the next
+    entrant's epithet onto the previous entrant. With routing, each
+    entrant gets its OWN epithet."""
+    ann = _annotation(
+        [
+            # Entrant 1: epithet ABOVE its placement row.
+            [_word("SS", 10, 10), _word("Unpredictable", 40, 10), _word("End", 175, 10)],
+            [_word("1st", 10, 60), _word("8", 50, 60), _word("Gold", 80, 60), _word("Ship", 130, 60)],
+            [_word("Yuuta", 50, 110), _word("No.", 110, 110), _word("1", 150, 110), _word("Fav", 175, 110)],
+            # Entrant 2: epithet ABOVE its placement row (sandwiched
+            # between entrant 1's player line and entrant 2's main row).
+            [_word("SS", 10, 200), _word("Victory", 40, 200), _word("Derived", 110, 200), _word("Pace", 200, 200)],
+            [_word("2nd", 10, 250), _word("9", 50, 250), _word("Biwa", 80, 250), _word("Hayahide", 130, 250)],
+            [_word("Acrith", 50, 300), _word("No.", 110, 300), _word("3", 150, 300), _word("Fav", 175, 300)],
+            # Entrant 3.
+            [_word("S", 10, 400), _word("White", 30, 400), _word("Lightning", 90, 400)],
+            [_word("3rd", 10, 450), _word("3", 50, 450), _word("Tamamo", 80, 450), _word("Cross", 160, 450)],
+            [_word("Yuuta", 50, 500), _word("No.", 110, 500), _word("4", 150, 500), _word("Fav", 175, 500)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    placement_rows = [r for r in parse.rows if r.get("placement") is not None]
+    assert [r["placement"] for r in placement_rows] == [1, 2, 3]
+
+    # Entrant 1 keeps its OWN epithet, not entrant 2's.
+    p1 = placement_rows[0]
+    assert "Unpredictable" in p1["uma_name"]
+    assert "Victory Derived" not in p1["uma_name"]
+
+    # Entrant 2 keeps its OWN epithet, not entrant 3's.
+    p2 = placement_rows[1]
+    assert "Victory Derived" in p2["uma_name"]
+    assert "White Lightning" not in p2["uma_name"]
+
+    # Entrant 3 keeps its OWN epithet (the last one).
+    p3 = placement_rows[2]
+    assert "White Lightning" in p3["uma_name"]
 
 
 def test_pre_placement_orphans_are_kept_not_dropped() -> None:
