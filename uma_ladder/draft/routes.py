@@ -174,6 +174,16 @@ def detail(match_id: int) -> object:
         if b.ban_type == DraftBanType.UMA and b.uma_outfit_id is not None
     }
 
+    completed_results = (
+        draft_service.list_results_for_match(match.id)
+        if match.status == DraftMatchStatus.COMPLETED
+        else []
+    )
+    completed_elo = (
+        draft_service.list_elo_changes_for_match(match.id)
+        if match.status == DraftMatchStatus.COMPLETED
+        else []
+    )
     return render_template(
         "draft/detail.html",
         match=match,
@@ -189,6 +199,8 @@ def detail(match_id: int) -> object:
         all_outfits=all_outfits,
         oshi_outfit_ids=oshi_outfit_ids,
         banned_outfit_ids=banned_outfit_ids,
+        completed_results=completed_results,
+        completed_elo=completed_elo,
     )
 
 

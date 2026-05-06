@@ -326,13 +326,38 @@ def notify_draft_results(
     loser_username: str,
     winner_delta: int,
     loser_delta: int,
+    placements: Sequence[Any] | None = None,
 ) -> DiscordNotificationAttempt:
+    """`placements` accepts the DraftResultLine sequence (or any
+    objects with `placement`, `user_id`, `uma_character_id`,
+    `uma_outfit_id`, `custom_uma_name`) so the embed can list each
+    finishing position. Optional — older callers that pass nothing
+    just see the winner/loser/preset summary."""
     fields = [
         _field("Winner", f"{winner_username} ({winner_delta:+d})"),
         _field("Loser", f"{loser_username} ({loser_delta:+d})"),
     ]
     if match.selected_preset is not None:
         fields.append(_field("Preset", match.selected_preset.name, inline=False))
+    if placements:
+        host_id = match.host_user_id
+        opp_id = match.opponent_user_id
+        host_label = match.host.username if match.host else "host"
+        opp_label = match.opponent.username if match.opponent else "opp"
+        ordered = sorted(placements, key=lambda p: p.placement)
+        lines = []
+        for p in ordered:
+            label = (
+                host_label if p.user_id == host_id
+                else opp_label if p.user_id == opp_id
+                else "?"
+            )
+            uma = (
+                getattr(p, "custom_uma_name", None)
+                or "Uma"
+            )
+            lines.append(f"#{p.placement} **{label}** — {uma}")
+        fields.append(_field("Placements", "\n".join(lines), inline=False))
     mention = mention_prefix([match.host_user_id, match.opponent_user_id])
     return send_event(
         event_type=NotificationEvent.DRAFT_RESULTS,

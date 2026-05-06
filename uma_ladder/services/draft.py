@@ -690,6 +690,44 @@ def submit_results(
     # 1+4 vs 2+3 (sum 5 vs 5) is a near-tie even though one side has
     # the #1 finisher. Tiebreak on best individual placement so a
     # match is never undecidable when sums collide.
+    winner_change, loser_change = _apply_result_decision(
+        match, lines, confirmed_by_user_id=confirmed_by_user_id
+    )
+
+    if notify:
+        try:
+            from ..notifications import services as notif_services
+
+            notif_services.notify_draft_results(
+                match,
+                winner_username=match.host.username
+                if match.winner_user_id == match.host_user_id
+                else (match.opponent.username if match.opponent else "?"),
+                loser_username=match.host.username
+                if match.loser_user_id == match.host_user_id
+                else (match.opponent.username if match.opponent else "?"),
+                winner_delta=winner_change.delta,
+                loser_delta=loser_change.delta,
+                placements=lines,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    return match
+
+
+def _apply_result_decision(
+    match: DraftMatch,
+    lines: Sequence[DraftResultLine],
+    *,
+    confirmed_by_user_id: int,
+):
+    """Determine winner from team-sum placements (PR-I2 logic), insert
+    DraftRaceResult + DraftEloChange rows, flip match status to
+    COMPLETED. Shared by submit_results and edit_results.
+
+    Returns (winner_change, loser_change) so the caller can pass the
+    deltas to a notification embed without re-querying.
+    """
     by_user_lines: dict[int, list[int]] = {}
     for line in lines:
         by_user_lines.setdefault(line.user_id, []).append(line.placement)
@@ -706,9 +744,6 @@ def submit_results(
         host_best = min(by_user_lines[match.host_user_id])
         opp_best = min(by_user_lines[match.opponent_user_id])
         if host_best == opp_best:
-            # Mathematically only reachable when a placement is shared,
-            # which the dedupe check above already rejects — but keep
-            # the guard so we never silently pick the wrong winner.
             raise DraftError("placements yield a tie even after tiebreaker")
         winner_id, loser_id = (
             (match.host_user_id, match.opponent_user_id)
@@ -725,7 +760,7 @@ def submit_results(
     for line in lines:
         db.session.add(
             DraftRaceResult(
-                draft_match_id=match_id,
+                draft_match_id=match.id,
                 user_id=line.user_id,
                 uma_character_id=line.uma_character_id,
                 uma_outfit_id=line.uma_outfit_id,
@@ -744,7 +779,7 @@ def submit_results(
     )
     db.session.add(
         DraftEloChange(
-            draft_match_id=match_id,
+            draft_match_id=match.id,
             season_id=match.season_id,
             user_id=winner_id,
             opponent_user_id=loser_id,
@@ -756,7 +791,7 @@ def submit_results(
     )
     db.session.add(
         DraftEloChange(
-            draft_match_id=match_id,
+            draft_match_id=match.id,
             season_id=match.season_id,
             user_id=loser_id,
             opponent_user_id=winner_id,
@@ -772,24 +807,146 @@ def submit_results(
     match.completed_at = _utcnow()
     match.status = DraftMatchStatus.COMPLETED
     db.session.commit()
+    return winner_change, loser_change
 
-    if notify:
-        try:
-            from ..notifications import services as notif_services
 
-            notif_services.notify_draft_results(
-                match,
-                winner_username=match.host.username
-                if winner_id == match.host_user_id
-                else (match.opponent.username if match.opponent else "?"),
-                loser_username=match.host.username
-                if loser_id == match.host_user_id
-                else (match.opponent.username if match.opponent else "?"),
-                winner_delta=winner_change.delta,
-                loser_delta=loser_change.delta,
+def list_results_for_match(match_id: int) -> list[DraftRaceResult]:
+    """Result rows ordered by placement (ascending — winner first)."""
+    return list(
+        db.session.scalars(
+            select(DraftRaceResult)
+            .where(DraftRaceResult.draft_match_id == match_id)
+            .order_by(DraftRaceResult.placement.asc())
+        )
+    )
+
+
+def list_elo_changes_for_match(match_id: int) -> list[DraftEloChange]:
+    return list(
+        db.session.scalars(
+            select(DraftEloChange).where(DraftEloChange.draft_match_id == match_id)
+        )
+    )
+
+
+def validate_completeness(
+    match: DraftMatch, lines: Sequence[DraftResultLine]
+) -> list[str]:
+    """Soft-warning check: returns a list of human-readable warnings
+    when the submitted result lines don't match what the match
+    contract expects. A 2v2 should have 4 lines (2 per player); an
+    uneven submission is allowed but flagged so the UI can prompt
+    "are you sure?" — never raises.
+    """
+    warnings: list[str] = []
+    expected_per_player = match.umas_per_player
+    by_user: dict[int, int] = {}
+    for line in lines:
+        by_user[line.user_id] = by_user.get(line.user_id, 0) + 1
+
+    host_count = by_user.get(match.host_user_id, 0)
+    opp_count = (
+        by_user.get(match.opponent_user_id, 0)
+        if match.opponent_user_id is not None
+        else 0
+    )
+    host_label = match.host.username if match.host else f"user {match.host_user_id}"
+    opp_label = (
+        match.opponent.username
+        if match.opponent
+        else (
+            f"user {match.opponent_user_id}"
+            if match.opponent_user_id is not None
+            else "opponent"
+        )
+    )
+    if host_count != expected_per_player:
+        warnings.append(
+            f"{host_label} has {host_count} uma placement(s); "
+            f"a {expected_per_player}v{expected_per_player} match expects "
+            f"{expected_per_player}."
+        )
+    if opp_count != expected_per_player:
+        warnings.append(
+            f"{opp_label} has {opp_count} uma placement(s); "
+            f"a {expected_per_player}v{expected_per_player} match expects "
+            f"{expected_per_player}."
+        )
+    return warnings
+
+
+def edit_results(
+    match_id: int,
+    lines: Sequence[DraftResultLine],
+    *,
+    by_user_id: int,
+) -> DraftMatch:
+    """Admin correction path — wipe a completed match's results and
+    ELO change rows, then apply new ones. The match's per-row
+    rating_before/rating_after on the new rows reflects the *current*
+    summed rating; ELO snapshots on later matches in the same season
+    are not retroactively recomputed (a chain rebuild is out of scope
+    for this PR).
+
+    Caller is responsible for verifying admin role; this layer only
+    guards state.
+    """
+    match = get_match(match_id)
+    if match.status != DraftMatchStatus.COMPLETED:
+        raise InvalidMatchStateError(
+            f"can only edit results on a completed match (status: {match.status})"
+        )
+    if not lines:
+        raise DraftError("need at least both players' placements")
+    placements = [line.placement for line in lines]
+    if len(set(placements)) != len(placements):
+        raise DraftError("duplicate placements")
+
+    banned_chars = banned_uma_character_ids(match_id)
+    banned_outfits = banned_uma_outfit_ids(match_id)
+    for line in lines:
+        if line.uma_character_id is not None and line.uma_character_id in banned_chars:
+            raise BannedCharacterUsedError(
+                f"character {line.uma_character_id} was banned"
             )
-        except Exception:  # noqa: BLE001
-            pass
+        if line.uma_outfit_id is not None and line.uma_outfit_id in banned_outfits:
+            raise BannedCharacterUsedError(
+                f"outfit {line.uma_outfit_id} was banned"
+            )
+
+    # Snapshot for audit before we wipe.
+    old_results = list_results_for_match(match_id)
+    old_summary = ", ".join(
+        f"{r.placement}={r.user_id}" for r in old_results
+    ) or "(none)"
+
+    # Wipe existing results + elo. CASCADE handles result skills if any.
+    for r in old_results:
+        db.session.delete(r)
+    for c in list_elo_changes_for_match(match_id):
+        db.session.delete(c)
+    # Need to drop COMPLETED guard so _apply_result_decision can re-set it.
+    match.winner_user_id = None
+    match.loser_user_id = None
+    match.completed_at = None
+    match.status = DraftMatchStatus.ROOM_CODE_AVAILABLE  # transient
+    db.session.commit()
+
+    _apply_result_decision(match, lines, confirmed_by_user_id=by_user_id)
+
+    # Audit trail.
+    try:
+        from . import admin_audit
+
+        admin_audit.log_action(
+            actor_user_id=by_user_id,
+            action="draft_match_edit_results",
+            target_kind="draft_match",
+            target_id=match.id,
+            details=f"old: {old_summary}",
+        )
+    except Exception:  # noqa: BLE001
+        pass
     return match
 
 

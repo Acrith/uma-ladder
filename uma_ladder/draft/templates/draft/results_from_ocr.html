@@ -148,9 +148,50 @@
 
           <div class="flex items-center justify-between gap-2 pt-2">
             <p class="text-xs text-slate-500">All rows default to <span class="text-rose-300">skip</span> — toggle to a player to count them.</p>
-            <button class="btn-primary">Save results</button>
+            <button id="ocr-review-submit" class="btn-primary">Save results</button>
           </div>
         </form>
+
+        {# Soft warning before submit when the assignment counts
+           don't match the umas_per_player contract — e.g. a 2v2
+           with only 3 umas total because the user forgot one. The
+           server still accepts (results submission is best-effort),
+           but the dialog gives a chance to back out. #}
+        <script>
+          (function () {
+            var form = document.querySelector('form[method="post"]');
+            var submitBtn = document.getElementById('ocr-review-submit');
+            if (!form || !submitBtn) return;
+            var hostUsername = {{ match.host.username | tojson }};
+            var oppUsername = {{ (match.opponent.username if match.opponent else None) | tojson }};
+            var expected = {{ match.umas_per_player }};
+            form.addEventListener('submit', function (e) {
+              var counts = { host: 0, opp: 0, skip: 0 };
+              form.querySelectorAll('select[name^="assign_"]').forEach(function (sel) {
+                if (counts[sel.value] !== undefined) counts[sel.value] += 1;
+              });
+              var problems = [];
+              if (counts.host !== expected) {
+                problems.push(
+                  '@' + hostUsername + ': ' + counts.host + ' uma(s) (expected ' + expected + ')'
+                );
+              }
+              if (oppUsername && counts.opp !== expected) {
+                problems.push(
+                  '@' + oppUsername + ': ' + counts.opp + ' uma(s) (expected ' + expected + ')'
+                );
+              }
+              if (problems.length === 0) return;
+              var msg =
+                'Are you sure those results are correct?\n\n' +
+                'Missing or extra:\n  - ' + problems.join('\n  - ') +
+                '\n\nClick OK to submit anyway, or Cancel to go fix the assignments.';
+              if (!window.confirm(msg)) {
+                e.preventDefault();
+              }
+            });
+          })();
+        </script>
       {% endif %}
     {% endcall %}
   </section>

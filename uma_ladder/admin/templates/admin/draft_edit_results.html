@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Edit results · Match #{{ match.id }} · Admin · Uma Ladder{% endblock %}
+{% block content %}
+
+  <p class="label-eyebrow">
+    <a class="hover:text-cyan-300" href="{{ url_for('draft.detail', match_id=match.id) }}">Match #{{ match.id }}</a> · Admin
+  </p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Edit results</h1>
+  <p class="mt-2 text-sm text-slate-400">
+    Wipes the current result + ELO rows for this match and applies new ones.
+    Useful when the original submission missed an Uma, mis-assigned a row, or
+    typo'd a placement.
+  </p>
+  <div class="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+    ⚠ Editing a past match's results recomputes its ELO delta against the players'
+    <em>current</em> ratings. Subsequent matches' rating-before / rating-after
+    snapshots are <strong>not</strong> retroactively recomputed — the season's
+    cumulative rating sum still reflects the new state, but historical match
+    rows show stale before/after values. Edit recent matches when possible.
+  </div>
+
+  {% call card(class="mt-6 p-5") %}
+    <form method="post" id="draft-edit-form" class="space-y-3">
+      {{ csrf_form.hidden_tag() }}
+      {% set expected_total = match.umas_per_player * 2 %}
+      {% set row_count = expected_total + 2 %}{# allow a couple of spare rows #}
+      <input type="hidden" name="row_count" value="{{ row_count }}" />
+
+      <p class="text-xs text-slate-400">
+        Match shape: <strong>{{ match.umas_per_player }}v{{ match.umas_per_player }}</strong>
+        ({{ expected_total }} placements expected — {{ match.umas_per_player }}
+        per player).
+      </p>
+
+      <table class="w-full text-sm">
+        <thead class="bg-slate-900/50 text-[11px] uppercase tracking-wider text-slate-500">
+          <tr class="text-left">
+            <th class="px-2 py-2">Place</th>
+            <th class="px-2 py-2">Player</th>
+            <th class="px-2 py-2">Uma name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for i in range(row_count) %}
+            {% set existing = results[i] if i < results|length else None %}
+            <tr class="border-t border-slate-800">
+              <td class="px-2 py-1">
+                <input type="number" min="1" max="18"
+                       name="placement_{{ i }}"
+                       value="{{ existing.placement if existing else '' }}"
+                       class="input-base w-20 text-center" />
+              </td>
+              <td class="px-2 py-1">
+                <select name="user_{{ i }}" class="input-base">
+                  <option value="">—</option>
+                  <option value="{{ match.host_user_id }}"
+                    {% if existing and existing.user_id == match.host_user_id %}selected{% endif %}>
+                    @{{ match.host.username }}
+                  </option>
+                  {% if match.opponent %}
+                    <option value="{{ match.opponent_user_id }}"
+                      {% if existing and existing.user_id == match.opponent_user_id %}selected{% endif %}>
+                      @{{ match.opponent.username }}
+                    </option>
+                  {% endif %}
+                </select>
+              </td>
+              <td class="px-2 py-1">
+                <input name="uma_name_{{ i }}"
+                       value="{{ (existing.custom_uma_name if existing else '') or (existing.uma_character.name_en if existing and existing.uma_character else '') }}"
+                       class="input-base text-sm"
+                       placeholder="(Uma name)" />
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="flex flex-wrap items-center gap-3 pt-2">
+        <button class="btn-primary">Save edited results</button>
+        <a href="{{ url_for('draft.detail', match_id=match.id) }}" class="btn-ghost">Cancel</a>
+      </div>
+    </form>
+  {% endcall %}
+
+  {# Same JS warning as the OCR review form: count assignments and
+     prompt before submitting an uneven set. Keeps the admin path
+     consistent with the player path. #}
+  <script>
+    (function () {
+      var form = document.getElementById('draft-edit-form');
+      if (!form) return;
+      var hostId = {{ match.host_user_id | tojson }};
+      var oppId = {{ match.opponent_user_id | tojson }};
+      var hostUsername = {{ match.host.username | tojson }};
+      var oppUsername = {{ (match.opponent.username if match.opponent else None) | tojson }};
+      var expected = {{ match.umas_per_player }};
+      form.addEventListener('submit', function (e) {
+        var counts = {};
+        form.querySelectorAll('select[name^="user_"]').forEach(function (sel) {
+          if (!sel.value) return;
+          counts[sel.value] = (counts[sel.value] || 0) + 1;
+        });
+        var problems = [];
+        var hostCount = counts[String(hostId)] || 0;
+        var oppCount = oppId ? (counts[String(oppId)] || 0) : 0;
+        if (hostCount !== expected) {
+          problems.push('@' + hostUsername + ': ' + hostCount + ' (expected ' + expected + ')');
+        }
+        if (oppUsername && oppCount !== expected) {
+          problems.push('@' + oppUsername + ': ' + oppCount + ' (expected ' + expected + ')');
+        }
+        if (!problems.length) return;
+        var msg = 'Submit anyway?\n\nMissing or extra:\n  - ' + problems.join('\n  - ');
+        if (!window.confirm(msg)) e.preventDefault();
+      });
+    })();
+  </script>
+{% endblock %}

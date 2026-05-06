@@ -269,3 +269,100 @@ def test_audit_page_filter_by_action(
     assert "role_change" in body
     # Cancel entry's details "c" shouldn't appear when filtered to role_change.
     assert ">c<" not in body
+
+
+def test_admin_draft_edit_results_gate(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Organizer can NOT reach the admin edit-results page; only
+    admin+ can."""
+    make_user(username="org", role=Role.ORGANIZER)
+    _login(client, "org")
+    # Match doesn't have to exist for the role check to fire — gate
+    # runs before the route handler queries the DB.
+    resp = client.get("/admin/draft/1/edit-results")
+    assert resp.status_code == 403
+
+
+def test_admin_draft_edit_results_recovers_botched_match(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """End-to-end: a 2v2 match was completed with the wrong winner
+    (3 lines instead of 4). Admin edits via the form → match flips
+    to the correct winner with full 2v2 results."""
+    from uma_ladder.models import DraftMatchStatus
+    from uma_ladder.services import draft as draft_service
+
+    make_user(username="adm", role=Role.ADMIN, password="password123")
+    host = make_user(username="hostie", password="password123")
+    opp = make_user(username="oppy", password="password123")
+    with app.app_context():
+        s = Season(
+            name="S",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+        # Build a completed match by jumping past ban + randomization
+        # (we just need a COMPLETED match to edit).
+        m = draft_service.create_match(
+            draft_service.CreateMatchRequest(
+                season_id=s.id,
+                host_user_id=host["id"],
+                umas_per_player=2,
+                preset_pool="custom",
+            )
+        )
+        m.opponent_user_id = opp["id"]
+        m.status = DraftMatchStatus.ROOM_CODE_AVAILABLE
+        db.session.commit()
+        # Submit wrong/incomplete results.
+        draft_service.submit_results(
+            m.id,
+            [
+                draft_service.DraftResultLine(user_id=host["id"], placement=1),
+                draft_service.DraftResultLine(user_id=host["id"], placement=4),
+                draft_service.DraftResultLine(user_id=opp["id"],  placement=2),
+            ],
+            confirmed_by_user_id=host["id"],
+        )
+        match_id = m.id
+        # Sums: host 1+4=5, opp 2 → opp wins, wrong outcome.
+        assert draft_service.get_match(match_id).winner_user_id == opp["id"]
+
+    _login(client, "adm", "password123")
+    resp = client.post(
+        f"/admin/draft/{match_id}/edit-results",
+        data={
+            "row_count": "4",
+            "placement_0": "1",
+            "user_0": str(host["id"]),
+            "uma_name_0": "Gold Ship",
+            "placement_1": "2",
+            "user_1": str(host["id"]),
+            "uma_name_1": "Biwa Hayahide",
+            "placement_2": "3",
+            "user_2": str(opp["id"]),
+            "uma_name_2": "Tamamo Cross",
+            "placement_3": "4",
+            "user_3": str(opp["id"]),
+            "uma_name_3": "Daiwa Scarlet",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        match = draft_service.get_match(match_id)
+        assert match.winner_user_id == host["id"]
+        results = draft_service.list_results_for_match(match_id)
+        assert len(results) == 4
+        # Audit row written under the new action.
+        rows = (
+            db.session.query(AdminAuditLog)
+            .filter_by(action="draft_match_edit_results")
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].target_id == match_id

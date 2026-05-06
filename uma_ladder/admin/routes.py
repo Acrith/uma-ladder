@@ -182,6 +182,93 @@ def cancel_match(match_id: int) -> object:
     return redirect(next_url)
 
 
+@bp.route("/draft/<int:match_id>/edit-results", methods=["GET", "POST"])
+@min_role_required(Role.ADMIN)
+def draft_edit_results(match_id: int) -> object:
+    """Admin recovery path for a completed draft match whose results
+    were submitted incorrectly (typo, missing uma, wrong assignment).
+    Wipes the existing result + ELO rows and re-applies fresh ones.
+
+    Note: editing a past match doesn't retroactively recompute later
+    matches' rating-before/rating-after snapshots in the same season —
+    the current rating sum still reflects the new state, but the
+    historical chain is left as-is. Document this in the form so the
+    admin understands the trade-off."""
+    csrf_form = CsrfOnlyForm()
+    try:
+        match = draft_service.get_match(match_id)
+    except draft_service.DraftNotFoundError:
+        abort(404)
+    if match.status != DraftMatchStatus.COMPLETED:
+        flash("Edit-results only applies to completed matches.")
+        return redirect(url_for("draft.detail", match_id=match_id))
+    if request.method == "POST":
+        if not csrf_form.validate_on_submit():
+            abort(400)
+        lines = _build_draft_result_lines(request.form, match)
+        if isinstance(lines, str):
+            flash(lines)
+            return redirect(
+                url_for("admin.draft_edit_results", match_id=match_id)
+            )
+        try:
+            draft_service.edit_results(
+                match_id, lines, by_user_id=current_user.id
+            )
+        except draft_service.DraftError as exc:
+            flash(str(exc))
+            return redirect(
+                url_for("admin.draft_edit_results", match_id=match_id)
+            )
+        flash(f"Match #{match_id} results updated.")
+        return redirect(url_for("draft.detail", match_id=match_id))
+    return render_template(
+        "admin/draft_edit_results.html",
+        match=match,
+        results=draft_service.list_results_for_match(match_id),
+        elo_changes=draft_service.list_elo_changes_for_match(match_id),
+        csrf_form=csrf_form,
+    )
+
+
+def _build_draft_result_lines(form, match):
+    """Pull a list[DraftResultLine] out of the admin edit form, or
+    return a string error message when validation fails."""
+    raw_count = form.get("row_count") or "0"
+    if not raw_count.isdigit():
+        return "Bad form: row_count missing."
+    n = int(raw_count)
+    lines = []
+    seen_placements: set[int] = set()
+    for i in range(n):
+        placement_raw = (form.get(f"placement_{i}") or "").strip()
+        user_raw = (form.get(f"user_{i}") or "").strip()
+        uma_name = (form.get(f"uma_name_{i}") or "").strip() or None
+        if not placement_raw and not user_raw and not uma_name:
+            continue  # blank row — skip
+        if not placement_raw.isdigit():
+            return f"Row {i + 1}: placement must be a number."
+        if not user_raw.isdigit():
+            return f"Row {i + 1}: pick host or opp."
+        placement = int(placement_raw)
+        user_id = int(user_raw)
+        if user_id not in (match.host_user_id, match.opponent_user_id):
+            return f"Row {i + 1}: user must be host or opponent."
+        if placement in seen_placements:
+            return f"Row {i + 1}: duplicate placement {placement}."
+        seen_placements.add(placement)
+        lines.append(
+            draft_service.DraftResultLine(
+                user_id=user_id,
+                placement=placement,
+                custom_uma_name=uma_name,
+            )
+        )
+    if not lines:
+        return "At least one result row is required."
+    return lines
+
+
 # ---------- Season management ----------
 
 

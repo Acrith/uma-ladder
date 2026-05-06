@@ -618,3 +618,137 @@ def test_sum_winner_overrides_old_best_placement_logic(app: Flask) -> None:
         )
         assert m.winner_user_id == opp
         assert m.loser_user_id == host
+
+
+# ---------- PR-I4: validate_completeness + edit_results ----------
+
+
+def test_validate_completeness_flags_missing_umas(app: Flask) -> None:
+    """A 2v2 with only 3 lines (one player missing an uma) returns
+    a human-readable warning per offending player. Submission is
+    still allowed; the warning drives the JS confirm dialog."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        match = draft_service.get_match(m_id)
+        # Yuuta-style mistake: 2 lines for host, only 1 for opp.
+        lines = [
+            draft_service.DraftResultLine(user_id=host, placement=1),
+            draft_service.DraftResultLine(user_id=opp,  placement=2),
+            draft_service.DraftResultLine(user_id=host, placement=3),
+        ]
+        warnings = draft_service.validate_completeness(match, lines)
+        assert len(warnings) == 1
+        assert "bob" in warnings[0]
+        assert "1 uma placement" in warnings[0]
+        assert "expects 2" in warnings[0]
+
+
+def test_validate_completeness_clean_2v2_returns_empty(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        match = draft_service.get_match(m_id)
+        lines = [
+            draft_service.DraftResultLine(user_id=host, placement=1),
+            draft_service.DraftResultLine(user_id=host, placement=2),
+            draft_service.DraftResultLine(user_id=opp,  placement=3),
+            draft_service.DraftResultLine(user_id=opp,  placement=4),
+        ]
+        assert draft_service.validate_completeness(match, lines) == []
+
+
+def test_edit_results_replaces_results_and_recomputes_elo(app: Flask) -> None:
+    """Headline regression: a match was submitted with wrong
+    placements that gave the wrong winner. Admin edits → new lines
+    win → match's winner flips, ELO row count is unchanged (one per
+    side), the rating sum reflects the new state."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        _drive_to_results_phase(m_id, host, opp)
+
+        # Original (wrong) submission: 3 lines, opp accidentally wins
+        # because host has fewer placements than opp.
+        draft_service.submit_results(
+            m_id,
+            [
+                draft_service.DraftResultLine(user_id=host, placement=1),
+                draft_service.DraftResultLine(user_id=host, placement=4),
+                draft_service.DraftResultLine(user_id=opp,  placement=2),
+            ],
+            confirmed_by_user_id=host,
+        )
+        match = draft_service.get_match(m_id)
+        # Sums: host 1+4=5, opp 2 → opp wins (lower).
+        assert match.winner_user_id == opp
+
+        # Admin corrects: full 2v2 with proper assignments.
+        draft_service.edit_results(
+            m_id,
+            [
+                draft_service.DraftResultLine(user_id=host, placement=1),
+                draft_service.DraftResultLine(user_id=host, placement=2),
+                draft_service.DraftResultLine(user_id=opp,  placement=3),
+                draft_service.DraftResultLine(user_id=opp,  placement=4),
+            ],
+            by_user_id=host,
+        )
+        match = draft_service.get_match(m_id)
+        assert match.winner_user_id == host
+        assert match.status == DraftMatchStatus.COMPLETED
+
+        # Exactly two ELO change rows for the match (the old ones
+        # were wiped). And four result rows (2 per player).
+        results = draft_service.list_results_for_match(m_id)
+        elo = draft_service.list_elo_changes_for_match(m_id)
+        assert len(results) == 4
+        assert len(elo) == 2
+
+        # Host got positive delta on the corrected match, opp negative.
+        host_delta = next(c.delta for c in elo if c.user_id == host)
+        opp_delta = next(c.delta for c in elo if c.user_id == opp)
+        assert host_delta > 0
+        assert opp_delta < 0
+
+
+def test_edit_results_refuses_non_completed_match(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        # Match is in WAITING_FOR_OPPONENT or similar — not completed.
+        with pytest.raises(draft_service.InvalidMatchStateError):
+            draft_service.edit_results(
+                m_id,
+                [draft_service.DraftResultLine(user_id=host, placement=1)],
+                by_user_id=host,
+            )
+
+
+def test_list_results_for_match_orders_by_placement(app: Flask) -> None:
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        _drive_to_results_phase(m_id, host, opp)
+        draft_service.submit_results(
+            m_id,
+            [
+                draft_service.DraftResultLine(user_id=host, placement=3),
+                draft_service.DraftResultLine(user_id=host, placement=1),
+                draft_service.DraftResultLine(user_id=opp,  placement=2),
+                draft_service.DraftResultLine(user_id=opp,  placement=4),
+            ],
+            confirmed_by_user_id=host,
+        )
+        rows = draft_service.list_results_for_match(m_id)
+        assert [r.placement for r in rows] == [1, 2, 3, 4]
