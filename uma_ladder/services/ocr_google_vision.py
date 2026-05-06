@@ -53,17 +53,53 @@ _ORDINAL_RE = re.compile(r"^(\d+)(?:st|nd|rd|th)$", re.IGNORECASE)
 # case-insensitive comparison.
 _NOISE_TOKENS: frozenset[str] = frozenset({"rank"})
 
+# Vocabulary used by structured-row extraction. Stored as canonical-
+# capitalisation strings so we can echo them back to the UI without
+# losing case info, plus a lowercased lookup set for membership.
+
+_POSITION_WORDS: tuple[str, ...] = ("Front", "Pace", "Late", "End")
+_POSITION_LOOKUP: frozenset[str] = frozenset(p.lower() for p in _POSITION_WORDS)
+
+# Distance descriptors that show up where a "1/2 L" or "Nose" gap
+# would. "Distance" means "too far behind to measure in lengths" and
+# is the keyword bots commonly carry.
+_DISTANCE_KEYWORDS: tuple[str, ...] = ("Nose", "Head", "Neck", "Distance")
+_DISTANCE_LOOKUP: frozenset[str] = frozenset(d.lower() for d in _DISTANCE_KEYWORDS)
+
+# Skill-rank vocabulary, longest-first so "SS+" matches before "SS",
+# "S+" before "S" etc. when used in alternation.
+_RANK_WORDS: tuple[str, ...] = (
+    "SS+", "SS", "S+", "S",
+    "A+", "A", "B+", "B", "C+", "C", "D+", "D",
+    # UG bands ("UG", "UG1".."UG9") — Uma Musume occasionally uses
+    # these for end-of-leaderboard tiers.
+    "UG9", "UG8", "UG7", "UG6", "UG5", "UG4", "UG3", "UG2", "UG1", "UG",
+)
+_RANK_LOOKUP: frozenset[str] = frozenset(r.lower() for r in _RANK_WORDS)
+
+# Build a regex that matches any rank word with longest-first
+# alternation (so "SS+" wins over "SS"). Used both as the epithet-
+# line detector and as the rank prefix in placement-row extraction.
+_RANK_ALTERNATION = "|".join(re.escape(r) for r in _RANK_WORDS)
+
 # Skill-rank prefix on an "epithet" line. Each Uma Musume entrant
 # block starts with one of these visually above the placement row:
 #   "SS Unpredictable End"
 #   "S Now That's White Lightning ! End"
 #   "A+ <text>"
 # Used to detect rows that introduce the *next* entrant so the
-# forward merge stops before stealing them. Order matters: longer
-# prefixes ("SS", "S+", "A+", ...) tested before single-letter ones.
+# forward merge stops before stealing them.
 _EPITHET_RE = re.compile(
-    r"^(SS|S\+|S|A\+|A|B\+|B|C\+|C|D\+|D|F|G)\s+\S",
+    rf"^(?:{_RANK_ALTERNATION})\s+\S",
     re.IGNORECASE,
+)
+
+# Keywords that should NEVER be treated as a player_name candidate,
+# even when they appear immediately before "No. X Fav". Bot rows
+# often look like "<uma name> Distance No. 7 Fav" and would
+# otherwise capture "Distance" as the player.
+_NON_PLAYER_KEYWORDS: frozenset[str] = (
+    _POSITION_LOOKUP | _DISTANCE_LOOKUP | _RANK_LOOKUP | frozenset({"l", "fav"})
 )
 
 
@@ -77,64 +113,72 @@ def _parse_placement_row_fields(text: str) -> dict[str, Any]:
     Input is the post-merge `uma_name` (or `raw_line`) of a placement
     row, e.g.
       "SS Unpredictable End 8 Gold Ship 3:43.8 Yuuta No. 1 Fav"
+      "A End 2 Castanet Rhythm Distance No. 7 Fav"          ← bot
 
-    Output keys (any of which may be absent if extraction fails — the
-    review form treats them all as optional and falls back to the
-    raw merged text as-is):
+    Output keys (any of which may be absent — the review form treats
+    them all as optional and falls back to the raw merged text):
 
-      epithet_rank   "SS"
-      epithet        "Unpredictable End"
-      gate           8
-      uma_name       "Gold Ship"          ← the clean field used by the form
-      time_or_lengths "3:43.8" or "3 1/2 L" or "Nose"
-      player_name    "Yuuta"
-      fav_rank       1
+      epithet_rank        "SS"          (from the rank vocabulary)
+      epithet             "Unpredictable"
+      position            "End"         (Front / Pace / Late / End)
+      gate                8
+      uma_name            "Gold Ship"   ← the clean field used by the form
+      time_or_lengths     "3:43.8" / "3 1/2 L" / "Nose" / "Distance"
+      player_name         "Yuuta"       (skipped when the candidate
+                                         word is a known keyword —
+                                         bot rows have no player)
+      fav_rank            1
 
-    Best-effort regex extraction, peeled from the outside in. Each
-    successfully matched chunk is stripped before the next regex
-    runs, so order matters: player → epithet → time/lengths → gate.
+    Peel order, outside-in: distance/time → player+fav → rank prefix
+    → position+gate boundary → uma_name. Each match strips its chunk
+    before the next regex runs.
     """
     out: dict[str, Any] = {}
     if not text:
         return out
     work = text.strip()
 
-    # Player + fav, e.g. "Yuuta No. 1 Fav" — anchored at the end.
-    # `\w+` (instead of `\S+`) excludes time / decimal artifacts like
-    # "3:43.8" that the greedier match used to absorb into the
-    # player_name capture group.
-    player_match = re.search(
+    # 1. Player + fav at the end ("<word> No. X Fav"). Stripped first
+    #    because it's the LAST segment in the merged row — distance
+    #    and time live just before it. The candidate word
+    #    immediately preceding "No." is rejected if it's one of the
+    #    keyword vocabularies — bot rows have no real player and
+    #    we'd otherwise capture words like "Distance" or "End".
+    fav_match = re.search(
         r"(\w+)\s+No\.\s*(\d+)\s+Fav\s*$",
         work,
         re.IGNORECASE,
     )
-    if player_match:
-        out["player_name"] = player_match.group(1).strip()
-        out["fav_rank"] = int(player_match.group(2))
-        work = work[: player_match.start()].strip()
-
-    # Epithet at the start: skill rank prefix + descriptive text up to
-    # the next "<digit> " boundary (which is the gate column).
-    epithet_match = re.match(
-        r"^(SS|S\+|S|A\+|A|B\+|B|C\+|C|D\+|D|F|G)\s+(.+?)(?=\s+\d|$)",
-        work,
-        re.IGNORECASE,
-    )
-    if epithet_match:
-        out["epithet_rank"] = epithet_match.group(1).upper()
-        out["epithet"] = epithet_match.group(2).strip()
-        work = work[epithet_match.end():].strip()
-
-    # Finishing time (1st-place row): "M:SS.S" or "MM:SS.S".
-    time_match = re.search(r"\b(\d+:\d+\.\d+)\s*$", work)
-    if time_match:
-        out["time_or_lengths"] = time_match.group(1)
-        work = work[: time_match.start()].strip()
+    if fav_match:
+        candidate = fav_match.group(1)
+        out["fav_rank"] = int(fav_match.group(2))
+        if candidate.lower() in _NON_PLAYER_KEYWORDS or candidate.isdigit():
+            # Bot row — preserve the keyword in `work` (it's
+            # actually a position/distance/rank word, not a player)
+            # so the next stage can claim it. Drop only " No. X Fav".
+            work = work[: fav_match.end(1)].strip()
+        else:
+            out["player_name"] = candidate.strip()
+            work = work[: fav_match.start()].strip()
     else:
-        # Lengths-back gap: "3 1/2 L", "1/2 L", "Nose", "Head", "Neck"
-        # (the latter three may or may not carry an "L" suffix).
+        # Some bot rows are even sparser: "No. 7 Fav" with nothing
+        # before. Strip the suffix and capture fav_rank only.
+        sparse_match = re.search(
+            r"No\.\s*(\d+)\s+Fav\s*$", work, re.IGNORECASE
+        )
+        if sparse_match:
+            out["fav_rank"] = int(sparse_match.group(1))
+            work = work[: sparse_match.start()].strip()
+
+    # 2. Distance / time at the new end (after player segment removed).
+    finish_time_match = re.search(r"\b(\d+:\d+\.\d+)\s*$", work)
+    if finish_time_match:
+        out["time_or_lengths"] = finish_time_match.group(1)
+        work = work[: finish_time_match.start()].strip()
+    else:
+        kw_alt = "|".join(re.escape(k) for k in _DISTANCE_KEYWORDS)
         length_match = re.search(
-            r"(\d+(?:\s+\d+/\d+)?\s*L|\d+/\d+\s*L|(?:Nose|Head|Neck)(?:\s*L)?)\s*$",
+            rf"(\d+(?:\s+\d+/\d+)?\s*L|\d+/\d+\s*L|(?:{kw_alt})(?:\s*L)?)\s*$",
             work,
             re.IGNORECASE,
         )
@@ -142,13 +186,51 @@ def _parse_placement_row_fields(text: str) -> dict[str, Any]:
             out["time_or_lengths"] = length_match.group(1).strip()
             work = work[: length_match.start()].strip()
 
-    # Leading gate digit, then the rest is the uma name.
-    gate_match = re.match(r"^(\d+)\s+(.+)$", work)
-    if gate_match:
-        out["gate"] = int(gate_match.group(1))
-        out["uma_name"] = gate_match.group(2).strip() or None
-    elif work:
-        out["uma_name"] = work
+    # 3. Skill rank at the start ("SS", "S+", "A+", "UG3"...).
+    rank_match = re.match(
+        rf"^({_RANK_ALTERNATION})\b",
+        work,
+        re.IGNORECASE,
+    )
+    if rank_match:
+        out["epithet_rank"] = rank_match.group(1).upper()
+        work = work[rank_match.end():].strip()
+
+    # 4. Position keyword followed by a gate digit — the boundary
+    #    between epithet text and the uma name. e.g.
+    #       "Unpredictable End 8 Gold Ship"
+    #            ^^^^^^^^^^^^|   |- after = uma_name
+    #            before-pos = epithet
+    pos_alt = "|".join(re.escape(p) for p in _POSITION_WORDS)
+    pos_gate_match = re.search(
+        rf"\b({pos_alt})\s+(\d+)\b",
+        work,
+        re.IGNORECASE,
+    )
+    if pos_gate_match:
+        out["position"] = pos_gate_match.group(1).capitalize()
+        out["gate"] = int(pos_gate_match.group(2))
+        before = work[: pos_gate_match.start()].strip()
+        after = work[pos_gate_match.end():].strip()
+        if before:
+            out["epithet"] = before
+        if after:
+            out["uma_name"] = after
+    else:
+        # No position keyword found. Split on the first standalone
+        # digit (the gate column) — anything before it is residual
+        # epithet text, anything after is the uma name. Real Uma
+        # Musume epithets are descriptive English so the first digit
+        # in the row is the gate ~always.
+        embedded_gate = re.search(r"\b(\d+)\s+(.+)$", work)
+        if embedded_gate:
+            out["gate"] = int(embedded_gate.group(1))
+            out["uma_name"] = embedded_gate.group(2).strip() or None
+            before = work[: embedded_gate.start()].strip()
+            if before and "epithet" not in out:
+                out["epithet"] = before
+        elif work:
+            out["uma_name"] = work
     return out
 
 
@@ -432,8 +514,10 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
         row["raw_uma_name"] = raw_uma_name
         if "uma_name" in fields:
             row["uma_name"] = fields["uma_name"]
-        for key in ("gate", "time_or_lengths", "player_name", "fav_rank",
-                    "epithet_rank", "epithet"):
+        for key in (
+            "gate", "time_or_lengths", "player_name", "fav_rank",
+            "epithet_rank", "epithet", "position",
+        ):
             if key in fields:
                 row[key] = fields[key]
 

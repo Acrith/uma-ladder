@@ -28,10 +28,14 @@
 
   <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
     {% call card(class="p-3") %}
-      <p class="label-eyebrow">Source screenshot</p>
-      <img src="{{ url_for('ocr.serve_image', image_id=attempt.image.id) }}"
-           alt="result screenshot"
-           class="mt-2 w-full rounded border border-slate-800" />
+      <p class="label-eyebrow">Source screenshot{% if source_images|length > 1 %}s ({{ source_images|length }}){% endif %}</p>
+      <div class="mt-2 space-y-2">
+        {% for img in source_images %}
+          <img src="{{ url_for('ocr.serve_image', image_id=img.id) }}"
+               alt="result screenshot {{ loop.index }} of {{ source_images|length }}"
+               class="w-full rounded border border-slate-800" />
+        {% endfor %}
+      </div>
       <p class="mt-2 text-xs text-slate-500">
         Provider: <span class="text-slate-300">{{ attempt.provider }}</span>
         {% if attempt.confidence_json and attempt.confidence_json.get('overall') is not none %}
@@ -85,12 +89,13 @@
                 {# Structured chips — informational only (the only
                    field that goes into submit_results is uma_name).
                    Helps the user verify the auto-assign was right. #}
-                {% if row.gate or row.time_or_lengths or row.player_name or row.epithet %}
+                {% if row.gate or row.time_or_lengths or row.player_name or row.epithet or row.position or row.fav_rank %}
                   <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
                     {% if row.gate %}<span class="rounded border border-slate-700 px-1.5 py-0.5">Gate {{ row.gate }}</span>{% endif %}
+                    {% if row.position %}<span class="rounded border border-cyan-500/30 bg-cyan-500/5 px-1.5 py-0.5 text-cyan-200">{{ row.position }}</span>{% endif %}
                     {% if row.time_or_lengths %}<span class="rounded border border-slate-700 px-1.5 py-0.5">{{ row.time_or_lengths }}</span>{% endif %}
-                    {% if row.player_name %}<span class="rounded border border-slate-700 px-1.5 py-0.5">@{{ row.player_name }}{% if row.fav_rank %} · No. {{ row.fav_rank }} Fav{% endif %}</span>{% endif %}
-                    {% if row.epithet %}<span class="rounded border border-fuchsia-500/30 bg-fuchsia-500/5 px-1.5 py-0.5 text-fuchsia-200">{% if row.epithet_rank %}{{ row.epithet_rank }} {% endif %}{{ row.epithet }}</span>{% endif %}
+                    {% if row.player_name %}<span class="rounded border border-slate-700 px-1.5 py-0.5">@{{ row.player_name }}{% if row.fav_rank %} · No. {{ row.fav_rank }} Fav{% endif %}</span>{% elif row.fav_rank %}<span class="rounded border border-slate-700 px-1.5 py-0.5">No. {{ row.fav_rank }} Fav</span>{% endif %}
+                    {% if row.epithet %}<span class="rounded border border-fuchsia-500/30 bg-fuchsia-500/5 px-1.5 py-0.5 text-fuchsia-200">{% if row.epithet_rank %}{{ row.epithet_rank }} {% endif %}{{ row.epithet }}</span>{% elif row.epithet_rank %}<span class="rounded border border-fuchsia-500/30 bg-fuchsia-500/5 px-1.5 py-0.5 text-fuchsia-200">{{ row.epithet_rank }}</span>{% endif %}
                   </p>
                 {% endif %}
                 {% if row.confidence is not none %}

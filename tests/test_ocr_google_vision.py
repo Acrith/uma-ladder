@@ -604,11 +604,87 @@ def test_punctuation_tightening_applies_in_real_parse() -> None:
     assert "3 : 43.8" not in (row.get("raw_uma_name") or "")
 
 
+def test_parse_placement_row_extracts_position_separately() -> None:
+    """Position keywords (Front/Pace/Late/End) live on the epithet
+    line just before the gate digit. PR-I3.1 splits them out so the
+    epithet field carries only the descriptive text."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    f = _parse_placement_row_fields(
+        "SS Unpredictable End 8 Gold Ship 3:43.8 Yuuta No. 1 Fav"
+    )
+    assert f["epithet_rank"] == "SS"
+    assert f["epithet"] == "Unpredictable"
+    assert f["position"] == "End"
+    assert f["gate"] == 8
+    assert f["uma_name"] == "Gold Ship"
+
+    f2 = _parse_placement_row_fields(
+        "SS Victory Derived Pace 9 Biwa Hayahide 3 1/2 L Acrith No. 3 Fav"
+    )
+    assert f2["epithet"] == "Victory Derived"
+    assert f2["position"] == "Pace"
+
+
+def test_parse_placement_row_handles_distance_keyword() -> None:
+    """Bots commonly carry the 'Distance' keyword where a numeric
+    gap would be on a real-player row. The user's bot row mangled
+    on the prior version — peel it cleanly here."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    f = _parse_placement_row_fields(
+        "A End 2 Castanet Rhythm Distance No. 7 Fav"
+    )
+    assert f["epithet_rank"] == "A"
+    assert f["position"] == "End"
+    assert f["gate"] == 2
+    assert f["uma_name"] == "Castanet Rhythm"
+    assert f["time_or_lengths"] == "Distance"
+    assert f["fav_rank"] == 7
+    # Bot row — no real player, so player_name was rejected as a
+    # candidate (the trailing "Distance" matches the keyword set).
+    assert "player_name" not in f
+
+
+def test_parse_placement_row_recognises_ug_ranks() -> None:
+    """UG / UG1.. UG9 are valid skill ranks per the user's
+    keyword catalogue."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    f = _parse_placement_row_fields("UG3 Some Ability Late 5 Mejiro McQueen 2 L")
+    assert f["epithet_rank"] == "UG3"
+    assert f["epithet"] == "Some Ability"
+    assert f["position"] == "Late"
+    assert f["gate"] == 5
+    assert f["uma_name"] == "Mejiro McQueen"
+
+
+def test_parse_placement_row_does_not_capture_keyword_as_player() -> None:
+    """A bot row has no player. The word before "No. X Fav" should
+    only be claimed as player_name when it ISN'T a known keyword."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    cases = [
+        # (raw_text, expected_no_player_name)
+        ("End No. 7 Fav",      True),   # position keyword
+        ("Distance No. 7 Fav", True),   # distance keyword
+        ("L No. 7 Fav",        True),   # leftover length unit
+        ("Yuuta No. 7 Fav",    False),  # real player
+    ]
+    for text, expected_skip in cases:
+        f = _parse_placement_row_fields(text)
+        assert f.get("fav_rank") == 7, f"fav_rank missing for {text!r}"
+        if expected_skip:
+            assert "player_name" not in f, f"unexpected player for {text!r}: {f.get('player_name')!r}"
+        else:
+            assert f.get("player_name") == "Yuuta"
+
+
 def test_parse_placement_row_fields_extracts_clean_uma_name() -> None:
     """Round-trip the canonical merged row shapes back to clean
-    structured fields. The driving signal: form gets uma_name="Gold
-    Ship", not the whole "SS Unpredictable End 8 Gold Ship 3:43.8 …"
-    blob."""
+    structured fields. PR-I3.1 added position as its own field, so
+    epithet now carries only the descriptive text (no trailing
+    Front/Pace/Late/End word)."""
     from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
 
     # 1st place — finishing time
@@ -621,7 +697,8 @@ def test_parse_placement_row_fields_extracts_clean_uma_name() -> None:
     assert f1["player_name"] == "Yuuta"
     assert f1["fav_rank"] == 1
     assert f1["epithet_rank"] == "SS"
-    assert f1["epithet"] == "Unpredictable End"
+    assert f1["epithet"] == "Unpredictable"
+    assert f1["position"] == "End"
 
     # 2nd place — lengths-back gap "3 1/2 L"
     f2 = _parse_placement_row_fields(
@@ -632,6 +709,8 @@ def test_parse_placement_row_fields_extracts_clean_uma_name() -> None:
     assert f2["time_or_lengths"] == "3 1/2 L"
     assert f2["player_name"] == "Acrith"
     assert f2["fav_rank"] == 3
+    assert f2["epithet"] == "Victory Derived"
+    assert f2["position"] == "Pace"
 
     # 3rd place — short gap "1/2 L"
     f3 = _parse_placement_row_fields(
@@ -641,6 +720,8 @@ def test_parse_placement_row_fields_extracts_clean_uma_name() -> None:
     assert f3["gate"] == 3
     assert f3["time_or_lengths"] == "1/2 L"
     assert f3["player_name"] == "Yuuta"
+    assert f3["epithet"] == "Now That's White Lightning!"
+    assert f3["position"] == "End"
 
 
 def test_parse_placement_row_fields_handles_partial_data() -> None:
@@ -677,7 +758,9 @@ def test_parse_annotation_emits_structured_fields_per_row() -> None:
     assert row["player_name"] == "Yuuta"
     assert row["fav_rank"] == 1
     assert row["epithet_rank"] == "SS"
-    assert row["epithet"] == "Unpredictable End"
+    # PR-I3.1 splits position out of epithet text.
+    assert row["epithet"] == "Unpredictable"
+    assert row["position"] == "End"
     # The unmerged concatenation is preserved as raw_uma_name for
     # the review form's diagnostic line.
     assert "Gold Ship" in row["raw_uma_name"]

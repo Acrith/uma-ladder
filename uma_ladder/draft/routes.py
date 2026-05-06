@@ -538,6 +538,12 @@ def upload_result_screenshot(match_id: int) -> object:
     primary = attempts[0]
     primary.parsed_json = dict(primary.parsed_json or {})
     primary.parsed_json["rows"] = merged_rows
+    # Track every UploadedImage that contributed to this merged
+    # parse so the review page can render all the source screenshots
+    # side by side, not just the primary one.
+    primary.parsed_json["screenshot_image_ids"] = [
+        a.uploaded_image_id for a in attempts
+    ]
     db.session.commit()
     return redirect(
         url_for(
@@ -666,10 +672,24 @@ def results_from_ocr(match_id: int, attempt_id: int) -> object:
         idx: _suggest_assignment(row, host_username, opp_username)
         for idx, row in zip(placement_row_indices, placement_rows, strict=True)
     }
+    # Source-screenshot strip: the primary attempt has its own image,
+    # plus parsed_json["screenshot_image_ids"] (set during multi-
+    # screenshot upload) lists the full batch so we can show all of
+    # them in the review preview, not just the first.
+    from ..models import UploadedImage
+
+    image_ids = (attempt.parsed_json or {}).get("screenshot_image_ids") or []
+    if not image_ids:
+        image_ids = [attempt.uploaded_image_id]
+    source_images = [
+        img for img in (db.session.get(UploadedImage, i) for i in image_ids)
+        if img is not None
+    ]
     return render_template(
         "draft/results_from_ocr.html",
         match=match,
         attempt=attempt,
+        source_images=source_images,
         placement_rows=placement_rows,
         placement_row_indices=placement_row_indices,
         other_rows=other_rows,
