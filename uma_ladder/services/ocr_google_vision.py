@@ -40,6 +40,19 @@ VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate"
 _PLACEMENT_MIN = 1
 _PLACEMENT_MAX = 30  # generous upper bound for any future race format
 
+# Uma Musume's result-summary screen renders placements as ordinals
+# ("1st", "2nd", "3rd", "4th"...). Plain integers also need to be
+# accepted for the legacy / official-race screenshots that already
+# work in production.
+_ORDINAL_RE = re.compile(r"^(\d+)(?:st|nd|rd|th)$", re.IGNORECASE)
+
+# Known column-header / chrome strings that show up on the result
+# screen as their own clusters. Filtering them out of the merge pass
+# stops them from being absorbed into the previous entrant's
+# uma_name (e.g. "Gold Ship 3:43.8 Yuuta RANK"). Lowercased for
+# case-insensitive comparison.
+_NOISE_TOKENS: frozenset[str] = frozenset({"rank"})
+
 # Stat-screen detection: lowercased labels we recognise as Uma stats.
 # The label appears once per row; the value is the closest plausible
 # number on the same row (or directly below).
@@ -259,6 +272,14 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
             n = int(first)
             if _PLACEMENT_MIN <= n <= _PLACEMENT_MAX:
                 placement = n
+        else:
+            # Ordinal placements: "1st", "2nd", "3rd", "4th" etc. as
+            # rendered on Uma Musume's result-summary screen.
+            ordinal = _ORDINAL_RE.match(first)
+            if ordinal:
+                n = int(ordinal.group(1))
+                if _PLACEMENT_MIN <= n <= _PLACEMENT_MAX:
+                    placement = n
         if placement is not None:
             uma_name = " ".join(w["text"] for w in row[1:]).strip() or None
         else:
@@ -343,7 +364,11 @@ def _merge_orphan_followups(
             and absorbed < _MAX_FOLLOWUP_ABSORPTIONS
         ):
             extra = (rows[j].get("raw_line") or "").strip()
-            if extra:
+            # Skip column-header / chrome rows so a "RANK" cluster
+            # sitting between two entrants doesn't get glued to the
+            # previous entrant's uma_name. The cap still increments
+            # so a stretch of pure-noise rows eventually breaks out.
+            if extra and extra.lower() not in _NOISE_TOKENS:
                 if merged.get("uma_name"):
                     merged["uma_name"] = f"{merged['uma_name']} {extra}".strip()
                 else:

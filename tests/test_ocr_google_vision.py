@@ -471,6 +471,48 @@ def test_absorption_caps_at_three_followups() -> None:
     assert "totals" in " ".join(leftover_names)
 
 
+def test_ordinal_placements_are_recognised() -> None:
+    """Uma Musume's result-summary screen renders placements as
+    ordinals — "1st", "2nd", "3rd", "4th"... — not bare digits.
+    Plain integers must keep working too (legacy / official-race
+    screenshots already in production)."""
+    ann = _annotation(
+        [
+            [_word("1st", 10, 10), _word("Gold", 50, 10), _word("Ship", 130, 10)],
+            [_word("2nd", 10, 60), _word("Biwa", 50, 60), _word("Hayahide", 110, 60)],
+            [_word("3rd", 10, 110), _word("Tamamo", 50, 110), _word("Cross", 150, 110)],
+            [_word("4th", 10, 160), _word("Daiwa", 50, 160), _word("Scarlet", 130, 160)],
+            # Plain digit still works for any non-ordinal screenshot.
+            [_word("5", 10, 210), _word("Mejiro", 50, 210), _word("McQueen", 130, 210)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert [r["placement"] for r in parse.rows] == [1, 2, 3, 4, 5]
+    assert parse.rows[0]["uma_name"] == "Gold Ship"
+    assert parse.rows[1]["uma_name"] == "Biwa Hayahide"
+
+
+def test_rank_column_header_does_not_pollute_uma_name() -> None:
+    """The result screen has a "RANK" column label between entrants.
+    The merge pass must skip it so we don't render "Gold Ship Yuuta
+    No. 1 Fav RANK" as a single uma name."""
+    ann = _annotation(
+        [
+            [_word("1st", 10, 10), _word("Gold", 50, 10), _word("Ship", 130, 10)],
+            [_word("Yuuta", 50, 60), _word("No.", 110, 60), _word("1", 150, 60), _word("Fav", 175, 60)],
+            [_word("RANK", 10, 110)],  # column header — must NOT merge
+            [_word("2nd", 10, 160), _word("Biwa", 50, 160), _word("Hayahide", 110, 160)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    assert len(parse.rows) == 2
+    p1 = parse.rows[0]
+    assert p1["placement"] == 1
+    assert "Gold Ship" in p1["uma_name"]
+    assert "Yuuta" in p1["uma_name"]
+    assert "RANK" not in p1["uma_name"]
+
+
 def test_pre_placement_orphans_are_kept_not_dropped() -> None:
     """Header chrome (rows above the first placement) survives the
     merge pass — it lives as its own non-placement row so the route
