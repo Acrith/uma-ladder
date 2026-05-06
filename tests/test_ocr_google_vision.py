@@ -767,6 +767,64 @@ def test_parse_annotation_emits_structured_fields_per_row() -> None:
     assert "Yuuta" in row["raw_uma_name"]
 
 
+def test_epithet_detection_survives_misread_rank_prefix() -> None:
+    """Vision sometimes misreads the small rank glyph — we've seen
+    "S" come back as "St" because of anti-aliasing/font hinting at
+    common screenshot resolutions. The epithet detector now tolerates
+    that by ALSO accepting lines that end with a position keyword
+    (Front/Pace/Late/End), which is a much more distinctive marker
+    than the 1-2 character rank prefix."""
+    from uma_ladder.services.ocr_google_vision import _looks_like_epithet
+
+    # Rank-misread cases — _start_re fails, _end_re still catches them.
+    assert _looks_like_epithet("St Now That's White Lightning! End")
+    assert _looks_like_epithet("5 something Pace")  # "5" instead of "S"
+    # Sanity: the canonical shapes still match.
+    assert _looks_like_epithet("SS Unpredictable End")
+    assert _looks_like_epithet("S Victory Derived Pace")
+    # Non-epithets stay rejected.
+    assert not _looks_like_epithet("RANK")
+    assert not _looks_like_epithet("Result Summary")
+    assert not _looks_like_epithet("Yuuta No. 1 Fav")
+
+
+def test_misread_rank_does_not_steal_next_entrants_epithet(
+    monkeypatch,
+) -> None:
+    """The headline regression — if Vision returned "St" instead of
+    "S" for entrant 3's rank prefix, our prior pass-1 routing
+    skipped that line entirely and pass-2 forward merge swallowed
+    it into entrant 2's row. With dual-signal epithet detection,
+    each entrant gets its own intro again."""
+    ann = _annotation(
+        [
+            [_word("SS", 10, 10), _word("Unpredictable", 40, 10), _word("End", 175, 10)],
+            [_word("1st", 10, 60), _word("8", 50, 60), _word("Gold", 80, 60), _word("Ship", 130, 60)],
+            [_word("Yuuta", 50, 110), _word("No.", 110, 110), _word("1", 150, 110), _word("Fav", 175, 110)],
+            [_word("SS", 10, 200), _word("Victory", 40, 200), _word("Derived", 110, 200), _word("Pace", 200, 200)],
+            [_word("2nd", 10, 250), _word("9", 50, 250), _word("Biwa", 80, 250), _word("Hayahide", 130, 250)],
+            [_word("Acrith", 50, 300), _word("No.", 110, 300), _word("3", 150, 300), _word("Fav", 175, 300)],
+            # "S" misread as "St" by Vision — start-of-line rank
+            # detection fails here, but the trailing "End" keyword
+            # triggers epithet detection via the end-of-line path.
+            [_word("St", 10, 400), _word("Now", 30, 400), _word("That's", 60, 400),
+             _word("White", 100, 400), _word("Lightning!", 150, 400), _word("End", 220, 400)],
+            [_word("3rd", 10, 450), _word("3", 50, 450), _word("Tamamo", 80, 450), _word("Cross", 160, 450)],
+            [_word("Yuuta", 50, 500), _word("No.", 110, 500), _word("4", 150, 500), _word("Fav", 175, 500)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    placement_rows = [r for r in parse.rows if r.get("placement") is not None]
+    assert [r["placement"] for r in placement_rows] == [1, 2, 3]
+    # Each entrant carries its OWN epithet — Biwa no longer has
+    # Tamamo's "White Lightning" stuck on the end of its row.
+    p2 = placement_rows[1]
+    p3 = placement_rows[2]
+    assert "Victory Derived" in (p2.get("epithet") or "")
+    assert "White Lightning" not in (p2.get("epithet") or "")
+    assert "White Lightning" in (p3.get("epithet") or "")
+
+
 def test_pre_placement_orphans_are_kept_not_dropped() -> None:
     """Header chrome (rows above the first placement) survives the
     merge pass — it lives as its own non-placement row so the route

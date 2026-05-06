@@ -82,15 +82,20 @@ _RANK_LOOKUP: frozenset[str] = frozenset(r.lower() for r in _RANK_WORDS)
 # line detector and as the rank prefix in placement-row extraction.
 _RANK_ALTERNATION = "|".join(re.escape(r) for r in _RANK_WORDS)
 
-# Skill-rank prefix on an "epithet" line. Each Uma Musume entrant
-# block starts with one of these visually above the placement row:
+# An "epithet" line introduces an entrant block visually above
+# the placement row, e.g.
 #   "SS Unpredictable End"
 #   "S Now That's White Lightning ! End"
-#   "A+ <text>"
-# Used to detect rows that introduce the *next* entrant so the
-# forward merge stops before stealing them.
-_EPITHET_RE = re.compile(
+# We detect it by EITHER signal — rank prefix at the start OR a
+# position keyword at the end. Two signals is much more robust to
+# Vision misreading the small rank glyph (e.g. "S" → "St"); the
+# position-suffix keyword survives those misreads.
+_EPITHET_START_RE = re.compile(
     rf"^(?:{_RANK_ALTERNATION})\s+\S",
+    re.IGNORECASE,
+)
+_EPITHET_END_RE = re.compile(
+    rf"\b(?:{'|'.join(re.escape(p) for p in _POSITION_WORDS)})\s*$",
     re.IGNORECASE,
 )
 
@@ -104,7 +109,10 @@ _NON_PLAYER_KEYWORDS: frozenset[str] = (
 
 
 def _looks_like_epithet(text: str) -> bool:
-    return bool(_EPITHET_RE.match(text.strip()))
+    t = text.strip()
+    if not t:
+        return False
+    return bool(_EPITHET_START_RE.match(t)) or bool(_EPITHET_END_RE.search(t))
 
 
 def _parse_placement_row_fields(text: str) -> dict[str, Any]:
