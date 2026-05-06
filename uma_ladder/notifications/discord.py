@@ -45,12 +45,22 @@ class WebhookTransport(ABC):
 class UrllibTransport(WebhookTransport):
     """Default production transport using stdlib urllib."""
 
+    # Discord's WAF rejects the default `Python-urllib/<version>`
+    # User-Agent with a 403 from cloud egress IPs (we hit it from
+    # Fly Frankfurt — `curl` from a laptop on the same URL works
+    # fine). The Discord API guidelines ask for a descriptive UA;
+    # this also makes our traffic identifiable in their logs.
+    _USER_AGENT = "uma-ladder (https://umaladder.moe, 1.0)"
+
     def post(self, url: str, payload: dict[str, Any], *, timeout: float = 10.0) -> SendResult:
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             url,
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": self._USER_AGENT,
+            },
             method="POST",
         )
         try:

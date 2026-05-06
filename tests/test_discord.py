@@ -151,3 +151,32 @@ def test_urllib_transport_returns_send_result_shape() -> None:
     assert isinstance(t, UrllibTransport)
     sr = SendResult(ok=True, status_code=204, error=None)
     assert sr.ok and sr.status_code == 204
+
+
+def test_urllib_transport_sends_user_agent_header(monkeypatch) -> None:
+    """Discord's WAF rejects requests with the default
+    `Python-urllib/<version>` User-Agent (403 from cloud egress IPs).
+    The transport must override it so production posts succeed."""
+    import urllib.request
+
+    captured: dict[str, dict[str, str]] = {}
+
+    class _FakeResp:
+        status = 204
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    def _fake_urlopen(req, timeout=None):  # noqa: ARG001
+        captured["headers"] = dict(req.headers)
+        return _FakeResp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    UrllibTransport().post("https://x", {"content": "hi"})
+    headers = captured["headers"]
+    # urllib normalises header keys to title case.
+    assert "User-agent" in headers
+    assert "uma-ladder" in headers["User-agent"]
