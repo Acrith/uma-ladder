@@ -428,20 +428,164 @@
                  review page. Both participants and organizers can
                  upload (matches who can submit manually).
                  `multiple` accepts several screenshots in one shot
-                 for races where the result screen scrolls past 9. #}
-              <form method="post"
+                 for races where the result screen scrolls past 9.
+                 Inline JS below accumulates re-selected files (so a
+                 second pick doesn't replace the first) and accepts
+                 Ctrl+V clipboard pastes. #}
+              <form id="ocr-upload-form"
+                    method="post"
                     action="{{ url_for('draft.upload_result_screenshot', match_id=match.id) }}"
                     enctype="multipart/form-data"
                     class="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3">
                 {{ results_screenshot_form.hidden_tag() }}
                 <p class="text-xs font-medium text-cyan-200">📷 OCR result screenshot</p>
-                <p class="mt-1 text-[11px] text-slate-400">Upload the in-game result summary. Pick more than one screenshot if the field scrolled. We auto-assign rows to host / opp by player name; bots default to skip.</p>
+                <p class="mt-1 text-[11px] text-slate-400">Upload the in-game result summary. Pick more than one screenshot if the field scrolled, or <kbd class="rounded border border-slate-700 bg-slate-900/60 px-1 py-0 text-[10px]">Ctrl+V</kbd> a screenshot from clipboard. We auto-assign rows to host / opp by player name; bots default to skip.</p>
                 <div class="mt-2 flex flex-wrap items-center gap-2">
-                  {{ results_screenshot_form.image(class="text-xs text-slate-300 file:mr-3 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-3 file:py-1 file:text-slate-300 hover:file:bg-slate-800", accept="image/png,image/jpeg,image/webp", multiple=True) }}
-                  <button class="btn-ghost text-xs">Parse</button>
+                  {{ results_screenshot_form.image(id="ocr-image-input", class="text-xs text-slate-300 file:mr-3 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-3 file:py-1 file:text-slate-300 hover:file:bg-slate-800", accept="image/png,image/jpeg,image/webp", multiple=True) }}
+                  <button type="submit" class="btn-ghost text-xs">Parse</button>
+                  <button type="button" id="ocr-clear-btn" class="text-[11px] text-slate-400 hover:text-slate-200 hidden">Clear</button>
                 </div>
+                <div id="ocr-pending-thumbs" class="mt-2 hidden flex-wrap gap-2"></div>
                 {% for err in results_screenshot_form.image.errors %}<p class="mt-1 text-[11px] text-rose-300">{{ err }}</p>{% endfor %}
               </form>
+
+              <script>
+                (function () {
+                  // PR-I3.2 — accumulate file selections + accept
+                  // clipboard paste. Browsers' default <input type="file">
+                  // replaces the FileList on every selection; we keep
+                  // a separate DataTransfer that we sync into the
+                  // input before submit so the route's
+                  // request.files.getlist still sees the full set.
+                  var form = document.getElementById('ocr-upload-form');
+                  var input = document.getElementById('ocr-image-input');
+                  var thumbs = document.getElementById('ocr-pending-thumbs');
+                  var clearBtn = document.getElementById('ocr-clear-btn');
+                  if (!form || !input || !thumbs) return;
+
+                  var queue = new DataTransfer();
+
+                  function isDuplicate(f) {
+                    return Array.from(queue.files).some(function (existing) {
+                      return existing.name === f.name
+                          && existing.size === f.size
+                          && existing.lastModified === f.lastModified;
+                    });
+                  }
+
+                  function addFiles(files) {
+                    var added = 0;
+                    Array.from(files).forEach(function (f) {
+                      if (!f || !f.type || !f.type.startsWith('image/')) return;
+                      if (isDuplicate(f)) return;
+                      queue.items.add(f);
+                      added += 1;
+                    });
+                    if (added > 0) {
+                      input.files = queue.files;
+                      render();
+                    }
+                  }
+
+                  function removeAt(index) {
+                    var next = new DataTransfer();
+                    Array.from(queue.files).forEach(function (f, i) {
+                      if (i !== index) next.items.add(f);
+                    });
+                    queue = next;
+                    input.files = queue.files;
+                    render();
+                  }
+
+                  function render() {
+                    thumbs.innerHTML = '';
+                    if (queue.files.length === 0) {
+                      thumbs.classList.add('hidden');
+                      thumbs.classList.remove('flex');
+                      clearBtn.classList.add('hidden');
+                      return;
+                    }
+                    thumbs.classList.remove('hidden');
+                    thumbs.classList.add('flex');
+                    clearBtn.classList.remove('hidden');
+                    Array.from(queue.files).forEach(function (file, i) {
+                      var card = document.createElement('div');
+                      card.className =
+                        'relative rounded border border-slate-700 bg-slate-900/40 p-1';
+                      var img = document.createElement('img');
+                      img.src = URL.createObjectURL(file);
+                      img.onload = function () { URL.revokeObjectURL(img.src); };
+                      img.alt = file.name;
+                      img.className =
+                        'h-16 w-24 rounded object-cover';
+                      var label = document.createElement('p');
+                      label.className =
+                        'mt-1 max-w-[6rem] truncate text-[10px] text-slate-400';
+                      label.title = file.name;
+                      label.textContent = file.name;
+                      var rm = document.createElement('button');
+                      rm.type = 'button';
+                      rm.className =
+                        'absolute -right-1 -top-1 rounded-full border border-slate-700 bg-slate-950 px-1.5 text-[10px] leading-none text-rose-300 hover:text-rose-200';
+                      rm.textContent = '×';
+                      rm.title = 'Remove';
+                      rm.addEventListener('click', function () { removeAt(i); });
+                      card.appendChild(img);
+                      card.appendChild(label);
+                      card.appendChild(rm);
+                      thumbs.appendChild(card);
+                    });
+                  }
+
+                  // File-input change: accumulate the new selection
+                  // into the queue. The browser already replaced
+                  // input.files with just the new picks, so we read
+                  // those, fold them in, and re-sync.
+                  input.addEventListener('change', function () {
+                    var picked = Array.from(input.files);
+                    addFiles(picked);
+                    // If addFiles dropped duplicates, input.files
+                    // currently has only the deduped subset (or even
+                    // an empty list). Ensure it's the full queue.
+                    input.files = queue.files;
+                  });
+
+                  // Clipboard paste: capture image items globally
+                  // (only fires when this template is rendered, i.e.
+                  // status is room_code_available). We rename the
+                  // pasted file because clipboards generically call
+                  // it "image.png" — without rename, dedup would
+                  // reject a second paste.
+                  document.addEventListener('paste', function (e) {
+                    if (!e.clipboardData || !e.clipboardData.items) return;
+                    var pasted = [];
+                    Array.from(e.clipboardData.items).forEach(function (it) {
+                      if (it.kind === 'file' && it.type.startsWith('image/')) {
+                        var raw = it.getAsFile();
+                        if (!raw) return;
+                        var ext = (raw.name && raw.name.split('.').pop()) || 'png';
+                        var stamp = Date.now() + '-' + Math.floor(Math.random() * 1000);
+                        var renamed = new File(
+                          [raw],
+                          'paste-' + stamp + '.' + ext,
+                          { type: raw.type, lastModified: raw.lastModified }
+                        );
+                        pasted.push(renamed);
+                      }
+                    });
+                    if (pasted.length > 0) {
+                      e.preventDefault();
+                      addFiles(pasted);
+                    }
+                  });
+
+                  clearBtn.addEventListener('click', function () {
+                    queue = new DataTransfer();
+                    input.files = queue.files;
+                    render();
+                  });
+                })();
+              </script>
 
               <p class="mt-4 text-[11px] uppercase tracking-wider text-slate-500">— or enter manually —</p>
 

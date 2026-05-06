@@ -297,6 +297,33 @@ def test_review_page_collapses_non_placement_rows_under_other(
     assert "Cygames footer" in body
 
 
+def test_detail_page_wires_up_clipboard_accumulator(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The OCR upload form's inline JS expects specific IDs on the
+    file input + clear button + thumbnail container. If a refactor
+    moves anything around, this test catches the JS hooks getting
+    decoupled from their DOM targets."""
+    host = make_user(username="host")
+    opp = make_user(username="opp")
+    with app.app_context():
+        match_id = _setup_match_in_room_code_phase(host["id"], opp["id"])
+    _login(client, "host")
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # JS hooks must find these IDs to wire up.
+    assert 'id="ocr-upload-form"' in body
+    assert 'id="ocr-image-input"' in body
+    assert 'id="ocr-clear-btn"' in body
+    assert 'id="ocr-pending-thumbs"' in body
+    # `multiple` must be present on the file input so the browser's
+    # file picker accepts batch selection.
+    assert "multiple" in body
+    # Paste hint visible to the user.
+    assert "Ctrl+V" in body
+
+
 def test_review_page_auto_assigns_by_player_name(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
