@@ -173,6 +173,118 @@ def test_format_track_returns_none_for_missing_preset() -> None:
     assert _format_track(None) is None
 
 
+def test_format_track_drops_redundant_line_for_custom_preset() -> None:
+    """Custom-preset names already encode venue/distance/surface, so
+    we don't repeat that on a second line. G1 imports get both
+    lines because the name (e.g. "Tokyo Yushun") is the race name,
+    not the conditions."""
+    from uma_ladder.models import PresetSource, RacePreset
+    from uma_ladder.notifications.services import _format_track
+
+    custom = RacePreset(
+        source=PresetSource.CUSTOM_BUILTIN,
+        name="Hanshin Dirt 2000m (Medium) Right",
+        venue="Hanshin",
+        surface="Dirt",
+        distance_meters=2000,
+        distance_category="Medium",
+        direction="Right",
+        course_variant=None,
+        max_runners=16,
+        enabled=True,
+    )
+    g1 = RacePreset(
+        source=PresetSource.G1_IMPORT,
+        name="Tokyo Yushun",
+        grade="G1",
+        venue="Tokyo",
+        surface="Turf",
+        distance_meters=2400,
+        distance_category="Medium",
+        direction="Left",
+        course_variant=None,
+        max_runners=18,
+        enabled=True,
+    )
+    custom_out = _format_track(custom)
+    # Only one structural line (the bold name) + max-runners. No
+    # second venue/distance/surface line.
+    assert "**Hanshin Dirt 2000m (Medium) Right**" in custom_out
+    assert "Hanshin · 2000m Dirt" not in custom_out
+    assert "Max runners: 16" in custom_out
+
+    g1_out = _format_track(g1)
+    # G1 keeps both: race-name line + structured-conditions line.
+    assert "**Tokyo Yushun**" in g1_out
+    assert "Tokyo · 2400m Turf (Left)" in g1_out
+
+
+def test_publish_embed_includes_url_when_app_base_url_set(
+    app: Flask,
+) -> None:
+    """Title becomes a clickable link to /official/<id> when
+    APP_BASE_URL is configured."""
+    from uma_ladder.models import PresetSource, RacePreset
+    from uma_ladder.notifications.discord import FakeTransport, set_transport
+
+    with app.app_context():
+        app.config["DISCORD_WEBHOOK_RACE_REGISTRATION_URL"] = "https://x"
+        app.config["APP_BASE_URL"] = "https://umaladder.moe"
+        transport = FakeTransport()
+        set_transport(transport)
+
+        preset = RacePreset(
+            source=PresetSource.G1_IMPORT,
+            name="Tokyo Yushun", grade="G1", venue="Tokyo",
+            surface="Turf", distance_meters=2400,
+            distance_category="Medium", direction="Left",
+            course_variant=None, max_runners=18, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+
+        s = _season()
+        org = _user("org", role=Role.ORGANIZER)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=s.id, name="Linked", organizer_user_id=org,
+                preset_id=preset.id,
+            )
+        )
+        official_service.open_registration(race.id)
+        publish_payload = next(
+            p for _, p in transport.calls if "Race published" in str(p)
+        )
+        embed = publish_payload["embeds"][0]
+        assert embed["url"] == f"https://umaladder.moe/official/{race.id}"
+
+
+def test_publish_embed_omits_url_when_app_base_url_unset(
+    app: Flask,
+) -> None:
+    from uma_ladder.notifications.discord import FakeTransport, set_transport
+
+    with app.app_context():
+        app.config["DISCORD_WEBHOOK_RACE_REGISTRATION_URL"] = "https://x"
+        app.config["APP_BASE_URL"] = None
+        transport = FakeTransport()
+        set_transport(transport)
+
+        s = _season()
+        org = _user("org", role=Role.ORGANIZER)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=s.id, name="Naked", organizer_user_id=org,
+            )
+        )
+        official_service.open_registration(race.id)
+        publish_payload = next(
+            p for _, p in transport.calls if "Race published" in str(p)
+        )
+        embed = publish_payload["embeds"][0]
+        assert "url" not in embed
+
+
 def test_publish_embed_includes_track_and_dynamic_timestamp(
     app: Flask,
 ) -> None:

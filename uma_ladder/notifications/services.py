@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from flask import current_app
+
 from ..models import (
     AdminAuditLog,
     DiscordNotificationAttempt,
@@ -25,6 +27,19 @@ from ..models import (
 from ..services.official import LadderRow
 from .discord import send_event
 from .mentions import mention_prefix
+
+
+def _public_url(path: str) -> str | None:
+    """Build an absolute URL by stitching `path` onto APP_BASE_URL.
+    Returns None when no base URL is configured — callers should
+    skip the link rather than emit a relative href into a Discord
+    embed (which Discord rejects)."""
+    base = (current_app.config.get("APP_BASE_URL") or "").rstrip("/")
+    if not base:
+        return None
+    if not path.startswith("/"):
+        path = "/" + path
+    return base + path
 
 
 def _ts(dt: datetime | None, *, style: str = "F", relative: bool = False) -> str:
@@ -65,13 +80,20 @@ def _format_track(preset: RacePreset | None) -> str | None:
 
     Returns None when preset is missing — the caller should skip the
     field entirely rather than render an empty box.
+
+    G1 imports name a *real-world race* (e.g. "Tokyo Yushun") so we
+    add the structured venue/distance line as complementary detail.
+    Custom / manual presets typically have descriptive names that
+    already encode the conditions ("Hanshin Dirt 2000m Right"); the
+    structured line would be redundant there, so we drop it.
     """
     if preset is None:
         return None
-    lines = [
-        f"**{preset.name}**",
-        f"{preset.venue} · {preset.distance_meters}m {preset.surface} ({preset.direction})",
-    ]
+    lines = [f"**{preset.name}**"]
+    if preset.source == "g1_import":
+        lines.append(
+            f"{preset.venue} · {preset.distance_meters}m {preset.surface} ({preset.direction})"
+        )
     if preset.max_runners:
         lines.append(f"Max runners: {preset.max_runners}")
     return "\n".join(lines)
@@ -95,16 +117,18 @@ def _embed(
     *,
     color: int = 0x3B82F6,
     mention: str = "",
+    url: str | None = None,
 ) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "embeds": [
-            {
-                "title": title,
-                "color": color,
-                "fields": fields,
-            }
-        ]
+    embed: dict[str, Any] = {
+        "title": title,
+        "color": color,
+        "fields": fields,
     }
+    if url:
+        # Discord renders the embed title as a link when `url` is set.
+        # Skip when None / empty so the rendering stays clean.
+        embed["url"] = url
+    payload: dict[str, Any] = {"embeds": [embed]}
     if mention:
         # Discord renders `content` above the embed and triggers a push
         # for each mentioned user. `allowed_mentions.parse=["users"]`
@@ -143,7 +167,11 @@ def notify_official_race_published(race: OfficialRace) -> DiscordNotificationAtt
     return send_event(
         event_type=NotificationEvent.OFFICIAL_RACE_PUBLISHED,
         target=NotificationTarget.RACE_REGISTRATION,
-        payload=_embed(f"Race published: {race.name}", fields),
+        payload=_embed(
+            f"Race published: {race.name}",
+            fields,
+            url=_public_url(f"/official/{race.id}"),
+        ),
     )
 
 
@@ -165,7 +193,11 @@ def notify_official_room_code(
         event_type=NotificationEvent.OFFICIAL_ROOM_CODE,
         target=NotificationTarget.RACE_REGISTRATION,
         payload=_embed(
-            f"Room code for {race.name}", fields, color=0x10B981, mention=mention
+            f"Room code for {race.name}",
+            fields,
+            color=0x10B981,
+            mention=mention,
+            url=_public_url(f"/official/{race.id}"),
         ),
     )
 
@@ -198,6 +230,7 @@ def notify_official_race_cancelled(
             fields,
             color=0xEF4444,
             mention=mention,
+            url=_public_url(f"/official/{race.id}"),
         ),
     )
 
@@ -228,6 +261,7 @@ def notify_official_registration_removed(
             fields,
             color=0xF59E0B,
             mention=mention,
+            url=_public_url(f"/official/{race.id}"),
         ),
     )
 
@@ -247,7 +281,12 @@ def notify_official_results(
     return send_event(
         event_type=NotificationEvent.OFFICIAL_RESULTS,
         target=NotificationTarget.OFFICIAL_RESULTS,
-        payload=_embed(f"Results: {race.name}", fields, color=0xF59E0B),
+        payload=_embed(
+            f"Results: {race.name}",
+            fields,
+            color=0xF59E0B,
+            url=_public_url(f"/official/{race.id}"),
+        ),
     )
 
 
@@ -275,6 +314,7 @@ def notify_draft_room_code(match: DraftMatch) -> DiscordNotificationAttempt:
             fields,
             color=0x10B981,
             mention=mention,
+            url=_public_url(f"/draft/{match.id}"),
         ),
     )
 
@@ -302,6 +342,7 @@ def notify_draft_results(
             fields,
             color=0xF59E0B,
             mention=mention,
+            url=_public_url(f"/draft/{match.id}"),
         ),
     )
 
@@ -330,6 +371,7 @@ def notify_draft_match_cancelled(
             fields,
             color=0xEF4444,
             mention=mention,
+            url=_public_url(f"/draft/{match.id}"),
         ),
     )
 

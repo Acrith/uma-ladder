@@ -21,6 +21,10 @@ class BaseConfig:
     DISCORD_WEBHOOK_FALLBACK_URL: str | None = None
     OCR_PROVIDER: str = "manual"
     GOOGLE_VISION_API_KEY: str | None = None
+    # Public base URL for outgoing links (Discord embed titles point
+    # back to /official/<id> etc.). Empty / unset = no link added,
+    # embed still posts. Avoid a trailing slash.
+    APP_BASE_URL: str | None = None
     UMA_MOE_BASE_URL: str = "https://uma.moe"
     UMA_MOE_CACHE_TTL_HOURS: int = 12
     # Set to True in production where Tailwind has been built into
@@ -47,6 +51,7 @@ class DevConfig(BaseConfig):
     DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
     OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
     GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
+    APP_BASE_URL = _env_or_none("APP_BASE_URL")
     TAILWIND_BUILT = os.environ.get("TAILWIND_BUILT", "").lower() in ("1", "true", "yes")
 
 
@@ -83,6 +88,7 @@ class ProdConfig(BaseConfig):
         cls.DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
         cls.OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
         cls.GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
+        cls.APP_BASE_URL = _env_or_none("APP_BASE_URL")
         cls.TAILWIND_BUILT = os.environ.get("TAILWIND_BUILT", "1").lower() in (
             "1",
             "true",
