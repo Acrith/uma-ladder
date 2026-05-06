@@ -318,18 +318,19 @@ def test_admin_draft_edit_results_recovers_botched_match(
         m.opponent_user_id = opp["id"]
         m.status = DraftMatchStatus.ROOM_CODE_AVAILABLE
         db.session.commit()
-        # Submit wrong/incomplete results.
+        # Submit wrong/incomplete results — OCR mis-attributed
+        # the rows so opp ends up with the #1 finisher.
         draft_service.submit_results(
             m.id,
             [
-                draft_service.DraftResultLine(user_id=host["id"], placement=1),
-                draft_service.DraftResultLine(user_id=host["id"], placement=4),
-                draft_service.DraftResultLine(user_id=opp["id"],  placement=2),
+                draft_service.DraftResultLine(user_id=opp["id"],  placement=1),
+                draft_service.DraftResultLine(user_id=opp["id"],  placement=4),
+                draft_service.DraftResultLine(user_id=host["id"], placement=2),
             ],
             confirmed_by_user_id=host["id"],
         )
         match_id = m.id
-        # Sums: host 1+4=5, opp 2 → opp wins, wrong outcome.
+        # opp has #1 → opp wins (wrong outcome the admin will fix).
         assert draft_service.get_match(match_id).winner_user_id == opp["id"]
 
     _login(client, "adm", "password123")

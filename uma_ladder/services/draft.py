@@ -54,31 +54,48 @@ _TRACK_BAN_TYPES = frozenset(
 )
 
 
-def _k_multiplier(host_score: int, opp_score: int, umas_per_player: int) -> float:
-    """Scale K by team-placement spread. 1v1 stays at 1.0 so the
-    rating math is unchanged from the pre-PR-I2 era; 2v2 / 3v3 see
-    K swing 0.5x → 1.5x of DEFAULT_K depending on how decisive the
-    placement combo was.
+def _k_multiplier(
+    winner_score: int, loser_score: int, umas_per_player: int
+) -> float:
+    """Scale K by SIGNED team-placement spread. Drives the
+    *magnitude* of the rating delta — the *winner* is decided
+    separately by best individual placement (see
+    _apply_result_decision).
 
-    Max possible margin for n umas per side is `n * n` (best-case
-    [1..n] vs worst-case [n+1..2n] in a tightly packed race), so we
-    normalise abs(margin) by that and map to [0.5, 1.5].
+    Signed margin = loser_score - winner_score, so:
 
-      2v2  1+2 vs 3+4 → margin 4, max 4, mult 1.50
-      2v2  1+3 vs 2+4 → margin 2, max 4, mult 1.00
-      2v2  1+4 vs 2+3 → margin 0 (tiebreak), mult 0.50
-      3v3  1+2+3 vs 4+5+6 → margin 9, max 9, mult 1.50
-      3v3  1+3+5 vs 2+4+6 → margin 3, max 9, mult ~0.83
+      - Positive when the winner's team also had the lower sum
+        (clean sweep — winner's umas placed better overall).
+      - Zero when sums tied (winner held the #1 finisher but
+        otherwise the teams matched).
+      - Negative when the winner held #1 but their other umas
+        placed worse than the loser's. Caters to debuffer-style
+        playstyles where one strong uma carries while teammates
+        place at the back.
 
-    Tunable; the constants live here on purpose so a future tweak
-    only touches one site.
+    1v1 stays at 1.0 — sum margin is just the placement gap, and
+    the standard ELO already reflects that.
+
+      2v2  1+2 vs 3+4 → margin +4 / 4 → mult 1.50  (sweep)
+      2v2  1+3 vs 2+4 → margin +2 / 4 → mult 1.00  (mid)
+      2v2  1+4 vs 2+3 → margin  0     → mult 0.50  (coin-flip)
+      2v2  1+8 vs 2+3 → margin -4 / 4 → mult floor (scrap; bots fill)
+      3v3  1+2+3 vs 4+5+6 → margin +9 / 9 → mult 1.50
+      3v3  1+3+5 vs 2+4+6 → margin +3 / 9 → mult ~0.83
+      3v3  1+5+6 vs 2+3+4 → margin -3 / 9 → mult ~0.17  (scrap)
+
+    Capped at [0.1, 1.5]:
+      - Floor 0.1 keeps the rating delta ≥ ~2 even on extreme
+        scraps; ELO that doesn't move feels broken.
+      - Cap 1.5 prevents 9-uma rooms (with bot-filled gaps) from
+        producing absurd swings when player teams are far apart.
     """
     if umas_per_player <= 1:
         return 1.0
-    margin = abs(opp_score - host_score)
-    max_margin = umas_per_player * umas_per_player
-    normalized = margin / max_margin if max_margin else 0.0
-    return 0.5 + normalized
+    margin = loser_score - winner_score
+    max_positive = umas_per_player * umas_per_player
+    multiplier = 0.5 + margin / max_positive
+    return max(0.1, min(1.5, multiplier))
 
 
 class DraftError(Exception):
@@ -721,12 +738,24 @@ def _apply_result_decision(
     *,
     confirmed_by_user_id: int,
 ):
-    """Determine winner from team-sum placements (PR-I2 logic), insert
-    DraftRaceResult + DraftEloChange rows, flip match status to
-    COMPLETED. Shared by submit_results and edit_results.
+    """Determine winner + ELO magnitude, insert DraftRaceResult and
+    DraftEloChange rows, flip match status to COMPLETED. Shared by
+    submit_results and edit_results.
 
-    Returns (winner_change, loser_change) so the caller can pass the
-    deltas to a notification embed without re-querying.
+    Two separate axes (PR-I4 corrected from PR-I2):
+
+    - **Winner** = side with the best (lowest) individual placement.
+      Whoever has the #1 finisher (or, failing that, the lowest of
+      either team's umas) wins, regardless of team sum. Placements
+      are unique across the race so this is always decisive.
+
+    - **ELO magnitude** = scaled by team-sum margin. A clean sweep
+      (1+2 vs 3+4) and a coin-flip (1+4 vs 2+3) award the same WIN
+      to the same player, but the K-multiplier scales the rating
+      delta — decisive wins net ~1.5× DEFAULT_K, near-ties net ~0.5×.
+
+    Returns (winner_change, loser_change) so the caller can pass
+    the deltas to a notification embed without re-querying.
     """
     by_user_lines: dict[int, list[int]] = {}
     for line in lines:
@@ -740,22 +769,18 @@ def _apply_result_decision(
 
     host_score = sum(by_user_lines[match.host_user_id])
     opp_score = sum(by_user_lines[match.opponent_user_id])
-    if host_score == opp_score:
-        host_best = min(by_user_lines[match.host_user_id])
-        opp_best = min(by_user_lines[match.opponent_user_id])
-        if host_best == opp_best:
-            raise DraftError("placements yield a tie even after tiebreaker")
-        winner_id, loser_id = (
-            (match.host_user_id, match.opponent_user_id)
-            if host_best < opp_best
-            else (match.opponent_user_id, match.host_user_id)
-        )
-    else:
-        winner_id, loser_id = (
-            (match.host_user_id, match.opponent_user_id)
-            if host_score < opp_score
-            else (match.opponent_user_id, match.host_user_id)
-        )
+    host_best = min(by_user_lines[match.host_user_id])
+    opp_best = min(by_user_lines[match.opponent_user_id])
+    if host_best == opp_best:
+        # Mathematically only reachable when a placement is shared
+        # between the teams, which the dedupe check upstream rejects.
+        # Keep the guard so we never silently pick the wrong winner.
+        raise DraftError("two teams share the best placement")
+    winner_id, loser_id = (
+        (match.host_user_id, match.opponent_user_id)
+        if host_best < opp_best
+        else (match.opponent_user_id, match.host_user_id)
+    )
 
     for line in lines:
         db.session.add(
@@ -772,7 +797,9 @@ def _apply_result_decision(
 
     winner_rating = current_rating(winner_id, match.season_id)
     loser_rating = current_rating(loser_id, match.season_id)
-    multiplier = _k_multiplier(host_score, opp_score, match.umas_per_player)
+    winner_score = host_score if winner_id == match.host_user_id else opp_score
+    loser_score = opp_score if winner_id == match.host_user_id else host_score
+    multiplier = _k_multiplier(winner_score, loser_score, match.umas_per_player)
     effective_k = max(1, int(round(DEFAULT_K * multiplier)))
     winner_change, loser_change = apply_match(
         winner_rating, loser_rating, outcome_a=1.0, k=effective_k

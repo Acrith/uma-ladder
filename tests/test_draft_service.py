@@ -560,10 +560,39 @@ def test_2v2_split_placements_mid_margin(app: Flask) -> None:
         assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 16
 
 
-def test_2v2_tied_sums_tiebreak_on_best_individual(app: Flask) -> None:
-    """Host (1,4) vs opp (2,3) — sums tied at 5. Tiebreak: host has
-    placement 1 → host wins. Margin 0 → K-multiplier 0.5 →
-    effective K=16 → ±8 swing."""
+def test_2v2_winner_is_best_individual_with_minimal_swing_on_scrap(app: Flask) -> None:
+    """PR-I4 final contract: best individual decides the winner;
+    SIGNED team-sum margin (loser_sum - winner_sum) drives the
+    K-multiplier.
+
+    Host (1,8) vs opp (2,3) — host wins (has #1) but host_sum=9 is
+    worse than opp_sum=5. Signed margin = 5 - 9 = -4. Multiplier
+    floor at 0.1 → effective K=3 → ±2 swing. The scrap-win case the
+    user wanted to be near-zero ELO."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
+        _drive_to_results_phase(m_id, host, opp)
+        m = draft_service.submit_results(
+            m_id,
+            [_line(host, 1), _line(host, 8), _line(opp, 2), _line(opp, 3)],
+            confirmed_by_user_id=host,
+        )
+        assert m.winner_user_id == host
+        # Floor multiplier produces minimal swing — exactly the
+        # "barely moved the needle" outcome for a debuffer-carry win.
+        host_change = draft_service.current_rating(host, s.id) - DEFAULT_RATING
+        opp_change = draft_service.current_rating(opp, s.id) - DEFAULT_RATING
+        assert 0 < host_change <= 4
+        assert -4 <= opp_change < 0
+
+
+def test_2v2_tied_sums_still_decided_by_best_individual(app: Flask) -> None:
+    """Host (1,4) vs opp (2,3) — sums tied at 5. Best individual:
+    host has 1 → host wins. Margin 0 → K-multiplier 0.5 →
+    effective K=16 → ±8 swing (the near-coin-flip case)."""
     with app.app_context():
         s = _season()
         host = _user("alice")
@@ -601,10 +630,11 @@ def test_3v3_max_margin_sweep(app: Flask) -> None:
         assert draft_service.current_rating(opp, s.id) == DEFAULT_RATING - 24
 
 
-def test_sum_winner_overrides_old_best_placement_logic(app: Flask) -> None:
-    """Pre-PR-I2 the player with the #1 finisher always won. Now sum
-    decides — host (1,6) loses to opp (2,3) because team scores are
-    7 vs 5 even though host has the single best uma."""
+def test_winner_is_best_individual_with_signed_magnitude(app: Flask) -> None:
+    """Host (1,6) vs opp (2,3) — host wins (has #1). Signed margin
+    (loser-winner) = 5 - 7 = -2 of max +4. Multiplier 0 capped to
+    floor 0.1 → effective K=3 → ±2 swing. Compare to the symmetric
+    abs-margin formula (now removed) which would have given ±16."""
     with app.app_context():
         s = _season()
         host = _user("alice")
@@ -616,8 +646,47 @@ def test_sum_winner_overrides_old_best_placement_logic(app: Flask) -> None:
             [_line(host, 1), _line(host, 6), _line(opp, 2), _line(opp, 3)],
             confirmed_by_user_id=host,
         )
-        assert m.winner_user_id == opp
-        assert m.loser_user_id == host
+        assert m.winner_user_id == host
+        host_change = draft_service.current_rating(host, s.id) - DEFAULT_RATING
+        opp_change = draft_service.current_rating(opp, s.id) - DEFAULT_RATING
+        # Signed-margin scrap win: small but non-zero swing.
+        assert 0 < host_change <= 4
+        assert -4 <= opp_change < 0
+
+
+def test_3v3_scrap_win_with_carry_uma_nets_minimal_elo(app: Flask) -> None:
+    """The user's headline 3v3 case: host (1,5,6) vs opp (2,3,4).
+    Host wins because they have #1, but their other two umas placed
+    last among the player set. Host sum=12, opp sum=9. Signed
+    margin = 9 - 12 = -3 of max +9 → multiplier 0.5 - 1/3 ≈ 0.17
+    → effective K≈5 → ±3 swing.
+
+    Caters to debuffer-style team comps where one carry uma wins
+    while teammates enable that win without placing high — should
+    not net the same ELO as a clean sweep."""
+    with app.app_context():
+        s = _season()
+        host = _user("alice")
+        opp = _user("bob")
+        m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=3)
+        _drive_to_results_phase(m_id, host, opp)
+        m = draft_service.submit_results(
+            m_id,
+            [
+                _line(host, 1), _line(host, 5), _line(host, 6),
+                _line(opp, 2),  _line(opp, 3),  _line(opp, 4),
+            ],
+            confirmed_by_user_id=host,
+        )
+        assert m.winner_user_id == host
+        host_change = draft_service.current_rating(host, s.id) - DEFAULT_RATING
+        opp_change = draft_service.current_rating(opp, s.id) - DEFAULT_RATING
+        # Multiplier ~0.17, K~5, delta = round(5*0.5) = 2 or 3.
+        assert 1 <= host_change <= 5
+        assert -5 <= opp_change <= -1
+        # And critically: notably smaller than a 3v3 sweep, which
+        # would give ±24 (mult 1.5, K=48).
+        assert host_change < 24
 
 
 # ---------- PR-I4: validate_completeness + edit_results ----------
@@ -663,10 +732,12 @@ def test_validate_completeness_clean_2v2_returns_empty(app: Flask) -> None:
 
 
 def test_edit_results_replaces_results_and_recomputes_elo(app: Flask) -> None:
-    """Headline regression: a match was submitted with wrong
-    placements that gave the wrong winner. Admin edits → new lines
-    win → match's winner flips, ELO row count is unchanged (one per
-    side), the rating sum reflects the new state."""
+    """Admin recovery for a botched submission: the OCR review may
+    have mis-assigned a row (e.g. a host uma got marked as opp's),
+    which changes who has the #1 finisher and therefore who wins.
+    Admin edits → new line set → winner flips correctly, ELO is
+    recomputed against the *current* rating, exactly two change
+    rows persist (the old ones were wiped)."""
     with app.app_context():
         s = _season()
         host = _user("alice")
@@ -674,22 +745,22 @@ def test_edit_results_replaces_results_and_recomputes_elo(app: Flask) -> None:
         m_id = _match_with_two(host, opp, season_id=s.id, umas_per_player=2)
         _drive_to_results_phase(m_id, host, opp)
 
-        # Original (wrong) submission: 3 lines, opp accidentally wins
-        # because host has fewer placements than opp.
+        # Original (wrong) submission: rows mis-attributed so opp
+        # ends up with the #1 finisher → opp wins.
         draft_service.submit_results(
             m_id,
             [
-                draft_service.DraftResultLine(user_id=host, placement=1),
-                draft_service.DraftResultLine(user_id=host, placement=4),
-                draft_service.DraftResultLine(user_id=opp,  placement=2),
+                draft_service.DraftResultLine(user_id=opp,  placement=1),
+                draft_service.DraftResultLine(user_id=opp,  placement=4),
+                draft_service.DraftResultLine(user_id=host, placement=2),
+                draft_service.DraftResultLine(user_id=host, placement=3),
             ],
             confirmed_by_user_id=host,
         )
         match = draft_service.get_match(m_id)
-        # Sums: host 1+4=5, opp 2 → opp wins (lower).
-        assert match.winner_user_id == opp
+        assert match.winner_user_id == opp  # opp has #1, opp wins.
 
-        # Admin corrects: full 2v2 with proper assignments.
+        # Admin corrects the row attributions: host actually had #1.
         draft_service.edit_results(
             m_id,
             [
@@ -704,14 +775,11 @@ def test_edit_results_replaces_results_and_recomputes_elo(app: Flask) -> None:
         assert match.winner_user_id == host
         assert match.status == DraftMatchStatus.COMPLETED
 
-        # Exactly two ELO change rows for the match (the old ones
-        # were wiped). And four result rows (2 per player).
         results = draft_service.list_results_for_match(m_id)
         elo = draft_service.list_elo_changes_for_match(m_id)
         assert len(results) == 4
         assert len(elo) == 2
 
-        # Host got positive delta on the corrected match, opp negative.
         host_delta = next(c.delta for c in elo if c.user_id == host)
         opp_delta = next(c.delta for c in elo if c.user_id == opp)
         assert host_delta > 0
