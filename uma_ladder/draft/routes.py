@@ -423,6 +423,36 @@ def submit_results(match_id: int) -> object:
 # ---- OCR-driven results entry (PR-I1) ----
 
 
+def _suggest_assignment(
+    row: dict, host_username: str | None, opp_username: str | None
+) -> str:
+    """Given a parsed OCR row, decide whether the assign dropdown
+    should default to 'host', 'opp', or 'skip'. Matches on the
+    extracted `player_name` field; falls back to scanning both the
+    cleaned `uma_name` and the unparsed `raw_uma_name` for a
+    substring match (case-insensitive). The dual scan covers cases
+    where structured extraction stripped the username out of
+    uma_name into player_name (clean path) AND cases where
+    extraction failed and the username only survives in the raw
+    concat."""
+    pname = (row.get("player_name") or "").strip().lower()
+    fallback = " ".join(
+        s.lower() for s in (
+            row.get("uma_name") or "",
+            row.get("raw_uma_name") or "",
+        ) if s
+    )
+    for label, username in (("host", host_username), ("opp", opp_username)):
+        if not username:
+            continue
+        u = username.lower()
+        if pname == u:
+            return label
+        if u and u in fallback:
+            return label
+    return "skip"
+
+
 def _user_can_submit_results(match) -> bool:
     """Anyone in the match (host or opponent) plus organizer+ may
     upload results screenshots. Same audience that can submit them
@@ -438,8 +468,14 @@ def _user_can_submit_results(match) -> bool:
 @login_required
 def upload_result_screenshot(match_id: int) -> object:
     """Step 1 of OCR-driven results: upload, parse, redirect to
-    review. The screen is the standard 9-row Uma Musume result
-    summary — bots fill empty seats and are dismissed in step 2."""
+    review.
+
+    Accepts one OR multiple screenshots in a single submit. When the
+    result screen scrolls past 9 entrants (rare on draft, common on
+    larger official-style fields), the user can pick all the
+    screenshots in one go and we merge the parsed rows by placement
+    (highest-confidence wins on collisions).
+    """
     try:
         match = draft_service.get_match(match_id)
     except draft_service.DraftNotFoundError:
@@ -452,19 +488,62 @@ def upload_result_screenshot(match_id: int) -> object:
             for err in errs:
                 flash(err)
         return redirect(url_for("draft.detail", match_id=match_id))
-    try:
-        image = ocr_service.save_uploaded_image(
-            form.image.data, uploader_user_id=current_user.id
-        )
-    except ocr_service.OcrError as exc:
-        flash(str(exc))
+
+    files = [f for f in request.files.getlist("image") if f and f.filename]
+    if not files:
+        flash("Pick at least one screenshot.")
         return redirect(url_for("draft.detail", match_id=match_id))
-    attempt = ocr_service.run_parse(image)
+
+    attempts = []
+    for f in files:
+        try:
+            image = ocr_service.save_uploaded_image(
+                f, uploader_user_id=current_user.id
+            )
+        except ocr_service.OcrError as exc:
+            flash(str(exc))
+            return redirect(url_for("draft.detail", match_id=match_id))
+        attempts.append(ocr_service.run_parse(image))
+
+    # Single screenshot: keep the original behaviour — the attempt's
+    # parsed rows already drive the review page.
+    if len(attempts) == 1:
+        return redirect(
+            url_for(
+                "draft.results_from_ocr",
+                match_id=match_id,
+                attempt_id=attempts[0].id,
+            )
+        )
+
+    # Multi-screenshot: merge parsed rows into the FIRST attempt's
+    # parsed_json so the review URL is unchanged. Dedupe by placement
+    # (highest confidence wins); rows without a placement get
+    # concatenated since they're informational only.
+    by_placement: dict[int, dict] = {}
+    unplaced: list[dict] = []
+    for att in attempts:
+        for row in (att.parsed_json or {}).get("rows", []) or []:
+            p = row.get("placement")
+            if p is None:
+                unplaced.append(row)
+                continue
+            existing = by_placement.get(p)
+            if existing is None or (
+                row.get("confidence", 0) > existing.get("confidence", 0)
+            ):
+                by_placement[p] = row
+    merged_rows = sorted(by_placement.values(), key=lambda r: r["placement"])
+    merged_rows.extend(unplaced)
+    primary = attempts[0]
+    primary.parsed_json = dict(primary.parsed_json or {})
+    primary.parsed_json["rows"] = merged_rows
+    db.session.commit()
     return redirect(
         url_for(
             "draft.results_from_ocr",
             match_id=match_id,
-            attempt_id=attempt.id,
+            attempt_id=primary.id,
         )
     )
 
@@ -581,6 +660,12 @@ def results_from_ocr(match_id: int, attempt_id: int) -> object:
         flash("Results saved.")
         return redirect(url_for("draft.detail", match_id=match_id))
 
+    host_username = match.host.username if match.host else None
+    opp_username = match.opponent.username if match.opponent else None
+    suggested_assignments = {
+        idx: _suggest_assignment(row, host_username, opp_username)
+        for idx, row in zip(placement_row_indices, placement_rows, strict=True)
+    }
     return render_template(
         "draft/results_from_ocr.html",
         match=match,
@@ -589,6 +674,7 @@ def results_from_ocr(match_id: int, attempt_id: int) -> object:
         placement_row_indices=placement_row_indices,
         other_rows=other_rows,
         other_row_indices=other_row_indices,
+        suggested_assignments=suggested_assignments,
         csrf_form=CsrfOnlyForm(),
     )
 

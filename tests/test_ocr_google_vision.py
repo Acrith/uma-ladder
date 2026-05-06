@@ -415,16 +415,16 @@ def test_placement_screen_parse_unchanged_by_stat_extraction() -> None:
 def test_orphan_lines_after_placement_are_absorbed_into_uma_name() -> None:
     """When a placement row is followed by non-epithet lines without
     a placement, those lines get absorbed into the placement row's
-    uma_name. Trailing lines starting with a skill rank ("SS", "S+",
-    "A+"...) are NOT absorbed — those are the next entrant's epithet
-    intro, handled by separate epithet routing."""
+    raw text. The structured-extraction pass (PR-I3) then peels a
+    clean `uma_name` out of that raw text; the full concat is
+    preserved as `raw_uma_name`."""
     ann = _annotation(
         [
-            # Player 1: placement + uma, then player-info line, then
-            # a generic descriptor — no skill rank prefix.
+            # Player 1 — placement row, then the player line below.
+            # Matches the real game UI ordering (player segment is
+            # always last in the entrant block).
             [_word("1", 10, 10), _word("Special", 50, 10), _word("Week", 130, 10)],
             [_word("Yuuta", 50, 60), _word("No.", 110, 60), _word("1", 150, 60), _word("Fav", 175, 60)],
-            [_word("Time", 50, 110), _word("3:43.8", 100, 110)],
             # Player 2 starts a new placement row.
             [_word("2", 10, 200), _word("Gold", 50, 200), _word("Ship", 130, 200)],
         ]
@@ -433,9 +433,12 @@ def test_orphan_lines_after_placement_are_absorbed_into_uma_name() -> None:
     assert len(parse.rows) == 2
     p1 = parse.rows[0]
     assert p1["placement"] == 1
-    assert "Special Week" in p1["uma_name"]
-    assert "Yuuta" in p1["uma_name"]
-    assert "Time 3:43.8" in p1["uma_name"]
+    # PR-I3: clean uma_name extracted from the merged raw text;
+    # player_name extracted from the trailing "Yuuta No. 1 Fav" line.
+    assert p1["uma_name"] == "Special Week"
+    assert p1["player_name"] == "Yuuta"
+    # Full merged concat preserved under raw_uma_name.
+    assert "Yuuta" in p1["raw_uma_name"]
     p2 = parse.rows[1]
     assert p2["placement"] == 2
     assert p2["uma_name"] == "Gold Ship"
@@ -507,9 +510,10 @@ def test_rank_column_header_does_not_pollute_uma_name() -> None:
     assert len(parse.rows) == 2
     p1 = parse.rows[0]
     assert p1["placement"] == 1
-    assert "Gold Ship" in p1["uma_name"]
-    assert "Yuuta" in p1["uma_name"]
-    assert "RANK" not in p1["uma_name"]
+    # PR-I3: clean uma_name + raw_uma_name diagnostic concat.
+    assert p1["uma_name"] == "Gold Ship"
+    assert "Yuuta" in p1["raw_uma_name"]
+    assert "RANK" not in p1["raw_uma_name"]
 
 
 def test_epithet_line_attaches_to_next_entrant_not_previous() -> None:
@@ -539,19 +543,22 @@ def test_epithet_line_attaches_to_next_entrant_not_previous() -> None:
     placement_rows = [r for r in parse.rows if r.get("placement") is not None]
     assert [r["placement"] for r in placement_rows] == [1, 2, 3]
 
-    # Entrant 1 keeps its OWN epithet, not entrant 2's.
+    # PR-I3: epithet now lives in its own structured field rather
+    # than being concatenated into uma_name. Each entrant carries
+    # its OWN epithet — that's the routing fix this test guards.
     p1 = placement_rows[0]
-    assert "Unpredictable" in p1["uma_name"]
-    assert "Victory Derived" not in p1["uma_name"]
+    assert p1["uma_name"] == "Gold Ship"
+    assert "Unpredictable" in p1["epithet"]
+    assert "Victory Derived" not in (p1.get("epithet") or "")
 
-    # Entrant 2 keeps its OWN epithet, not entrant 3's.
     p2 = placement_rows[1]
-    assert "Victory Derived" in p2["uma_name"]
-    assert "White Lightning" not in p2["uma_name"]
+    assert p2["uma_name"] == "Biwa Hayahide"
+    assert "Victory Derived" in p2["epithet"]
+    assert "White Lightning" not in (p2.get("epithet") or "")
 
-    # Entrant 3 keeps its OWN epithet (the last one).
     p3 = placement_rows[2]
-    assert "White Lightning" in p3["uma_name"]
+    assert p3["uma_name"] == "Tamamo Cross"
+    assert "White Lightning" in p3["epithet"]
 
 
 def test_tightens_punctuation_spacing() -> None:
@@ -590,8 +597,91 @@ def test_punctuation_tightening_applies_in_real_parse() -> None:
         ]
     )
     parse = _parse_annotation(ann)
-    assert "3:43.8" in parse.rows[0]["uma_name"]
-    assert "3 : 43.8" not in parse.rows[0]["uma_name"]
+    # PR-I3: time_or_lengths is now its own structured field;
+    # punctuation-tightening still applies before extraction.
+    row = parse.rows[0]
+    assert row.get("time_or_lengths") == "3:43.8"
+    assert "3 : 43.8" not in (row.get("raw_uma_name") or "")
+
+
+def test_parse_placement_row_fields_extracts_clean_uma_name() -> None:
+    """Round-trip the canonical merged row shapes back to clean
+    structured fields. The driving signal: form gets uma_name="Gold
+    Ship", not the whole "SS Unpredictable End 8 Gold Ship 3:43.8 …"
+    blob."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    # 1st place — finishing time
+    f1 = _parse_placement_row_fields(
+        "SS Unpredictable End 8 Gold Ship 3:43.8 Yuuta No. 1 Fav"
+    )
+    assert f1["uma_name"] == "Gold Ship"
+    assert f1["gate"] == 8
+    assert f1["time_or_lengths"] == "3:43.8"
+    assert f1["player_name"] == "Yuuta"
+    assert f1["fav_rank"] == 1
+    assert f1["epithet_rank"] == "SS"
+    assert f1["epithet"] == "Unpredictable End"
+
+    # 2nd place — lengths-back gap "3 1/2 L"
+    f2 = _parse_placement_row_fields(
+        "SS Victory Derived Pace 9 Biwa Hayahide 3 1/2 L Acrith No. 3 Fav"
+    )
+    assert f2["uma_name"] == "Biwa Hayahide"
+    assert f2["gate"] == 9
+    assert f2["time_or_lengths"] == "3 1/2 L"
+    assert f2["player_name"] == "Acrith"
+    assert f2["fav_rank"] == 3
+
+    # 3rd place — short gap "1/2 L"
+    f3 = _parse_placement_row_fields(
+        "S Now That's White Lightning! End 3 Tamamo Cross 1/2 L Yuuta No. 4 Fav"
+    )
+    assert f3["uma_name"] == "Tamamo Cross"
+    assert f3["gate"] == 3
+    assert f3["time_or_lengths"] == "1/2 L"
+    assert f3["player_name"] == "Yuuta"
+
+
+def test_parse_placement_row_fields_handles_partial_data() -> None:
+    """When extraction finds only some fields the rest stay absent
+    and uma_name still produces a sensible value."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    # Just an uma name, no surrounding metadata.
+    f = _parse_placement_row_fields("Special Week")
+    assert f["uma_name"] == "Special Week"
+    assert "gate" not in f
+    assert "time_or_lengths" not in f
+    assert "player_name" not in f
+
+
+def test_parse_annotation_emits_structured_fields_per_row() -> None:
+    """End-to-end: a real parse run produces rows whose `uma_name`
+    is the clean uma name and whose structured fields land alongside."""
+    ann = _annotation(
+        [
+            [_word("SS", 10, 10), _word("Unpredictable", 40, 10), _word("End", 175, 10)],
+            [_word("1st", 10, 60), _word("8", 50, 60), _word("Gold", 80, 60), _word("Ship", 130, 60), _word("3", 200, 60), _word(":", 215, 60), _word("43.8", 230, 60)],
+            [_word("Yuuta", 50, 110), _word("No.", 110, 110), _word("1", 150, 110), _word("Fav", 175, 110)],
+        ]
+    )
+    parse = _parse_annotation(ann)
+    placement_rows = [r for r in parse.rows if r.get("placement") is not None]
+    assert len(placement_rows) == 1
+    row = placement_rows[0]
+    assert row["placement"] == 1
+    assert row["uma_name"] == "Gold Ship"
+    assert row["gate"] == 8
+    assert row["time_or_lengths"] == "3:43.8"
+    assert row["player_name"] == "Yuuta"
+    assert row["fav_rank"] == 1
+    assert row["epithet_rank"] == "SS"
+    assert row["epithet"] == "Unpredictable End"
+    # The unmerged concatenation is preserved as raw_uma_name for
+    # the review form's diagnostic line.
+    assert "Gold Ship" in row["raw_uma_name"]
+    assert "Yuuta" in row["raw_uma_name"]
 
 
 def test_pre_placement_orphans_are_kept_not_dropped() -> None:

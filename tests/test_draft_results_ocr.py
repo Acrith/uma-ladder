@@ -297,6 +297,174 @@ def test_review_page_collapses_non_placement_rows_under_other(
     assert "Cygames footer" in body
 
 
+def test_review_page_auto_assigns_by_player_name(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """OCR rows that contain the host's or opponent's username get
+    pre-selected as host / opp on the assign dropdown — saves the
+    user 4-6 clicks per match. Bot rows (no username match) stay on
+    the default skip."""
+    host = make_user(username="yuuta")
+    opp = make_user(username="acrith")
+    with app.app_context():
+        match_id = _setup_match_in_room_code_phase(host["id"], opp["id"])
+        image = ocr_service.save_uploaded_image(
+            _file_storage(), uploader_user_id=host["id"]
+        )
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="mock",
+            status=OcrParseStatus.PARSED,
+            parsed_json={
+                "rows": [
+                    {
+                        "placement": 1, "uma_name": "Gold Ship",
+                        "player_name": "Yuuta", "fav_rank": 1,
+                        "raw_line": "...", "confidence": 0.9,
+                    },
+                    {
+                        "placement": 2, "uma_name": "Biwa Hayahide",
+                        "player_name": "Acrith", "fav_rank": 3,
+                        "raw_line": "...", "confidence": 0.9,
+                    },
+                    {
+                        "placement": 3, "uma_name": "Tamamo Cross",
+                        "player_name": "BotPlayer", "fav_rank": 4,
+                        "raw_line": "...", "confidence": 0.9,
+                    },
+                ]
+            },
+            confidence_json={"overall": 0.9},
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+    _login(client, "yuuta")
+    resp = client.get(f"/draft/{match_id}/results-from-ocr/{attempt_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Row 0 player "Yuuta" matches host → assign select defaults to host.
+    # Row 1 player "Acrith" matches opp → assign select defaults to opp.
+    # Row 2 player "BotPlayer" matches neither → stays on skip.
+    # Crude check via the rendered <option ... selected> attributes
+    # for each row's assign select. (Three selects with 3 distinct
+    # selected options — host, opp, skip — must all appear.)
+    assert 'value="host" selected' in body
+    assert 'value="opp" selected' in body
+    assert 'value="skip" selected' in body
+
+
+def test_review_page_falls_back_to_substring_match(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """When the parser couldn't extract player_name cleanly, the
+    auto-assign falls back to a substring scan over the merged row
+    text — so a username embedded in raw_uma_name still wins the
+    dropdown."""
+    host = make_user(username="yuuta")
+    opp = make_user(username="acrith")
+    with app.app_context():
+        match_id = _setup_match_in_room_code_phase(host["id"], opp["id"])
+        image = ocr_service.save_uploaded_image(
+            _file_storage(), uploader_user_id=host["id"]
+        )
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="mock",
+            status=OcrParseStatus.PARSED,
+            parsed_json={
+                "rows": [
+                    {
+                        "placement": 1, "uma_name": "Gold Ship",
+                        # No structured player_name; only embedded.
+                        "raw_uma_name": "8 Gold Ship 3:43.8 Yuuta No. 1 Fav",
+                        "raw_line": "...", "confidence": 0.9,
+                    },
+                ]
+            },
+            confidence_json={"overall": 0.9},
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+    _login(client, "yuuta")
+    resp = client.get(f"/draft/{match_id}/results-from-ocr/{attempt_id}")
+    body = resp.data.decode()
+    assert 'value="host" selected' in body
+
+
+def test_multi_screenshot_upload_merges_parsed_rows(
+    client: FlaskClient, app: Flask, make_user, monkeypatch
+) -> None:
+    """Multiple screenshots in one upload step → run OCR per file,
+    dedupe by placement (highest confidence wins), redirect to
+    review with the merged set."""
+    host = make_user(username="host")
+    opp = make_user(username="opp")
+    with app.app_context():
+        match_id = _setup_match_in_room_code_phase(host["id"], opp["id"])
+
+    # Stub run_parse so each upload returns a deterministic row set
+    # without hitting Vision.
+    call_count = {"n": 0}
+    real_run_parse = ocr_service.run_parse
+
+    def fake_run_parse(image, *, provider=None):
+        attempt = real_run_parse(image, provider=ocr_service.MockOcrProvider())
+        # Replace the mock provider's rows with a per-call payload so
+        # we can verify dedupe logic.
+        n = call_count["n"]
+        call_count["n"] += 1
+        if n == 0:
+            attempt.parsed_json = {
+                "rows": [
+                    {"placement": 1, "uma_name": "A", "raw_line": "1 A", "confidence": 0.5},
+                    {"placement": 2, "uma_name": "B", "raw_line": "2 B", "confidence": 0.9},
+                ]
+            }
+        else:
+            attempt.parsed_json = {
+                "rows": [
+                    # Higher confidence for placement 1 → wins dedupe.
+                    {"placement": 1, "uma_name": "A2", "raw_line": "1 A2", "confidence": 0.95},
+                    {"placement": 3, "uma_name": "C", "raw_line": "3 C", "confidence": 0.9},
+                ]
+            }
+        db.session.commit()
+        return attempt
+
+    monkeypatch.setattr(ocr_service, "run_parse", fake_run_parse)
+
+    _login(client, "host")
+    resp = client.post(
+        f"/draft/{match_id}/results-screenshot",
+        data={
+            "image": [
+                (io.BytesIO(_png()), "shot1.png"),
+                (io.BytesIO(_png()), "shot2.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    # Redirected to results-from-ocr with the FIRST attempt's id.
+    assert "/results-from-ocr/" in resp.headers["Location"]
+
+    with app.app_context():
+        # Two attempts saved (one per file); merged rows live on the
+        # first one's parsed_json.
+        attempts = db.session.query(OcrParseAttempt).order_by(OcrParseAttempt.id).all()
+        assert len(attempts) == 2
+        merged = attempts[0].parsed_json["rows"]
+        # Three deduped rows: 1 (from file 2, conf 0.95), 2 (file 1), 3 (file 2).
+        by_p = {r["placement"]: r for r in merged}
+        assert set(by_p.keys()) == {1, 2, 3}
+        assert by_p[1]["uma_name"] == "A2"  # higher-confidence row won
+        assert by_p[2]["uma_name"] == "B"
+        assert by_p[3]["uma_name"] == "C"
+
+
 def test_confirm_parse_rejects_no_rows_assigned(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

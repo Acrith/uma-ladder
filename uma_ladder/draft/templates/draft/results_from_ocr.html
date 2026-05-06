@@ -53,10 +53,13 @@
           {{ csrf_form.hidden_tag() }}
 
           {# Placement-bearing rows — these are the actual race
-             entrants. Defaults to skip; user toggles to host/opp. #}
+             entrants. Defaults derive from auto-assign suggestions
+             (matches the extracted player_name vs host/opp); fall
+             back to skip when no match. #}
           {% if placement_rows %}
             {% for row in placement_rows %}
               {% set i = placement_row_indices[loop.index0] %}
+              {% set suggested = suggested_assignments[i] %}
               <fieldset class="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
                 <div class="grid gap-2 md:grid-cols-[auto_5rem_1fr_auto] md:items-center">
                   <span class="text-xs text-slate-500">#{{ loop.index }}</span>
@@ -72,16 +75,27 @@
                          class="input-base text-sm"
                          placeholder="(Uma name)" />
                   <select name="assign_{{ i }}" class="input-base text-sm">
-                    <option value="skip" selected>— skip (bot) —</option>
-                    <option value="host">{{ match.host.username }}</option>
+                    <option value="skip" {% if suggested == 'skip' %}selected{% endif %}>— skip (bot) —</option>
+                    <option value="host" {% if suggested == 'host' %}selected{% endif %}>{{ match.host.username }}</option>
                     {% if match.opponent %}
-                      <option value="opp">{{ match.opponent.username }}</option>
+                      <option value="opp" {% if suggested == 'opp' %}selected{% endif %}>{{ match.opponent.username }}</option>
                     {% endif %}
                   </select>
                 </div>
+                {# Structured chips — informational only (the only
+                   field that goes into submit_results is uma_name).
+                   Helps the user verify the auto-assign was right. #}
+                {% if row.gate or row.time_or_lengths or row.player_name or row.epithet %}
+                  <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
+                    {% if row.gate %}<span class="rounded border border-slate-700 px-1.5 py-0.5">Gate {{ row.gate }}</span>{% endif %}
+                    {% if row.time_or_lengths %}<span class="rounded border border-slate-700 px-1.5 py-0.5">{{ row.time_or_lengths }}</span>{% endif %}
+                    {% if row.player_name %}<span class="rounded border border-slate-700 px-1.5 py-0.5">@{{ row.player_name }}{% if row.fav_rank %} · No. {{ row.fav_rank }} Fav{% endif %}</span>{% endif %}
+                    {% if row.epithet %}<span class="rounded border border-fuchsia-500/30 bg-fuchsia-500/5 px-1.5 py-0.5 text-fuchsia-200">{% if row.epithet_rank %}{{ row.epithet_rank }} {% endif %}{{ row.epithet }}</span>{% endif %}
+                  </p>
+                {% endif %}
                 {% if row.confidence is not none %}
                   <p class="mt-1 text-[10px] text-slate-600">
-                    raw: <span class="font-mono text-slate-500">{{ row.raw_line }}</span>
+                    raw: <span class="font-mono text-slate-500">{{ row.raw_uma_name or row.raw_line }}</span>
                     · confidence {{ '%.0f' % (row.confidence * 100) }}%
                   </p>
                 {% endif %}

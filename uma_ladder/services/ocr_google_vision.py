@@ -71,6 +71,87 @@ def _looks_like_epithet(text: str) -> bool:
     return bool(_EPITHET_RE.match(text.strip()))
 
 
+def _parse_placement_row_fields(text: str) -> dict[str, Any]:
+    """Decompose a merged placement row into structured fields.
+
+    Input is the post-merge `uma_name` (or `raw_line`) of a placement
+    row, e.g.
+      "SS Unpredictable End 8 Gold Ship 3:43.8 Yuuta No. 1 Fav"
+
+    Output keys (any of which may be absent if extraction fails — the
+    review form treats them all as optional and falls back to the
+    raw merged text as-is):
+
+      epithet_rank   "SS"
+      epithet        "Unpredictable End"
+      gate           8
+      uma_name       "Gold Ship"          ← the clean field used by the form
+      time_or_lengths "3:43.8" or "3 1/2 L" or "Nose"
+      player_name    "Yuuta"
+      fav_rank       1
+
+    Best-effort regex extraction, peeled from the outside in. Each
+    successfully matched chunk is stripped before the next regex
+    runs, so order matters: player → epithet → time/lengths → gate.
+    """
+    out: dict[str, Any] = {}
+    if not text:
+        return out
+    work = text.strip()
+
+    # Player + fav, e.g. "Yuuta No. 1 Fav" — anchored at the end.
+    # `\w+` (instead of `\S+`) excludes time / decimal artifacts like
+    # "3:43.8" that the greedier match used to absorb into the
+    # player_name capture group.
+    player_match = re.search(
+        r"(\w+)\s+No\.\s*(\d+)\s+Fav\s*$",
+        work,
+        re.IGNORECASE,
+    )
+    if player_match:
+        out["player_name"] = player_match.group(1).strip()
+        out["fav_rank"] = int(player_match.group(2))
+        work = work[: player_match.start()].strip()
+
+    # Epithet at the start: skill rank prefix + descriptive text up to
+    # the next "<digit> " boundary (which is the gate column).
+    epithet_match = re.match(
+        r"^(SS|S\+|S|A\+|A|B\+|B|C\+|C|D\+|D|F|G)\s+(.+?)(?=\s+\d|$)",
+        work,
+        re.IGNORECASE,
+    )
+    if epithet_match:
+        out["epithet_rank"] = epithet_match.group(1).upper()
+        out["epithet"] = epithet_match.group(2).strip()
+        work = work[epithet_match.end():].strip()
+
+    # Finishing time (1st-place row): "M:SS.S" or "MM:SS.S".
+    time_match = re.search(r"\b(\d+:\d+\.\d+)\s*$", work)
+    if time_match:
+        out["time_or_lengths"] = time_match.group(1)
+        work = work[: time_match.start()].strip()
+    else:
+        # Lengths-back gap: "3 1/2 L", "1/2 L", "Nose", "Head", "Neck"
+        # (the latter three may or may not carry an "L" suffix).
+        length_match = re.search(
+            r"(\d+(?:\s+\d+/\d+)?\s*L|\d+/\d+\s*L|(?:Nose|Head|Neck)(?:\s*L)?)\s*$",
+            work,
+            re.IGNORECASE,
+        )
+        if length_match:
+            out["time_or_lengths"] = length_match.group(1).strip()
+            work = work[: length_match.start()].strip()
+
+    # Leading gate digit, then the rest is the uma name.
+    gate_match = re.match(r"^(\d+)\s+(.+)$", work)
+    if gate_match:
+        out["gate"] = int(gate_match.group(1))
+        out["uma_name"] = gate_match.group(2).strip() or None
+    elif work:
+        out["uma_name"] = work
+    return out
+
+
 def _tighten_punctuation(text: str) -> str:
     """Glue Vision-tokenised punctuation back to the preceding word.
 
@@ -338,6 +419,23 @@ def _parse_annotation(annotation: dict[str, Any]) -> OcrParse:
         )
 
     parsed_rows = _merge_orphan_followups(parsed_rows)
+
+    # PR-I3 — peel structured fields out of each merged placement row.
+    # Stored alongside the original `uma_name` (now a "raw_uma_name"
+    # backup) so the review form has both clean inputs and the full
+    # text fallback.
+    for row in parsed_rows:
+        if row.get("placement") is None:
+            continue
+        raw_uma_name = row.get("uma_name") or ""
+        fields = _parse_placement_row_fields(raw_uma_name)
+        row["raw_uma_name"] = raw_uma_name
+        if "uma_name" in fields:
+            row["uma_name"] = fields["uma_name"]
+        for key in ("gate", "time_or_lengths", "player_name", "fav_rank",
+                    "epithet_rank", "epithet"):
+            if key in fields:
+                row[key] = fields[key]
 
     overall = (
         sum(r["confidence"] for r in parsed_rows) / len(parsed_rows)
