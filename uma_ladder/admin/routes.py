@@ -98,6 +98,36 @@ def user_detail(user_id: int) -> object:
     )
 
 
+@bp.post("/users/<int:user_id>/reset-password")
+@min_role_required(Role.ADMIN)
+def issue_password_reset(user_id: int) -> object:
+    """PR-J11 — generate a one-time reset URL for the target user.
+    Renders the user_detail page with the URL surfaced inline so
+    the admin can copy it. We do NOT redirect-after-POST here on
+    purpose: the URL contains a sensitive token, so we'd rather
+    not bounce it through a Location header / browser history."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    try:
+        url = admin_service.issue_password_reset_url(
+            actor=current_user, target=target
+        )
+    except admin_service.InsufficientRankError:
+        flash("Only superadmins may issue resets for admin+ accounts.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    return render_template(
+        "admin/user_detail.html",
+        user=target,
+        roles=[r.value for r in Role],
+        csrf_form=CsrfOnlyForm(),
+        reset_url=url,
+    )
+
+
 @bp.post("/users/<int:user_id>/role")
 @min_role_required(Role.ADMIN)
 def update_user_role(user_id: int) -> object:

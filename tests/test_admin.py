@@ -197,3 +197,152 @@ def test_admin_matches_list_filter_and_cancel(
     assert resp.status_code == 302
     with app.app_context():
         assert db.session.get(DraftMatch, match_id).status == DraftMatchStatus.CANCELLED
+
+
+# ---------- PR-J11 — admin-issued password reset ----------
+
+
+def test_issue_password_reset_url_round_trip(
+    app: Flask, make_user
+) -> None:
+    """Service generates a URL, the token in it is consumable, and
+    the audit log records the action."""
+    from uma_ladder.models import AdminAuditLog
+    from uma_ladder.services import auth as auth_service
+
+    actor = make_user(username="adm", role=Role.ADMIN)
+    target = make_user(username="bob", role=Role.USER, password="oldpass1234")
+    with app.app_context():
+        a = db.session.get(User, actor["id"])
+        t = db.session.get(User, target["id"])
+        url = admin_service.issue_password_reset_url(actor=a, target=t)
+        # URL anatomy: ends in /auth/reset/<token>.
+        assert "/auth/reset/" in url
+        token = url.rsplit("/", 1)[-1]
+        # Token consumes back to the right user.
+        loaded = auth_service.consume_reset_token(
+            app.config["SECRET_KEY"], token
+        )
+        assert loaded.id == t.id
+        # Audit row written.
+        rows = list(
+            db.session.scalars(
+                db.select(AdminAuditLog).where(
+                    AdminAuditLog.action == "password_reset_issued"
+                )
+            )
+        )
+        assert len(rows) == 1
+        assert rows[0].actor_user_id == a.id
+        assert rows[0].target_user_id == t.id
+
+
+def test_issue_password_reset_blocks_admin_resetting_admin(
+    app: Flask, make_user
+) -> None:
+    """Same rank-protection as change_user_role — a regular admin
+    can't generate a reset for another admin (or higher). Only
+    superadmins can."""
+    actor = make_user(username="adm1", role=Role.ADMIN)
+    target = make_user(username="adm2", role=Role.ADMIN)
+    with app.app_context():
+        a = db.session.get(User, actor["id"])
+        t = db.session.get(User, target["id"])
+        with pytest.raises(admin_service.InsufficientRankError):
+            admin_service.issue_password_reset_url(actor=a, target=t)
+
+
+def test_superadmin_can_reset_admin(app: Flask, make_user) -> None:
+    actor = make_user(username="root", role=Role.SUPERADMIN)
+    target = make_user(username="adm", role=Role.ADMIN)
+    with app.app_context():
+        a = db.session.get(User, actor["id"])
+        t = db.session.get(User, target["id"])
+        url = admin_service.issue_password_reset_url(actor=a, target=t)
+        assert "/auth/reset/" in url
+
+
+def test_admin_route_renders_url_inline(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The route must render the URL on the same page (no
+    redirect-after-POST) so the sensitive token doesn't end up in
+    a browser-history Location header."""
+    make_user(username="adm", role=Role.ADMIN)
+    target = make_user(username="bob", role=Role.USER)
+    _login(client, "adm")
+    resp = client.post(
+        f"/admin/users/{target['id']}/reset-password",
+        follow_redirects=False,
+    )
+    # No redirect — page is rendered directly with the URL on it.
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "/auth/reset/" in body
+    assert "Generated" in body
+    # Audit hint visible — admin sees what they're doing.
+    assert "shown only once" in body
+
+
+def test_admin_route_requires_admin_rank(
+    client: FlaskClient, make_user
+) -> None:
+    """Plain users + organizers can't issue resets."""
+    make_user(username="bob", role=Role.USER, password="x")
+    target = make_user(username="alice", role=Role.USER)
+    _login(client, "bob", password="x")
+    resp = client.post(
+        f"/admin/users/{target['id']}/reset-password",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_route_full_recovery_round_trip(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """End-to-end: admin generates URL, target visits it, sets new
+    password, logs in with the new password."""
+    import re
+
+    make_user(username="adm", role=Role.ADMIN)
+    make_user(username="bob", role=Role.USER, password="oldpass1234")
+
+    _login(client, "adm")
+    target_id = None
+    with app.app_context():
+        target_id = db.session.scalar(
+            db.select(User.id).where(User.username == "bob")
+        )
+
+    resp = client.post(
+        f"/admin/users/{target_id}/reset-password",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 200
+    # Pull the URL out of the rendered card.
+    match = re.search(r"/auth/reset/([A-Za-z0-9._\-]+)", resp.data.decode())
+    assert match, "reset URL not in admin response body"
+    token = match.group(1)
+
+    # Switch to bob's perspective: visit reset page + set new pw.
+    client.post("/auth/logout")
+    resp = client.post(
+        f"/auth/reset/{token}",
+        data={"password": "newpass5678", "confirm": "newpass5678"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    # Old password no longer works.
+    bad = client.post(
+        "/auth/login",
+        data={"username": "bob", "password": "oldpass1234"},
+    )
+    assert b"Invalid username or password" in bad.data
+    # New password works.
+    good = client.post(
+        "/auth/login",
+        data={"username": "bob", "password": "newpass5678"},
+        follow_redirects=False,
+    )
+    assert good.status_code == 302

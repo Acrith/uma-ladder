@@ -85,3 +85,48 @@ def change_user_role(*, actor: User, target: User, new_role: str) -> User:
         after={"role": new_role},
     )
     return target
+
+
+def issue_password_reset_url(*, actor: User, target: User) -> str:
+    """PR-J11 — admin-requested password reset stopgap.
+
+    Generates a one-time reset URL for `target` (signed with
+    itsdangerous, 1-hour TTL — see auth_service.issue_reset_token /
+    consume_reset_token). The URL is RETURNED to the caller for the
+    admin to share out-of-band (Discord DM, in-person, etc.); we
+    don't have email infrastructure and the auth roadmap
+    (project_auth_roadmap.md) deliberately keeps it that way until
+    multi-provider OAuth lands.
+
+    Rank protection mirrors change_user_role: a non-superadmin
+    cannot generate a reset URL for an admin+ target — otherwise
+    a compromised admin account could rotate a peer's password.
+
+    Audit-logged via the standard AdminAuditLog feed.
+    """
+    actor_rank = role_rank(actor.role)
+    target_rank = role_rank(target.role)
+    admin_threshold = role_rank(Role.ADMIN)
+    if (
+        target_rank >= admin_threshold
+        and actor_rank < role_rank(Role.SUPERADMIN)
+    ):
+        raise InsufficientRankError()
+
+    from flask import current_app, url_for
+
+    from . import admin_audit
+    from . import auth as auth_service
+
+    token = auth_service.issue_reset_token(
+        current_app.config["SECRET_KEY"], target
+    )
+    url = url_for("auth.reset_password", token=token, _external=True)
+
+    admin_audit.log_action(
+        actor_user_id=actor.id,
+        action="password_reset_issued",
+        target_user_id=target.id,
+        details="One-time reset URL generated; admin shares out-of-band.",
+    )
+    return url

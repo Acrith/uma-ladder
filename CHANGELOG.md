@@ -50,3 +50,7 @@ log for the full history.
   attempts in a row, the account is locked for 15 minutes — the
   form tells you how long to wait. A correct password at any point
   resets the counter.
+- **Admin-issued password resets.** If you forget your password,
+  reach out to an admin via Discord — they can generate a one-time
+  reset link for you to set a new password. Self-service email
+  reset will follow once Discord / Google sign-in is added.
