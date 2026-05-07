@@ -156,6 +156,10 @@ class TrainerSummary:
     friend_code: str
     trainer_name: str | None
     circle_name: str | None
+    # PR-J7 — surfaced so the profile template can link to
+    # uma.moe/circles/<circle_id>. None when the trainer isn't in
+    # a club. Upstream key is `circle.circle_id`, not `circle.id`.
+    circle_id: int | None
     total_fans: int | None
     gain_7d: int | None
     gain_30d: int | None
@@ -268,6 +272,7 @@ def _summary_from_cache(row: UmaMoeCache) -> TrainerSummary | None:
         friend_code=row.friend_code,
         trainer_name=_str_or_none(trainer.get("name")),
         circle_name=_str_or_none(circle.get("name")),
+        circle_id=_int_or_none(circle.get("circle_id")),
         total_fans=_int_or_none(alltime.get("total_fans")),
         gain_7d=_int_or_none(rolling.get("gain_7d")),
         gain_30d=_int_or_none(rolling.get("gain_30d")),

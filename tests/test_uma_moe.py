@@ -58,6 +58,7 @@ def test_happy_path_returns_summary(app: Flask) -> None:
         assert summary.friend_code == fc
         assert summary.trainer_name == "TestTrainer"
         assert summary.circle_name == "TestClub"
+        assert summary.circle_id == 9999  # PR-J7 — drives uma.moe/circles/<id> link
         assert summary.total_fans == 150000000
         assert summary.gain_7d == 2000000
         assert summary.gain_30d == 8500000
@@ -190,6 +191,9 @@ def test_public_profile_renders_card_when_friend_code_set(
     assert "2,000,000" in body  # gain_7d
     assert "Global rank" in body
     assert "via uma.moe" in body
+    # PR-J7 — the club name must link to uma.moe/circles/<circle_id>
+    # so trainers can hop to the club page.
+    assert 'href="https://uma.moe/circles/9999"' in body
 
 
 def test_public_profile_links_trainer_name_to_uma_moe(
