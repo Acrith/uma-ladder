@@ -206,6 +206,25 @@ def detail(match_id: int) -> object:
         abort(404)
     bans = draft_service.list_bans(match_id)
     should_poll = _should_poll(match, bans)
+
+    # PR-J6 — uma ban is blind by design (template line ~365 even
+    # says "Pick one costume to ban — opponent can still race the
+    # same character in another outfit"). Without this filter the
+    # 5s lobby poll showed the opponent's pick to the still-deciding
+    # player as soon as it landed, so the slower player became
+    # reactive. Track bans were never blind — they pass through.
+    # Reveal happens automatically once the phase auto-advances out
+    # of uma_ban_phase into room_code_pending.
+    if match.status == DraftMatchStatus.UMA_BAN_PHASE:
+        visible_bans = [
+            b
+            for b in bans
+            if b.ban_type != DraftBanType.UMA
+            or b.user_id == current_user.id
+        ]
+    else:
+        visible_bans = bans
+
     # During the track-ban phase, prune options that would empty the pool
     # given the opponent's existing ban + cross-category dependencies.
     if match.status == DraftMatchStatus.TRACK_BAN_PHASE:
@@ -237,7 +256,11 @@ def detail(match_id: int) -> object:
         oshi_image = (
             profiles_service.resolve_oshi_image(profile) if profile else None
         )
-        player_bans = [b for b in bans if user_id is not None and b.user_id == user_id]
+        player_bans = [
+            b
+            for b in visible_bans
+            if user_id is not None and b.user_id == user_id
+        ]
         sides.append(
             {
                 "key": key,
@@ -263,7 +286,7 @@ def detail(match_id: int) -> object:
     }
     banned_outfit_ids = {
         b.uma_outfit_id
-        for b in bans
+        for b in visible_bans
         if b.ban_type == DraftBanType.UMA and b.uma_outfit_id is not None
     }
 
@@ -294,7 +317,7 @@ def detail(match_id: int) -> object:
     return render_template(
         "draft/detail.html",
         match=match,
-        bans=bans,
+        bans=visible_bans,
         sides=sides,
         room_code_form=RoomCodeForm(),
         csrf_form=CsrfOnlyForm(),

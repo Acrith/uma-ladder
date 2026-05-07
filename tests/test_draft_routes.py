@@ -617,6 +617,241 @@ def test_track_ban_panel_chip_uses_glyph_and_label(
     assert ">DC<" not in body
 
 
+# ---------- PR-J6: uma ban must be truly blind during uma_ban_phase ----------
+
+
+def _drive_to_uma_ban_phase(
+    client: FlaskClient, app: Flask, *, host: str, opp: str
+) -> int:
+    """Helper — alice creates, bob joins, both ready, both
+    track-ban, alice randomizes. Returns match_id with status
+    UMA_BAN_PHASE and no uma bans yet."""
+    _login(client, host, "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    from uma_ladder.models import DraftMatch
+
+    with app.app_context():
+        join_code = db.session.get(DraftMatch, match_id).join_code
+
+    client.post("/auth/logout")
+    _login(client, opp, "password123")
+    client.post("/draft/join", data={"join_code": join_code})
+    for username in (opp, host):
+        client.post("/auth/logout")
+        _login(client, username, "password123")
+        client.post(f"/draft/{match_id}/ready")
+    client.post("/auth/logout")
+    _login(client, host, "password123")
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "venue", "condition_key": "Tokyo"},
+    )
+    client.post("/auth/logout")
+    _login(client, opp, "password123")
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "direction", "condition_key": "Left"},
+    )
+    client.post(f"/draft/{match_id}/randomize")
+    return match_id
+
+
+def test_uma_ban_phase_hides_opponent_pick_from_view(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The 5s lobby poll must not leak the opponent's uma ban to
+    the still-deciding player. After bob bans char_c, alice's
+    detail-page render during uma_ban_phase must NOT mention the
+    banned character/outfit name OR mark its tile disabled."""
+    _season(app)
+    _add_preset(app)
+    char_a, char_b, char_c = _add_characters(app)
+    outfits = _add_outfits(app, char_a, char_b, char_c)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    match_id = _drive_to_uma_ban_phase(
+        client, app, host="alice", opp="bob"
+    )
+
+    # bob bans char_c's outfit. alice has not banned yet.
+    client.post(
+        f"/draft/{match_id}/uma-ban",
+        data={"uma_outfit_id": str(outfits[char_c])},
+    )
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+
+    # Sanity — we ARE still in the blind phase.
+    from uma_ladder.models import DraftMatch, DraftMatchStatus
+
+    with app.app_context():
+        assert (
+            db.session.get(DraftMatch, match_id).status
+            == DraftMatchStatus.UMA_BAN_PHASE
+        )
+
+    # Leak A: bob's panel must show "picking Uma ban…" — the
+    # template flips to that placeholder iff there's no
+    # uma_ban for that side in the rendered context. With the
+    # bug, alice's render of bob's panel would say "Banned"
+    # + character name instead.
+    assert "picking Uma ban…" in body, (
+        "leak A: opponent panel doesn't show the blind placeholder"
+    )
+    # Leak B: tile picker must not have a disabled radio for the
+    # opponent-banned outfit. Alice has banned NOTHING yet, so a
+    # disabled picker radio in her view can only come from a leak.
+    import re
+
+    disabled_picker_radios = re.findall(
+        r'<input\s+type="radio"\s+name="uma_outfit_id"\b[^>]*?\bdisabled\b',
+        body,
+        re.DOTALL,
+    )
+    assert disabled_picker_radios == [], (
+        f"leak B: {len(disabled_picker_radios)} picker tile(s) "
+        f"rendered as disabled in alice's view"
+    )
+
+
+def test_uma_ban_reveal_after_phase_advances(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Once both submit and the phase auto-advances to
+    room_code_pending, both bans are visible — the blind filter
+    only fires during uma_ban_phase itself, not after reveal."""
+    _season(app)
+    _add_preset(app)
+    char_a, char_b, char_c = _add_characters(app)
+    outfits = _add_outfits(app, char_a, char_b, char_c)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    match_id = _drive_to_uma_ban_phase(
+        client, app, host="alice", opp="bob"
+    )
+
+    # Both submit uma bans — bob bans C, alice bans B.
+    client.post(
+        f"/draft/{match_id}/uma-ban",
+        data={"uma_outfit_id": str(outfits[char_c])},
+    )
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(
+        f"/draft/{match_id}/uma-ban",
+        data={"uma_outfit_id": str(outfits[char_b])},
+    )
+
+    # Phase should now be past uma_ban_phase. Alice loads — both
+    # banned-uma chips should be present.
+    from uma_ladder.models import DraftMatch, DraftMatchStatus
+
+    with app.app_context():
+        match = db.session.get(DraftMatch, match_id)
+        assert match.status != DraftMatchStatus.UMA_BAN_PHASE
+
+    resp = client.get(f"/draft/{match_id}")
+    body = resp.data.decode()
+    assert "Char C" in body, "reveal: opponent ban must be visible post-phase"
+    assert "Char B" in body, "reveal: own ban must remain visible"
+
+
+def test_uma_ban_own_pick_visible_to_self_during_phase(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Self-suppression check: the blind filter must NOT hide the
+    current user's own ban from themselves. Alice bans char_b,
+    bob hasn't banned yet, alice reloads — char_b must show on
+    alice's side panel."""
+    _season(app)
+    _add_preset(app)
+    char_a, char_b, char_c = _add_characters(app)
+    outfits = _add_outfits(app, char_a, char_b, char_c)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    match_id = _drive_to_uma_ban_phase(
+        client, app, host="alice", opp="bob"
+    )
+
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(
+        f"/draft/{match_id}/uma-ban",
+        data={"uma_outfit_id": str(outfits[char_b])},
+    )
+    resp = client.get(f"/draft/{match_id}")
+    body = resp.data.decode()
+
+    # Phase still blind for bob (he hasn't banned).
+    from uma_ladder.models import DraftMatch, DraftMatchStatus
+
+    with app.app_context():
+        assert (
+            db.session.get(DraftMatch, match_id).status
+            == DraftMatchStatus.UMA_BAN_PHASE
+        )
+
+    assert "Char B" in body, "self-suppression: alice can't see her own ban"
+
+
+def test_track_ban_phase_still_shows_opponent_track_ban(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Track bans were never blind. The PR-J6 filter only fires for
+    UMA-typed bans during uma_ban_phase — make sure the implementation
+    doesn't accidentally drop opponent track-bans during the
+    track-ban phase."""
+    _season(app)
+    _add_preset(app)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    from uma_ladder.models import DraftMatch
+
+    with app.app_context():
+        join_code = db.session.get(DraftMatch, match_id).join_code
+
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post("/draft/join", data={"join_code": join_code})
+    for username in ("bob", "alice"):
+        client.post("/auth/logout")
+        _login(client, username, "password123")
+        client.post(f"/draft/{match_id}/ready")
+
+    # bob bans Tokyo. alice loads in track_ban_phase — Tokyo should
+    # be visible in bob's panel chip.
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "venue", "condition_key": "Tokyo"},
+    )
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    resp = client.get(f"/draft/{match_id}")
+    body = resp.data.decode()
+    assert "Banned · Venue" in body
+    assert "Tokyo" in body
+
+
 # ---------- PR-J3: ban forms must survive the 5s lobby poll ----------
 
 
