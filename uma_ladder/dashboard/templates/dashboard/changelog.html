@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}What's new · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="mx-auto max-w-3xl">
+    {% call card(class="p-6") %}
+      {# Tailwind doesn't style raw `<h1>`, `<ul>`, etc. in markdown
+         output; the `prose` classes from a typography plugin would
+         normally do this work but we're not pulling that in for one
+         page. Inline scoped styles below give the markdown HTML a
+         consistent look without leaking into the rest of the app. #}
+      <article class="changelog-body text-sm text-slate-300">
+        {{ body }}
+      </article>
+    {% endcall %}
+  </div>
+
+  <style>
+    .changelog-body h1 {
+      font-size: 1.75rem;
+      line-height: 1.2;
+      font-weight: 600;
+      color: rgb(241 245 249);
+      margin-bottom: 0.75rem;
+    }
+    .changelog-body h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: rgb(241 245 249);
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgb(30 41 59);
+    }
+    .changelog-body h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: rgb(165 243 252);
+      margin-top: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .changelog-body p {
+      margin-bottom: 0.75rem;
+    }
+    .changelog-body ul {
+      list-style: disc;
+      padding-left: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .changelog-body ul li {
+      margin-bottom: 0.5rem;
+    }
+    .changelog-body strong {
+      color: rgb(226 232 240);
+      font-weight: 600;
+    }
+    .changelog-body code {
+      background: rgb(15 23 42 / 0.6);
+      border: 1px solid rgb(30 41 59);
+      padding: 0 0.25rem;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+      color: rgb(165 243 252);
+    }
+    .changelog-body a {
+      color: rgb(103 232 249);
+    }
+    .changelog-body a:hover {
+      color: rgb(165 243 252);
+    }
+  </style>
+{% endblock %}

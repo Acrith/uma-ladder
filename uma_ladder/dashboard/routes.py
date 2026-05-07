@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template
+from pathlib import Path
+
+import markdown
+from flask import Blueprint, abort, current_app, render_template
 from flask_login import current_user
+from markupsafe import Markup
 
 from ..services import cm as cm_service
 from ..services import draft as draft_service
@@ -52,6 +56,27 @@ def index() -> object:
         pending_invites=pending_invites,
         csrf_form=_CsrfOnlyForm(),
     )
+
+
+@bp.get("/changelog")
+def changelog() -> object:
+    """Render the curated CHANGELOG.md as HTML — user-visible
+    "what's new" surface (PR-J9). Markdown source lives at the
+    repo root so the maintainer edits one file and both this page
+    + GitHub render it. We pre-trust the file (it ships in the
+    repo, not user input) so wrap the rendered HTML in `Markup`
+    for the template; without this Jinja's autoescape would emit
+    raw `<` / `>` literally.
+
+    404 if the file is missing — better than rendering an empty
+    shell that looks broken to a user clicking the navbar link."""
+    repo_root = Path(current_app.root_path).parent
+    src = repo_root / "CHANGELOG.md"
+    if not src.exists():
+        abort(404)
+    md = src.read_text(encoding="utf-8")
+    html = markdown.markdown(md, extensions=["extra", "sane_lists"])
+    return render_template("dashboard/changelog.html", body=Markup(html))
 
 
 @bp.get("/_partials/official-top5")
