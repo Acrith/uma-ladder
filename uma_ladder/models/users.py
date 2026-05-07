@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from flask_login import UserMixin
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -47,6 +47,16 @@ class User(UserMixin, db.Model):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default=Role.USER)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # PR-J10 — login lockout. Counter increments on every failed
+    # attempt against this user; once it reaches MAX_FAILED_LOGINS,
+    # the account is locked until LOCKOUT_DURATION elapses since
+    # `failed_login_at`. A successful login zeroes both fields.
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    failed_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

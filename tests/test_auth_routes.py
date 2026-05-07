@@ -58,6 +58,37 @@ def test_login_logout_cycle(client: FlaskClient) -> None:
     assert good.status_code == 302
 
 
+# ---------- PR-J10 — login lockout shown in the form ----------
+
+
+def test_login_form_surfaces_cooldown_message(
+    client: FlaskClient,
+) -> None:
+    """After MAX_FAILED_LOGINS wrong attempts, the form must show a
+    "try again in N minute(s)" message — the user otherwise sees
+    the same generic InvalidCredentials error and has no idea why
+    correct credentials suddenly stop working."""
+    from uma_ladder.services import auth as auth_service
+
+    _register(client, "alice", "password123")
+    client.post("/auth/logout")
+
+    for _ in range(auth_service.MAX_FAILED_LOGINS):
+        client.post(
+            "/auth/login",
+            data={"username": "alice", "password": "WRONG"},
+        )
+
+    resp = client.post(
+        "/auth/login",
+        data={"username": "alice", "password": "password123"},
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode().lower()
+    assert "too many failed attempts" in body
+    assert "minute" in body
+
+
 # ---------- PR-J8: open-redirect gate on /auth/login?next= ----------
 
 

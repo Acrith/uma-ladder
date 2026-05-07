@@ -48,6 +48,15 @@ def login() -> object:
             user = auth_service.authenticate(
                 form.username.data or "", form.password.data or ""
             )
+        except auth_service.RateLimitedError as exc:
+            # PR-J10 — surface a specific cooldown message rather
+            # than the generic "invalid". Usernames are public via
+            # /profiles already, so disclosing "this account is
+            # locked" doesn't leak new information.
+            mins = max(1, (exc.retry_after_seconds + 59) // 60)
+            form.password.errors.append(
+                f"Too many failed attempts. Try again in {mins} minute(s)."
+            )
         except auth_service.InvalidCredentialsError:
             form.password.errors.append("Invalid username or password.")
         except auth_service.InactiveUserError:

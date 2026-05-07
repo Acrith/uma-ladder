@@ -46,3 +46,7 @@ log for the full history.
   reject external URLs (closes a phishing vector). Request body
   size is capped at the WSGI layer. Production cookies are marked
   Secure / HttpOnly / SameSite=Lax.
+- **Login lockout against brute force.** After 10 wrong-password
+  attempts in a row, the account is locked for 15 minutes — the
+  form tells you how long to wait. A correct password at any point
+  resets the counter.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import select
@@ -27,6 +28,79 @@ class InactiveUserError(AuthError):
 
 class InvalidResetTokenError(AuthError):
     pass
+
+
+class RateLimitedError(AuthError):
+    """Raised when an account has hit MAX_FAILED_LOGINS within the
+    lockout window. Carries `retry_after_seconds` so the route can
+    surface a useful "try again in N min" message without leaking
+    whether the username actually exists (usernames are public on
+    /profiles anyway, so this isn't a real enumeration concern —
+    just keeping the failure shape uniform)."""
+
+    def __init__(self, *, retry_after_seconds: int) -> None:
+        super().__init__(
+            f"too many failed attempts; retry after {retry_after_seconds}s"
+        )
+        self.retry_after_seconds = retry_after_seconds
+
+
+# PR-J10 — login lockout tuning. 10 failures in a row triggers a
+# 15-minute lockout. The window is generous enough that a fat-
+# fingering user clears it by waiting briefly, but tight enough
+# that an online brute-force tops out at ~960 guesses/day.
+MAX_FAILED_LOGINS = 10
+LOCKOUT_DURATION = timedelta(minutes=15)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def _ensure_aware(dt: datetime) -> datetime:
+    """SQLite drops tzinfo on read — coerce naive datetimes back to
+    UTC so timedelta arithmetic doesn't raise."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+def _is_locked_out(user: User) -> bool:
+    if user.failed_login_count < MAX_FAILED_LOGINS:
+        return False
+    if user.failed_login_at is None:
+        return False
+    elapsed = _utcnow() - _ensure_aware(user.failed_login_at)
+    return elapsed < LOCKOUT_DURATION
+
+
+def _retry_after_seconds(user: User) -> int:
+    if user.failed_login_at is None:
+        return 0
+    elapsed = _utcnow() - _ensure_aware(user.failed_login_at)
+    return max(1, int((LOCKOUT_DURATION - elapsed).total_seconds()))
+
+
+def _record_failed_login(user: User) -> None:
+    """Increment counter; if the previous lockout window has fully
+    elapsed since the last failure, treat this attempt as a fresh
+    start (count goes to 1) so the lockout doesn't latch forever."""
+    now = _utcnow()
+    elapsed = (
+        now - _ensure_aware(user.failed_login_at)
+        if user.failed_login_at
+        else None
+    )
+    if elapsed is not None and elapsed >= LOCKOUT_DURATION:
+        user.failed_login_count = 1
+    else:
+        user.failed_login_count += 1
+    user.failed_login_at = now
+    db.session.commit()
+
+
+def _reset_failed_logins(user: User) -> None:
+    user.failed_login_count = 0
+    user.failed_login_at = None
+    db.session.commit()
 
 
 @dataclass(frozen=True)
@@ -63,10 +137,25 @@ def register_user(req: RegistrationRequest) -> User:
 
 def authenticate(username: str, password: str) -> User:
     user = find_user_by_username(username)
+
+    # PR-J10 — lockout check fires before password verification so
+    # a locked account can't be probed with new guesses every
+    # request. Triggered after MAX_FAILED_LOGINS consecutive
+    # failures within LOCKOUT_DURATION; auto-clears on a successful
+    # login or once the window naturally elapses.
+    if user is not None and _is_locked_out(user):
+        raise RateLimitedError(
+            retry_after_seconds=_retry_after_seconds(user)
+        )
+
     if user is None or not user.check_password(password):
+        if user is not None:
+            _record_failed_login(user)
         raise InvalidCredentialsError()
     if not user.is_active:
         raise InactiveUserError()
+    if user.failed_login_count or user.failed_login_at is not None:
+        _reset_failed_logins(user)
     return user
 
 
