@@ -339,6 +339,107 @@ def test_uma_ban_tile_picker_marks_oshi_and_banned(
     assert "Banned" in body
 
 
+# ---------- PR-J3: ban forms must survive the 5s lobby poll ----------
+
+
+def test_track_ban_form_marked_hx_preserve(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Regression — second-to-ban users were losing their selections
+    every 5s because the lobby poll did an outerHTML swap on the
+    whole detail body, re-rendering the form from scratch. The fix
+    is `hx-preserve="true"` on the in-progress form so htmx keeps the
+    live DOM (and the user's mid-edit state) across swaps. If a
+    refactor drops the attribute, this test fails."""
+    _season(app)
+    _add_preset(app)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    from uma_ladder.models import DraftMatch
+
+    with app.app_context():
+        join_code = db.session.get(DraftMatch, match_id).join_code
+
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post("/draft/join", data={"join_code": join_code})
+    for username in ("bob", "alice"):
+        client.post("/auth/logout")
+        _login(client, username, "password123")
+        client.post(f"/draft/{match_id}/ready")
+
+    # alice is logged in and in track-ban phase. Her form must be
+    # tagged hx-preserve so the 5s poll doesn't wipe her input.
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert 'id="draft-track-ban-form"' in body
+    assert 'hx-preserve="true"' in body
+
+
+def test_uma_ban_form_marked_hx_preserve(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Same regression as track-ban, blind-uma-ban variant."""
+    _season(app)
+    _add_preset(app)
+    char_a, char_b, char_c = _add_characters(app)
+    _add_outfits(app, char_a, char_b, char_c)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    from uma_ladder.models import DraftMatch
+
+    with app.app_context():
+        join_code = db.session.get(DraftMatch, match_id).join_code
+
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post("/draft/join", data={"join_code": join_code})
+    for username in ("bob", "alice"):
+        client.post("/auth/logout")
+        _login(client, username, "password123")
+        client.post(f"/draft/{match_id}/ready")
+    # alice -> track ban, bob -> track ban, alice randomize.
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "venue", "condition_key": "Tokyo"},
+    )
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "direction", "condition_key": "Left"},
+    )
+    client.post(f"/draft/{match_id}/randomize")
+
+    # bob is in uma_ban_phase — his form must carry hx-preserve.
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert 'id="draft-uma-ban-form"' in body
+    assert 'hx-preserve="true"' in body
+
+
 # ---------- PR-I6: room-code phase polish ----------
 
 

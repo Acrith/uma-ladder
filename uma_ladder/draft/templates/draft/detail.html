@@ -307,7 +307,17 @@
             <p class="label-eyebrow">Phase</p>
             <h2 class="mt-1 text-lg font-semibold text-slate-100">Track ban</h2>
             {% if not my_track_ban %}
-              <form method="post" action="{{ url_for('draft.track_ban', match_id=match.id) }}" class="mt-3 grid gap-3 md:grid-cols-2">
+              {# hx-preserve keeps this form's live DOM (and the
+                 user's in-progress selections) across the 5s poll
+                 swap. Once the user submits their ban, the
+                 {% if not my_track_ban %} branch stops rendering
+                 server-side so the preserved node naturally falls
+                 out on the next poll. #}
+              <form id="draft-track-ban-form"
+                    hx-preserve="true"
+                    method="post"
+                    action="{{ url_for('draft.track_ban', match_id=match.id) }}"
+                    class="mt-3 grid gap-3 md:grid-cols-2">
                 {{ csrf_form.hidden_tag() }}
                 <div>
                   <label class="text-sm text-slate-300">Ban type</label>
@@ -364,7 +374,16 @@
                 <span class="text-fuchsia-300">Fuchsia ring</span> = someone's Oshi.
                 Grayed = already banned.
               </p>
-              <form method="post" action="{{ url_for('draft.uma_ban', match_id=match.id) }}" class="mt-3 space-y-3">
+              {# hx-preserve — see the track-ban form above for why.
+                 Uma ban is blind, so opponent's pick must not appear
+                 in our tile state during the phase; the preserved
+                 form keeps the user's tile selection AND the search
+                 box content across the 5s poll. #}
+              <form id="draft-uma-ban-form"
+                    hx-preserve="true"
+                    method="post"
+                    action="{{ url_for('draft.uma_ban', match_id=match.id) }}"
+                    class="mt-3 space-y-3">
                 {{ csrf_form.hidden_tag() }}
 
                 <input type="search"
