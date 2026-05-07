@@ -14,6 +14,13 @@ class BaseConfig:
     WTF_CSRF_ENABLED = True
     TESTING = False
     DEBUG = False
+    # PR-J8 — cap request body at the WSGI layer. The OCR upload
+    # path also enforces 8 MiB per-file post-save (services/ocr.py),
+    # but without this Werkzeug streams the entire body to disk
+    # first; an unbounded POST is a disk-fill DoS. 16 MiB leaves
+    # headroom for legitimate multi-screenshot batches under the
+    # 8 MiB-per-file ceiling.
+    MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
     DISCORD_WEBHOOK_RACE_REGISTRATION_URL: str | None = None
     DISCORD_WEBHOOK_OFFICIAL_RESULTS_URL: str | None = None
     DISCORD_WEBHOOK_DRAFT_RESULTS_URL: str | None = None
@@ -68,6 +75,17 @@ class TestConfig(BaseConfig):
 
 
 class ProdConfig(BaseConfig):
+    # PR-J8 — cookie hardening. Fly serves over HTTPS-only, so
+    # SECURE is safe to require. SAMESITE=Lax keeps top-level
+    # navigations (post-login redirects, OAuth-style links) working
+    # while blocking cross-site POSTs from carrying the cookie.
+    SESSION_COOKIE_SECURE: bool = True
+    SESSION_COOKIE_HTTPONLY: bool = True
+    SESSION_COOKIE_SAMESITE: str = "Lax"
+    REMEMBER_COOKIE_SECURE: bool = True
+    REMEMBER_COOKIE_HTTPONLY: bool = True
+    REMEMBER_COOKIE_SAMESITE: str = "Lax"
+
     @classmethod
     def _load(cls) -> type[BaseConfig]:
         secret = os.environ.get("SECRET_KEY")

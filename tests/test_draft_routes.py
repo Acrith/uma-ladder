@@ -617,6 +617,51 @@ def test_track_ban_panel_chip_uses_glyph_and_label(
     assert ">DC<" not in body
 
 
+# ---------- PR-J8: request.referrer open-redirect gate ----------
+
+
+def test_decline_invite_rejects_external_referrer(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Malicious Referer header must not bounce the post-decline
+    redirect to an attacker domain. The route falls back to
+    /draft/ when the referrer fails the same-origin check."""
+    _season(app)
+    _add_preset(app)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(
+        f"/draft/{match_id}/invite",
+        data={"invitee_username": "bob"},
+    )
+
+    from uma_ladder.models import DraftMatchInvite
+
+    with app.app_context():
+        invite_id = db.session.query(DraftMatchInvite).first().id
+
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    resp = client.post(
+        f"/draft/invites/{invite_id}/decline",
+        headers={"Referer": "https://evil.com/phish"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    location = resp.headers["Location"]
+    assert "evil.com" not in location
+    # Falls back to the draft index.
+    assert location.endswith("/draft/")
+
+
 # ---------- PR-J6: uma ban must be truly blind during uma_ban_phase ----------
 
 

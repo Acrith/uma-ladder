@@ -21,6 +21,7 @@ from ..services import cm as cm_service
 from ..services import draft as draft_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
+from ..services.redirects import safe_redirect_target
 
 bp = Blueprint("admin", __name__, template_folder="templates")
 
@@ -178,7 +179,11 @@ def cancel_match(match_id: int) -> object:
         abort(404)
     except draft_service.DraftError as exc:
         flash(str(exc))
-    next_url = request.form.get("next") or url_for("admin.matches_list")
+    # PR-J8 — same open-redirect gate as /auth/login.
+    next_url = safe_redirect_target(
+        request.form.get("next"),
+        default=url_for("admin.matches_list"),
+    )
     return redirect(next_url)
 
 

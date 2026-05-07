@@ -24,6 +24,7 @@ from ..services.profiles import (
     list_outfits_for_character,
 )
 from ..services.randomizer import RandomizerError
+from ..services.redirects import safe_redirect_target
 from .forms import (
     CreateDraftForm,
     CsrfOnlyForm,
@@ -153,7 +154,17 @@ def decline_invite(invite_id: int) -> object:
         abort(404)
     except draft_service.InviteError as exc:
         flash(str(exc))
-    return redirect(request.referrer or url_for("draft.index"))
+    # PR-J8 — `request.referrer` is browser-supplied and acts as an
+    # open-redirect surface even though we're inside a CSRF-protected
+    # POST. Fold through the same-origin gate; pass current_host so
+    # legitimate same-origin referrers (full URLs) get accepted.
+    return redirect(
+        safe_redirect_target(
+            request.referrer,
+            default=url_for("draft.index"),
+            current_host=request.host,
+        )
+    )
 
 
 @bp.post("/invites/<int:invite_id>/cancel")
@@ -171,7 +182,16 @@ def cancel_invite(invite_id: int) -> object:
         abort(404)
     except draft_service.InviteError as exc:
         flash(str(exc))
-        return redirect(request.referrer or url_for("draft.index"))
+        # PR-J8 — referrer-based redirect goes through the same
+        # same-origin gate as decline_invite. See that route for
+        # the full explanation.
+        return redirect(
+            safe_redirect_target(
+                request.referrer,
+                default=url_for("draft.index"),
+                current_host=request.host,
+            )
+        )
     return redirect(url_for("draft.detail", match_id=invite.draft_match_id))
 
 

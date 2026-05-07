@@ -111,3 +111,25 @@ def test_no_warning_when_output_css_present(caplog, tmp_path) -> None:
     with caplog.at_level(logging.ERROR, logger="uma_ladder.test_tailwind_present"):
         _warn_if_tailwind_built_but_missing(_DummyApp())
     assert caplog.records == []
+
+
+# ---------- PR-J8 — request-size cap ----------
+
+
+def test_max_content_length_enforced_at_wsgi_layer(
+    client: FlaskClient,
+) -> None:
+    """Werkzeug must reject oversized POST bodies before any handler
+    runs, so an attacker can't DoS by streaming multi-GB junk into
+    the OCR upload route. Assert via /auth/login since the cap fires
+    at request-parse time, before per-route logic."""
+    huge = b"x" * (16 * 1024 * 1024 + 64)
+    resp = client.post(
+        "/auth/login",
+        data={"username": "alice", "password": "x", "filler": huge},
+        follow_redirects=False,
+    )
+    # Werkzeug returns 413 (Request Entity Too Large) when the body
+    # exceeds MAX_CONTENT_LENGTH; some adapters surface it as 400.
+    # Either is proof the request was rejected at parse time.
+    assert resp.status_code in (400, 413)

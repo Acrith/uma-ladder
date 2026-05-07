@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, flash, redirect, render_template, requ
 from flask_login import current_user, login_required, login_user, logout_user
 
 from ..services import auth as auth_service
+from ..services.redirects import safe_redirect_target
 from .forms import LoginForm, RegisterForm, RequestResetForm, ResetPasswordForm
 
 bp = Blueprint("auth", __name__, template_folder="templates")
@@ -53,7 +54,13 @@ def login() -> object:
             form.username.errors.append("Account is disabled.")
         else:
             login_user(user)
-            next_url = request.args.get("next") or url_for("dashboard.index")
+            # PR-J8 — open-redirect gate. `next` is attacker-controllable
+            # via crafted login URLs; only accept same-origin relative
+            # paths.
+            next_url = safe_redirect_target(
+                request.args.get("next"),
+                default=url_for("dashboard.index"),
+            )
             return redirect(next_url)
     return render_template("auth/login.html", form=form)
 

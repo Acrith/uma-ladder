@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
@@ -55,6 +56,55 @@ def test_login_logout_cycle(client: FlaskClient) -> None:
         follow_redirects=False,
     )
     assert good.status_code == 302
+
+
+# ---------- PR-J8: open-redirect gate on /auth/login?next= ----------
+
+
+def test_login_honours_safe_relative_next(client: FlaskClient) -> None:
+    """Legitimate same-origin relative `next` paths must still
+    work — that's the whole reason the param exists."""
+    _register(client)
+    client.post("/auth/logout")
+
+    resp = client.post(
+        "/auth/login?next=/draft/123",
+        data={"username": "alice", "password": "password123"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/draft/123")
+
+
+@pytest.mark.parametrize(
+    "evil_next",
+    [
+        "https://evil.com/phish",
+        "http://evil.com/phish",
+        "//evil.com/phish",
+        "/\\evil.com/phish",
+        "javascript:alert(1)",
+    ],
+)
+def test_login_rejects_external_next_target(
+    client: FlaskClient, evil_next: str
+) -> None:
+    """Crafted `next` values must not bounce a freshly-authed
+    user out of the trust boundary. Falls back to the dashboard."""
+    _register(client)
+    client.post("/auth/logout")
+
+    resp = client.post(
+        f"/auth/login?next={evil_next}",
+        data={"username": "alice", "password": "password123"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    location = resp.headers["Location"]
+    assert "evil.com" not in location
+    assert "javascript" not in location
+    # Default target is the dashboard.
+    assert location.endswith("/") or "/dashboard" in location
 
 
 def test_logout_requires_login(client: FlaskClient) -> None:
