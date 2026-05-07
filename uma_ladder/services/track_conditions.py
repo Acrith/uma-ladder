@@ -1,12 +1,22 @@
-"""Race-day condition helpers (PR-G3).
+"""Race-day condition helpers (PR-G3 + PR-J2).
 
-Three independent enums — `RaceSeason`, `Weather`, `GroundCondition` —
-attached to ChampionsMeeting (admin-set), OfficialRace (organizer-set),
-and DraftMatch (auto-rolled at preset selection time).
+Three enums — `RaceSeason`, `Weather`, `GroundCondition` — attached
+to ChampionsMeeting, OfficialRace, and DraftMatch.
 
-Game-logic constraint: **Snowy weather requires Winter season.** All
-other (season, weather) combinations are valid. Ground condition is
-independent of both.
+Game-logic constraints (per Uma Musume mechanics):
+
+1. **Snowy weather requires Winter season.** No other weather has a
+   season constraint.
+2. **Weather × Ground pairing** isn't free — the game only allows
+   specific combinations:
+
+       Sunny  → Firm or Good
+       Cloudy → Firm or Good
+       Rainy  → Soft or Heavy
+       Snowy  → Good or Soft  (and Snowy is Winter-only, see #1)
+
+Both constraints are enforced in `normalize()` and respected by
+`roll_random()`.
 """
 
 from __future__ import annotations
@@ -19,6 +29,26 @@ from ..models.enums import GroundCondition, RaceSeason, Weather
 
 class TrackConditionError(ValueError):
     pass
+
+
+# Allowed ground conditions per weather. The game UI accepts only
+# these eight combinations across all four weathers.
+_GROUND_BY_WEATHER: dict[str, frozenset[str]] = {
+    Weather.SUNNY:  frozenset({GroundCondition.FIRM, GroundCondition.GOOD}),
+    Weather.CLOUDY: frozenset({GroundCondition.FIRM, GroundCondition.GOOD}),
+    Weather.RAINY:  frozenset({GroundCondition.SOFT, GroundCondition.HEAVY}),
+    Weather.SNOWY:  frozenset({GroundCondition.GOOD, GroundCondition.SOFT}),
+}
+
+
+def is_valid_weather_ground(weather: str | None, ground: str | None) -> bool:
+    """True when the weather/ground pair is one of the eight game-
+    canonical combinations (or when either side is unset — a partial
+    form isn't a constraint violation, just incomplete)."""
+    if weather is None or ground is None:
+        return True
+    allowed = _GROUND_BY_WEATHER.get(weather)
+    return allowed is not None and ground in allowed
 
 
 def _normalize(
@@ -57,6 +87,13 @@ def normalize(
         raise TrackConditionError(
             "Snowy weather only happens in Winter races."
         )
+    # PR-J2 — game-mechanic combo check. Only fires when both
+    # fields are set; partially-filled forms still pass through.
+    if w is not None and g is not None and not is_valid_weather_ground(w, g):
+        allowed = sorted(_GROUND_BY_WEATHER.get(w, ()))
+        raise TrackConditionError(
+            f"{w} weather only allows ground: {', '.join(allowed)}."
+        )
     return season, w, g
 
 
@@ -86,15 +123,22 @@ def roll_random(
 
     weather_pool = [w.value for w in Weather if w.value not in forbidden_weathers]
     if season != RaceSeason.WINTER:
-        # Snowy is winter-only; drop it from the pool when off-season.
         weather_pool = [w for w in weather_pool if w != Weather.SNOWY]
     if not weather_pool:
         raise TrackConditionError("no valid weather after bans")
     weather = rng.choice(weather_pool)
 
-    ground_pool = [g.value for g in GroundCondition if g.value not in forbidden_grounds]
+    # PR-J2 — pick ground from the pair-table for this weather, not
+    # from the full GroundCondition enum. Each weather has exactly
+    # two valid ground conditions in-game.
+    allowed_grounds = _GROUND_BY_WEATHER.get(weather, frozenset())
+    ground_pool = [
+        g for g in allowed_grounds if g not in forbidden_grounds
+    ]
     if not ground_pool:
-        raise TrackConditionError("no valid ground condition after bans")
+        raise TrackConditionError(
+            f"no valid ground condition for {weather} after bans"
+        )
     ground = rng.choice(ground_pool)
 
     return season, weather, ground

@@ -125,7 +125,8 @@
           </div>
           <div>
             <label class="text-xs text-slate-400">{{ form.ground_condition.label.text }}</label>
-            {{ form.ground_condition(class="input-base mt-1") }}
+            {{ form.ground_condition(id="official-ground", class="input-base mt-1") }}
+            <p class="mt-1 text-[11px] text-slate-500">Limited by weather choice.</p>
           </div>
         </div>
       </div>
@@ -193,25 +194,57 @@
   </script>
 
   <script>
-    // Snowy weather only in Winter — same UX as the CM admin form.
+    // Snowy ↔ Winter and Weather × Ground pair table — mirrors
+    // services/track_conditions.py. Server is the source of truth;
+    // this just keeps the UI from offering invalid combos.
     (function () {
       var seasonEl = document.getElementById('official-race-season');
       var weatherEl = document.getElementById('official-weather');
-      if (!seasonEl || !weatherEl) return;
+      var groundEl = document.getElementById('official-ground');
+      if (!seasonEl || !weatherEl || !groundEl) return;
+
+      var GROUND_BY_WEATHER = {
+        'Sunny':  ['Firm', 'Good'],
+        'Cloudy': ['Firm', 'Good'],
+        'Rainy':  ['Soft', 'Heavy'],
+        'Snowy':  ['Good', 'Soft'],
+      };
+
       var snowyOpt = Array.from(weatherEl.options).find(function (o) {
         return o.value === 'Snowy';
       });
-      if (!snowyOpt) return;
-      function sync() {
+
+      function syncWeather() {
         var winter = seasonEl.value === 'Winter';
-        snowyOpt.hidden = !winter;
-        snowyOpt.disabled = !winter;
+        if (snowyOpt) {
+          snowyOpt.hidden = !winter;
+          snowyOpt.disabled = !winter;
+        }
         if (!winter && weatherEl.value === 'Snowy') {
           weatherEl.value = '';
         }
       }
-      seasonEl.addEventListener('change', sync);
-      sync();
+
+      function syncGround() {
+        var allowed = GROUND_BY_WEATHER[weatherEl.value] || null;
+        Array.from(groundEl.options).forEach(function (o) {
+          if (o.value === '') return;
+          var ok = !allowed || allowed.indexOf(o.value) !== -1;
+          o.hidden = !ok;
+          o.disabled = !ok;
+        });
+        if (allowed && groundEl.value && allowed.indexOf(groundEl.value) === -1) {
+          groundEl.value = '';
+        }
+      }
+
+      seasonEl.addEventListener('change', function () {
+        syncWeather();
+        syncGround();
+      });
+      weatherEl.addEventListener('change', syncGround);
+      syncWeather();
+      syncGround();
     })();
   </script>
 {% endblock %}

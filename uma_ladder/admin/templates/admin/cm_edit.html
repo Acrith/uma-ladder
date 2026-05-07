@@ -118,12 +118,13 @@
           </div>
           <div>
             <label class="text-xs text-slate-400">Ground condition</label>
-            <select class="input-base mt-1" name="ground_condition">
+            <select id="cm-ground" class="input-base mt-1" name="ground_condition">
               <option value="">— pick —</option>
               {% for v in ['Firm', 'Good', 'Soft', 'Heavy'] %}
                 <option value="{{ v }}" {% if cm and cm.ground_condition == v %}selected{% endif %}>{{ v }}</option>
               {% endfor %}
             </select>
+            <p class="mt-1 text-[11px] text-slate-500">Limited by weather choice.</p>
           </div>
         </div>
       </div>
@@ -133,29 +134,59 @@
         <textarea class="input-base mt-1" name="notes" rows="3" placeholder="Pickup banners, gimmicks, community meetup time, etc.">{{ cm.notes if cm and cm.notes else '' }}</textarea>
       </div>
 
-      {# Hide the Snowy weather option when season != Winter so admins
-         can't construct an invalid combo client-side. Server-side
-         validation in services/track_conditions.py is still the
-         source of truth. #}
+      {# Client-side mirror of services/track_conditions.py validation.
+         Hides Snowy outside Winter and constrains ground options to
+         the game-canonical pair set per weather. Server is still the
+         source of truth — this just keeps the UI honest. #}
       <script>
         (function () {
           var seasonEl = document.getElementById('cm-race-season');
           var weatherEl = document.getElementById('cm-weather');
-          if (!seasonEl || !weatherEl) return;
+          var groundEl = document.getElementById('cm-ground');
+          if (!seasonEl || !weatherEl || !groundEl) return;
+
+          var GROUND_BY_WEATHER = {
+            'Sunny':  ['Firm', 'Good'],
+            'Cloudy': ['Firm', 'Good'],
+            'Rainy':  ['Soft', 'Heavy'],
+            'Snowy':  ['Good', 'Soft'],
+          };
+
           var snowyOpt = Array.from(weatherEl.options).find(function (o) {
             return o.value === 'Snowy';
           });
-          if (!snowyOpt) return;
-          function sync() {
+
+          function syncWeather() {
             var winter = seasonEl.value === 'Winter';
-            snowyOpt.hidden = !winter;
-            snowyOpt.disabled = !winter;
+            if (snowyOpt) {
+              snowyOpt.hidden = !winter;
+              snowyOpt.disabled = !winter;
+            }
             if (!winter && weatherEl.value === 'Snowy') {
               weatherEl.value = '';
             }
           }
-          seasonEl.addEventListener('change', sync);
-          sync();
+
+          function syncGround() {
+            var allowed = GROUND_BY_WEATHER[weatherEl.value] || null;
+            Array.from(groundEl.options).forEach(function (o) {
+              if (o.value === '') return;
+              var ok = !allowed || allowed.indexOf(o.value) !== -1;
+              o.hidden = !ok;
+              o.disabled = !ok;
+            });
+            if (allowed && groundEl.value && allowed.indexOf(groundEl.value) === -1) {
+              groundEl.value = '';
+            }
+          }
+
+          seasonEl.addEventListener('change', function () {
+            syncWeather();
+            syncGround();
+          });
+          weatherEl.addEventListener('change', syncGround);
+          syncWeather();
+          syncGround();
         })();
       </script>
 

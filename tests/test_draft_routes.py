@@ -445,7 +445,7 @@ def test_room_code_card_shows_setup_walkthrough(
             selected_preset_id=preset.id,
             race_season="Winter",
             weather="Snowy",
-            ground_condition="Heavy",
+            ground_condition="Soft",
         )
         db.session.add(m)
         db.session.commit()
@@ -468,7 +468,7 @@ def test_room_code_card_shows_setup_walkthrough(
     # Race-day conditions appear in advanced-mode steps.
     assert "Winter" in body
     assert "Snowy" in body
-    assert "Heavy" in body
+    assert "Soft" in body
     # umas_per_player echoed.
     assert "<strong class=\"text-cyan-200\">2</strong>" in body
     # Public-off warning.

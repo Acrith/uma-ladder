@@ -114,9 +114,9 @@ def test_normalize_rejects_snowy_outside_winter() -> None:
 
 def test_normalize_allows_snowy_in_winter() -> None:
     out = tc.normalize(
-        race_season="Winter", weather="Snowy", ground_condition="Heavy"
+        race_season="Winter", weather="Snowy", ground_condition="Soft"
     )
-    assert out == ("Winter", "Snowy", "Heavy")
+    assert out == ("Winter", "Snowy", "Soft")
 
 
 def test_normalize_allows_snowy_when_season_blank() -> None:
@@ -129,22 +129,102 @@ def test_normalize_allows_snowy_when_season_blank() -> None:
     assert out == (None, "Snowy", None)
 
 
+# ---------- PR-J2 — weather × ground pair table ----------
+
+
+@pytest.mark.parametrize(
+    ("weather", "ground"),
+    [
+        # Eight valid in-game combos.
+        ("Sunny", "Firm"),
+        ("Sunny", "Good"),
+        ("Cloudy", "Firm"),
+        ("Cloudy", "Good"),
+        ("Rainy", "Soft"),
+        ("Rainy", "Heavy"),
+        ("Snowy", "Good"),
+        ("Snowy", "Soft"),
+    ],
+)
+def test_normalize_allows_each_canonical_pair(
+    weather: str, ground: str
+) -> None:
+    season = "Winter" if weather == "Snowy" else None
+    out = tc.normalize(
+        race_season=season, weather=weather, ground_condition=ground
+    )
+    assert out[1] == weather
+    assert out[2] == ground
+
+
+@pytest.mark.parametrize(
+    ("weather", "ground"),
+    [
+        # Every "off-table" pair the game never produces.
+        ("Sunny", "Soft"),
+        ("Sunny", "Heavy"),
+        ("Cloudy", "Soft"),
+        ("Cloudy", "Heavy"),
+        ("Rainy", "Firm"),
+        ("Rainy", "Good"),
+        ("Snowy", "Firm"),
+        ("Snowy", "Heavy"),
+    ],
+)
+def test_normalize_rejects_invalid_weather_ground_pairs(
+    weather: str, ground: str
+) -> None:
+    season = "Winter" if weather == "Snowy" else None
+    with pytest.raises(tc.TrackConditionError) as exc:
+        tc.normalize(
+            race_season=season, weather=weather, ground_condition=ground
+        )
+    msg = str(exc.value)
+    assert weather in msg
+
+
+def test_normalize_skips_combo_check_when_either_side_blank() -> None:
+    """Half-filled forms must still pass through — the combo
+    constraint only applies when BOTH weather and ground are set."""
+    out_no_g = tc.normalize(
+        race_season=None, weather="Rainy", ground_condition=None
+    )
+    assert out_no_g == (None, "Rainy", None)
+    out_no_w = tc.normalize(
+        race_season=None, weather=None, ground_condition="Heavy"
+    )
+    assert out_no_w == (None, None, "Heavy")
+
+
 # ---------- roll_random() ----------
 
 
+_VALID_PAIRS = {
+    ("Sunny", "Firm"),
+    ("Sunny", "Good"),
+    ("Cloudy", "Firm"),
+    ("Cloudy", "Good"),
+    ("Rainy", "Soft"),
+    ("Rainy", "Heavy"),
+    ("Snowy", "Good"),
+    ("Snowy", "Soft"),
+}
+
+
 def test_roll_random_never_yields_snowy_outside_winter() -> None:
-    """Probabilistic — exhaustive over 1000 rolls. With seed=0 the
-    sequence is deterministic so a regression in this constraint
-    would always fail at the same iteration."""
+    """Exhaustive over 1000 rolls. With seed=0 the sequence is
+    deterministic so a regression always fails at the same iteration.
+    Also asserts every (weather, ground) pair is one of the eight
+    game-canonical combos."""
     rng = random.Random(0)
     for _ in range(1000):
         season, weather, ground = tc.roll_random(rng=rng)
         if weather == "Snowy":
             assert season == "Winter"
-        # Sanity: every value is from the right enum.
         assert season in {s.value for s in RaceSeason}
         assert weather in {w.value for w in Weather}
         assert ground in {g.value for g in GroundCondition}
+        assert (weather, ground) in _VALID_PAIRS
 
 
 def test_roll_random_can_produce_snowy_in_winter() -> None:
@@ -193,13 +273,13 @@ def test_cm_create_persists_conditions(app: Flask, make_user) -> None:
                 preset_id=preset.id,
                 race_season="Winter",
                 weather="Snowy",
-                ground_condition="Heavy",
+                ground_condition="Soft",
             ),
             by_user_id=actor["id"],
         )
         assert cm.race_season == "Winter"
         assert cm.weather == "Snowy"
-        assert cm.ground_condition == "Heavy"
+        assert cm.ground_condition == "Soft"
 
 
 def test_cm_create_rejects_snowy_outside_winter(
