@@ -92,16 +92,16 @@ def serve_image(image_id: int) -> object:
     image = db.session.get(UploadedImage, image_id)
     if image is None:
         abort(404)
-    # PR-J4 — uploader / admin keep direct access; in addition,
-    # participants of any draft match this image was confirmed for
-    # can view it (so opponents can verify the parsed screenshots
-    # from the completed-match card).
+    # PR-J4 — uploader keeps direct access. senior_organizer+ can
+    # also view (they're match moderators per docs/permissions.md
+    # and need OCR access to adjudicate). Match participants get
+    # access via the J4 link helper.
     is_uploader = (
         image.uploader_user_id is not None
         and image.uploader_user_id == current_user.id
     )
-    is_admin = current_user.has_at_least("admin")
-    if not (is_uploader or is_admin) and not ocr_service.user_can_view_image(
+    is_moderator = current_user.has_at_least("senior_organizer")
+    if not (is_uploader or is_moderator) and not ocr_service.user_can_view_image(
         image_id, current_user.id
     ):
         abort(403)

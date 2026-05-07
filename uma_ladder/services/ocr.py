@@ -265,6 +265,67 @@ def confirm_parse(
     return attempt
 
 
+def backfill_draft_match_links(*, window_seconds: int = 600) -> int:
+    """PR-J4 follow-up — find each confirmed OCR attempt that has no
+    draft_match_id yet and stamp it with the most-plausible match.
+
+    Heuristic: the user who confirmed the parse must be host or
+    opponent of the candidate match, the match must be completed,
+    and `completed_at` must fall within ±`window_seconds` of the
+    attempt's `confirmed_at`. The OCR submit and the match's
+    `submit_results` commit happen back-to-back so they're normally
+    within seconds. The window guards against picking a stale
+    earlier match for a user who has multiple completed matches.
+
+    Returns the number of attempts that got linked. Idempotent —
+    rows with draft_match_id already set are skipped.
+    """
+    from datetime import timedelta
+
+    from ..models import DraftMatch
+
+    candidates = (
+        db.session.query(OcrParseAttempt)
+        .filter(
+            OcrParseAttempt.status == OcrParseStatus.CONFIRMED,
+            OcrParseAttempt.draft_match_id.is_(None),
+            OcrParseAttempt.confirmed_by_user_id.isnot(None),
+            OcrParseAttempt.confirmed_at.isnot(None),
+        )
+        .all()
+    )
+    linked = 0
+    window = timedelta(seconds=window_seconds)
+    for att in candidates:
+        match = (
+            db.session.query(DraftMatch)
+            .filter(
+                DraftMatch.status == "completed",
+                DraftMatch.completed_at.isnot(None),
+                (DraftMatch.host_user_id == att.confirmed_by_user_id)
+                | (DraftMatch.opponent_user_id == att.confirmed_by_user_id),
+                DraftMatch.completed_at >= att.confirmed_at - window,
+                DraftMatch.completed_at <= att.confirmed_at + window,
+            )
+            .order_by(
+                # Closest to confirmed_at wins; SQLite has no
+                # cross-platform ABS-of-interval, so order by
+                # completed_at ASC then pick by Python in tie cases.
+                DraftMatch.completed_at.asc()
+            )
+            .all()
+        )
+        if not match:
+            continue
+        # Pick the entry with smallest |completed_at - confirmed_at|.
+        best = min(match, key=lambda m: abs(m.completed_at - att.confirmed_at))
+        att.draft_match_id = best.id
+        linked += 1
+    if linked:
+        db.session.commit()
+    return linked
+
+
 def get_draft_match_screenshots(draft_match_id: int) -> list[UploadedImage]:
     """Return source UploadedImages for every confirmed OCR attempt
     tied to this draft match. Includes the primary uploaded_image_id

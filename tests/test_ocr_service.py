@@ -329,6 +329,232 @@ def test_user_can_view_image_allows_opponent(
         )
 
 
+def _confirmed_attempt_for(
+    app: Flask,
+    *,
+    uploader_id: int,
+    confirmer_id: int,
+    confirmed_at,
+) -> int:
+    """Build a confirmed attempt with confirmed_at set explicitly,
+    bypassing confirm_parse so we can simulate pre-J4 rows."""
+    from uma_ladder.models import OcrParseStatus, UploadedImage
+
+    image = ocr_service.save_uploaded_image(
+        _file_storage(name=f"u{uploader_id}.png"),
+        uploader_user_id=uploader_id,
+    )
+    attempt = ocr_service.run_parse(image)
+    attempt.status = OcrParseStatus.CONFIRMED
+    attempt.confirmed_by_user_id = confirmer_id
+    attempt.confirmed_at = confirmed_at
+    db.session.commit()
+    # Touch UploadedImage to keep the lazy-loader happy in tests.
+    assert db.session.get(UploadedImage, image.id) is not None
+    return attempt.id
+
+
+def test_backfill_links_attempt_to_completed_match(
+    app: Flask, make_user
+) -> None:
+    """Confirmed OCR attempt + completed match within the time
+    window for the same user → backfill stamps the link."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import (
+        DraftMatch,
+        DraftMatchStatus,
+        OcrParseAttempt,
+        Season,
+        SeasonStatus,
+    )
+
+    info = make_user(username="alice", password="x")
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+        match = DraftMatch(
+            season_id=s.id,
+            host_user_id=info["id"],
+            join_code="JBKFL",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+            completed_at=now,
+        )
+        db.session.add(match)
+        db.session.commit()
+        attempt_id = _confirmed_attempt_for(
+            app,
+            uploader_id=info["id"],
+            confirmer_id=info["id"],
+            confirmed_at=now - timedelta(seconds=2),
+        )
+        assert ocr_service.backfill_draft_match_links() == 1
+        att = db.session.get(OcrParseAttempt, attempt_id)
+        assert att.draft_match_id == match.id
+
+
+def test_backfill_skips_when_outside_window(
+    app: Flask, make_user
+) -> None:
+    """Hour-old completion vs fresh confirmation → no link, even
+    though the user has only this match."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import (
+        DraftMatch,
+        DraftMatchStatus,
+        OcrParseAttempt,
+        Season,
+        SeasonStatus,
+    )
+
+    info = make_user(username="alice", password="x")
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+        match = DraftMatch(
+            season_id=s.id,
+            host_user_id=info["id"],
+            join_code="JFAR",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+            completed_at=now - timedelta(hours=2),
+        )
+        db.session.add(match)
+        db.session.commit()
+        attempt_id = _confirmed_attempt_for(
+            app,
+            uploader_id=info["id"],
+            confirmer_id=info["id"],
+            confirmed_at=now,
+        )
+        assert ocr_service.backfill_draft_match_links() == 0
+        att = db.session.get(OcrParseAttempt, attempt_id)
+        assert att.draft_match_id is None
+
+
+def test_backfill_picks_closest_match_in_time(
+    app: Flask, make_user
+) -> None:
+    """Two completed matches within the window for the same user —
+    pick the one whose completed_at is closest to confirmed_at."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import (
+        DraftMatch,
+        DraftMatchStatus,
+        OcrParseAttempt,
+        Season,
+        SeasonStatus,
+    )
+
+    info = make_user(username="alice", password="x")
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+        far = DraftMatch(
+            season_id=s.id,
+            host_user_id=info["id"],
+            join_code="JFAR",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+            completed_at=now - timedelta(seconds=480),
+        )
+        near = DraftMatch(
+            season_id=s.id,
+            host_user_id=info["id"],
+            join_code="JNEAR",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+            completed_at=now - timedelta(seconds=10),
+        )
+        db.session.add_all([far, near])
+        db.session.commit()
+        attempt_id = _confirmed_attempt_for(
+            app,
+            uploader_id=info["id"],
+            confirmer_id=info["id"],
+            confirmed_at=now,
+        )
+        assert ocr_service.backfill_draft_match_links() == 1
+        att = db.session.get(OcrParseAttempt, attempt_id)
+        assert att.draft_match_id == near.id
+
+
+def test_backfill_is_idempotent(app: Flask, make_user) -> None:
+    """Running the backfill twice doesn't relink already-linked
+    rows, doesn't error, and reports 0 on the second pass."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import (
+        DraftMatch,
+        DraftMatchStatus,
+        Season,
+        SeasonStatus,
+    )
+
+    info = make_user(username="alice", password="x")
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+        now = datetime.now(UTC)
+        s = Season(
+            name="S",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=10),
+            status=SeasonStatus.ACTIVE,
+        )
+        db.session.add(s)
+        db.session.commit()
+        match = DraftMatch(
+            season_id=s.id,
+            host_user_id=info["id"],
+            join_code="JIDEM",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+            completed_at=now,
+        )
+        db.session.add(match)
+        db.session.commit()
+        _confirmed_attempt_for(
+            app,
+            uploader_id=info["id"],
+            confirmer_id=info["id"],
+            confirmed_at=now,
+        )
+        assert ocr_service.backfill_draft_match_links() == 1
+        assert ocr_service.backfill_draft_match_links() == 0
+
+
 def test_user_can_view_image_allows_opponent_for_extra_screenshots(
     app: Flask, make_user
 ) -> None:

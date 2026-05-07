@@ -331,5 +331,28 @@ def cmd_ocr_test(image_path: Path, provider: str | None) -> None:
     click.echo(f"  confidence: {parse.confidence}")
 
 
+@uma_cli.command("ocr-backfill-draft-links")
+@click.option(
+    "--window-seconds",
+    type=int,
+    default=600,
+    help="Max seconds between attempt.confirmed_at and match.completed_at.",
+)
+def cmd_ocr_backfill_draft_links(window_seconds: int) -> None:
+    """Re-stamp draft_match_id on confirmed OCR attempts (PR-J4).
+
+    Idempotent — only touches rows where draft_match_id IS NULL.
+    Same heuristic the c5ce51843265 migration applies, exposed as a
+    CLI for re-runs after data imports or if a future bug skips
+    stamping a confirmation.
+    """
+    from .services import ocr as ocr_service
+
+    linked = ocr_service.backfill_draft_match_links(
+        window_seconds=window_seconds
+    )
+    click.echo(f"ocr-backfill-draft-links: linked {linked} attempt(s)")
+
+
 def register_cli(app: Flask) -> None:
     app.cli.add_command(uma_cli)

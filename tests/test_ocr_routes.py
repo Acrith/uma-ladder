@@ -257,3 +257,81 @@ def test_serve_image_admin_keeps_access(
     _login(client, "root", "password123")
     resp = client.get(f"/ocr/uploads/{image_id}")
     assert resp.status_code == 200
+
+
+def test_serve_image_senior_organizer_can_view(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Senior organizers moderate matches per docs/permissions.md
+    and need OCR access to adjudicate disputes — they shouldn't
+    have to chain through admin to see screenshots."""
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+    make_user(username="alice", password="password123")
+    make_user(username="senior", password="password123", role=Role.SENIOR_ORGANIZER)
+
+    _login(client, "alice", "password123")
+    client.post(
+        "/ocr/upload",
+        data={"image": (io.BytesIO(_png()), "race.png")},
+        content_type="multipart/form-data",
+    )
+    with app.app_context():
+        image_id = db.session.query(UploadedImage).first().id
+
+    client.post("/auth/logout")
+    _login(client, "senior", "password123")
+    resp = client.get(f"/ocr/uploads/{image_id}")
+    assert resp.status_code == 200
+
+
+def test_serve_image_organizer_still_blocked(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Plain organizers (rank 1) are not match moderators — they
+    should NOT see other people's screenshots without a participant
+    link."""
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+    make_user(username="alice", password="password123")
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+
+    _login(client, "alice", "password123")
+    client.post(
+        "/ocr/upload",
+        data={"image": (io.BytesIO(_png()), "race.png")},
+        content_type="multipart/form-data",
+    )
+    with app.app_context():
+        image_id = db.session.query(UploadedImage).first().id
+
+    client.post("/auth/logout")
+    _login(client, "org", "password123")
+    resp = client.get(f"/ocr/uploads/{image_id}")
+    assert resp.status_code == 403
+
+
+def test_serve_image_superadmin_can_view(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Superadmins inherit `has_at_least('senior_organizer')` via
+    the rank ladder, so this is covered by the same check — make it
+    explicit so a future role-rank refactor can't quietly regress."""
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+    make_user(username="alice", password="password123")
+    make_user(username="root", password="password123", role=Role.SUPERADMIN)
+
+    _login(client, "alice", "password123")
+    client.post(
+        "/ocr/upload",
+        data={"image": (io.BytesIO(_png()), "race.png")},
+        content_type="multipart/form-data",
+    )
+    with app.app_context():
+        image_id = db.session.query(UploadedImage).first().id
+
+    client.post("/auth/logout")
+    _login(client, "root", "password123")
+    resp = client.get(f"/ocr/uploads/{image_id}")
+    assert resp.status_code == 200
