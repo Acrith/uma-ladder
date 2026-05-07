@@ -75,6 +75,15 @@
             <a href="{{ url_for('profiles.public', username=current_user.username) }}" class="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300">
               {{ current_user.username }}
             </a>
+            {# PR-J12 — inbox bell. Badge appears only when there's
+               unread; clicking the bell auto-marks all read. #}
+            <a href="{{ url_for('inbox.index') }}" class="relative rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Inbox">
+              <span aria-hidden="true">🔔</span>
+              <span class="sr-only">Inbox</span>
+              {% if unread_inbox_count and unread_inbox_count > 0 %}
+                <span class="absolute -right-0.5 -top-0.5 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-bold leading-none text-white">{{ unread_inbox_count if unread_inbox_count < 100 else '99+' }}</span>
+              {% endif %}
+            </a>
             {% if current_user.has_at_least('organizer') %}
               <a href="{{ url_for('skills.index') }}" class="rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-800/50 hover:text-cyan-300" title="Skill catalogue (organiser reference for OCR correction)">
                 Skills

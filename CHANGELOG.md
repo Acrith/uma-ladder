@@ -8,6 +8,11 @@ log for the full history.
 
 ### Quality of life
 
+- **In-app inbox.** A bell icon in the navbar shows when you have
+  notifications waiting. Draft invites surface here automatically
+  (no more discovering them only by visiting the Draft page).
+  Clicking the bell marks them read; accept / decline / cancel
+  cleans them up.
 - **Profile clubs link to uma.moe.** The Club tile on a public
   profile now opens the club's uma.moe page in a new tab.
 - **Track-ban panel layout fixed.** Distance and Direction bans

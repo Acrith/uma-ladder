@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Inbox · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="mx-auto max-w-2xl">
+    <h1 class="text-2xl font-semibold text-slate-100">Inbox</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Notifications about your matches and invites. Visiting this page
+      marks everything as read.
+    </p>
+
+    {% if not notifications %}
+      <div class="mt-6 rounded-lg border border-slate-800 bg-slate-950/40 p-6 text-center text-sm text-slate-500">
+        No notifications. You'll see Draft invites here.
+      </div>
+    {% else %}
+      <ul class="mt-6 space-y-2">
+        {% for n in notifications %}
+          {# Render branches per kind. New kind = new {% elif %}
+             block here, plus a `KIND_*` constant in services/inbox.py
+             and a `create(...)` call from the relevant domain
+             service. #}
+          {% if n.kind == "draft_invite" %}
+            <li class="flex items-start gap-3 rounded-lg border {% if not n.read_at %}border-fuchsia-500/40 bg-fuchsia-500/5{% else %}border-slate-800 bg-slate-950/40{% endif %} p-3">
+              <span class="text-xl leading-none text-fuchsia-300" aria-hidden="true">⚔</span>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm text-slate-200">
+                  <a href="{{ url_for('profiles.public', username=n.payload_json.inviter_username) }}" class="text-cyan-300 hover:text-cyan-200">@{{ n.payload_json.inviter_username }}</a>
+                  invited you to a Draft match.
+                </p>
+                <p class="mt-1 text-xs text-slate-500">
+                  {{ n.created_at.strftime('%Y-%m-%d %H:%M UTC') }}
+                  · <a href="{{ url_for('draft.detail', match_id=n.payload_json.match_id) }}" class="text-cyan-300 hover:text-cyan-200">Match #{{ n.payload_json.match_id }} →</a>
+                </p>
+              </div>
+            </li>
+          {% else %}
+            {# Defensive: future kind without a branch shouldn't
+               break the page — show a minimal generic row. #}
+            <li class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-400">
+              {{ n.kind }} ({{ n.created_at.strftime('%Y-%m-%d %H:%M UTC') }})
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+{% endblock %}

@@ -1378,6 +1378,18 @@ def invite_to_match(
     )
     db.session.add(invite)
     db.session.commit()
+
+    # PR-J12 — drop a notification into the invitee's in-app inbox
+    # so they're not relying on visiting /draft to discover it.
+    # Best-effort: a failure here shouldn't roll back the invite.
+    try:
+        from . import inbox as inbox_service
+
+        inbox_service.create_for_draft_invite(invite)
+    except Exception:  # noqa: BLE001
+        # Inbox is non-critical to the invite domain; eat any error
+        # so a misconfigured inbox can't block invitations.
+        db.session.rollback()
     return invite
 
 
@@ -1412,6 +1424,11 @@ def accept_invite(invite_id: int, *, by_user_id: int) -> DraftMatchInvite:
         s.responded_at = now
     if siblings:
         db.session.commit()
+    # PR-J12 — drop the inbox notification for this invite + the
+    # cancelled siblings; they're no longer actionable.
+    _drop_inbox_notifications(
+        [invite.id, *[s.id for s in siblings]]
+    )
     return invite
 
 
@@ -1426,6 +1443,7 @@ def decline_invite(invite_id: int, *, by_user_id: int) -> DraftMatchInvite:
     invite.status = DraftInviteStatus.DECLINED
     invite.responded_at = _utcnow()
     db.session.commit()
+    _drop_inbox_notifications([invite.id])
     return invite
 
 
@@ -1440,7 +1458,21 @@ def cancel_invite(invite_id: int, *, by_user_id: int) -> DraftMatchInvite:
     invite.status = DraftInviteStatus.CANCELLED
     invite.responded_at = _utcnow()
     db.session.commit()
+    _drop_inbox_notifications([invite.id])
     return invite
+
+
+def _drop_inbox_notifications(invite_ids: list[int]) -> None:
+    """Best-effort cleanup of the inbox rows that were created to
+    notify the invitee. Failures here aren't fatal — the inbox is
+    non-critical to invite state machine."""
+    try:
+        from . import inbox as inbox_service
+
+        for iid in invite_ids:
+            inbox_service.delete_for_draft_invite(iid)
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
 
 
 def list_pending_invites_for_user(user_id: int) -> list[DraftMatchInvite]:

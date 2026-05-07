@@ -36,6 +36,7 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
 
     _register_blueprints(app)
     _register_health(app)
+    _register_inbox_context(app)
 
     from .cli import register_cli
 
@@ -49,6 +50,7 @@ def _register_blueprints(app: Flask) -> None:
     from .auth.routes import bp as auth_bp
     from .dashboard.routes import bp as dashboard_bp
     from .draft.routes import bp as draft_bp
+    from .inbox.routes import bp as inbox_bp
     from .notifications.routes import bp as notifications_bp
     from .ocr.routes import bp as ocr_bp
     from .official.routes import bp as official_bp
@@ -63,9 +65,34 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(draft_bp, url_prefix="/draft")
     app.register_blueprint(presets_bp, url_prefix="/presets")
     app.register_blueprint(notifications_bp, url_prefix="/notifications")
+    app.register_blueprint(inbox_bp, url_prefix="/inbox")
     app.register_blueprint(ocr_bp, url_prefix="/ocr")
     app.register_blueprint(skills_bp, url_prefix="/skills")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+
+
+def _register_inbox_context(app: Flask) -> None:
+    """PR-J12 — make `unread_inbox_count` available to every
+    template so the navbar bell badge can render on any page
+    without each route having to remember to pass it in.
+
+    Costs one cheap COUNT query per page render for authenticated
+    users — covered by the user_id+read_at composite index. For
+    anonymous visitors the function returns 0 immediately.
+    """
+    from flask_login import current_user
+
+    @app.context_processor
+    def _inject_unread_inbox_count() -> dict[str, int]:
+        if not current_user.is_authenticated:
+            return {"unread_inbox_count": 0}
+        from .services import inbox as inbox_service
+
+        return {
+            "unread_inbox_count": inbox_service.unread_count_for_user(
+                current_user.id
+            )
+        }
 
 
 def _warn_if_tailwind_built_but_missing(app: Flask) -> None:

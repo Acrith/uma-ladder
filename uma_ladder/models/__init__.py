@@ -28,6 +28,7 @@ from .enums import (
     UploadPurpose,
     Weather,
 )
+from .inbox import UserNotification
 from .notifications import DiscordNotificationAttempt
 from .official_races import (
     OfficialRace,
@@ -86,6 +87,7 @@ __all__ = [
     "UploadPurpose",
     "UploadedImage",
     "User",
+    "UserNotification",
     "UserProfile",
     "Weather",
 ]
