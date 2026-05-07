@@ -11,6 +11,24 @@
 {% block main_padding_y %}py-4{% endblock %}
 {% block content %}
 
+  {# Track-ban label + chip glyph map. Distance Category and
+     Direction collide on first letter, so the glyph keeps two
+     letters for those (Dt / Dr) — the label drops the trailing
+     "category" word so "Banned · Distance" doesn't wrap and
+     truncate the uma-ban row beside it. #}
+  {% set ban_type_label = {
+       'venue':              'Venue',
+       'surface':            'Surface',
+       'direction':          'Direction',
+       'distance_category':  'Distance',
+  } %}
+  {% set ban_type_glyph = {
+       'venue':              'V',
+       'surface':            'S',
+       'direction':          'Dr',
+       'distance_category':  'Dt',
+  } %}
+
   <div
     {% if should_poll %}
       hx-get="{{ url_for('draft.detail', match_id=match.id) }}"
@@ -195,11 +213,12 @@
                     </div>
                   </div>
                 {% else %}
-                  {% set type_glyph = {'venue': 'V', 'direction': 'D', 'distance_category': 'DC', 'surface': 'S'}.get(track_ban.ban_type, '?') %}
+                  {% set type_glyph = ban_type_glyph.get(track_ban.ban_type, '?') %}
+                  {% set type_label = ban_type_label.get(track_ban.ban_type, track_ban.ban_type) %}
                   <div class="flex items-center gap-2.5 {{ row_dir }} rounded-full border border-cyan-500/40 bg-cyan-500/5 px-2 py-1 shadow-glow-cyan">
                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950/60 text-[11px] font-bold uppercase text-cyan-200 ring-1 ring-cyan-400/40">{{ type_glyph }}</div>
                     <div class="min-w-0 flex-1 {{ text_align }}">
-                      <p class="label-eyebrow text-cyan-300/80">Banned · {{ track_ban.ban_type.replace('_', ' ') }}</p>
+                      <p class="label-eyebrow text-cyan-300/80">Banned · {{ type_label }}</p>
                       <p class="truncate text-[11px] font-semibold leading-tight text-cyan-100">{{ track_ban.condition_key }}</p>
                     </div>
                   </div>
@@ -325,7 +344,7 @@
                           onchange="document.querySelectorAll('[data-ban-options]').forEach(el => { el.hidden = el.dataset.banOptions !== this.value; el.disabled = el.dataset.banOptions !== this.value; });">
                     {% for type_key, vals in track_ban_options.items() %}
                       {% if vals %}
-                        <option value="{{ type_key }}">{{ type_key.replace('_', ' ') | capitalize }}</option>
+                        <option value="{{ type_key }}">{{ ban_type_label.get(type_key, type_key) }}</option>
                       {% endif %}
                     {% endfor %}
                   </select>

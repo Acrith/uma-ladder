@@ -473,6 +473,150 @@ def test_completed_match_without_ocr_omits_screenshot_strip(
     assert "OCR source screenshot" not in resp.data.decode()
 
 
+# ---------- PR-J5: track-ban label uses "Distance" / "Direction" ----------
+
+
+def _add_diverse_presets(app: Flask) -> None:
+    """Augment _add_preset with Dirt + Sprint variants so the
+    feasibility filter doesn't strip Surface and Distance from the
+    track-ban dropdown — both columns need >=2 distinct values for
+    a ban to be non-redundant."""
+    with app.app_context():
+        db.session.add_all(
+            [
+                RacePreset(
+                    source=PresetSource.CUSTOM_BUILTIN,
+                    name="Tokyo Sprint",
+                    venue="Tokyo",
+                    surface="Turf",
+                    distance_meters=1200,
+                    distance_category="Sprint",
+                    direction="Left",
+                    course_variant=None,
+                    max_runners=18,
+                    enabled=True,
+                ),
+                RacePreset(
+                    source=PresetSource.CUSTOM_BUILTIN,
+                    name="Sapporo Dirt",
+                    venue="Sapporo",
+                    surface="Dirt",
+                    distance_meters=2000,
+                    distance_category="Medium",
+                    direction="Right",
+                    course_variant=None,
+                    max_runners=18,
+                    enabled=True,
+                ),
+            ]
+        )
+        db.session.commit()
+
+
+def test_track_ban_dropdown_uses_short_labels(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The dropdown option for distance_category used to render
+    'Distance category' (lower-case 'c' from a capitalize filter on
+    underscore-replace). The chip label below was the same wrap
+    offender. Both now read 'Distance' / 'Direction' / 'Surface' /
+    'Venue' so the panel doesn't truncate uma bans."""
+    _season(app)
+    _add_preset(app)
+    _add_diverse_presets(app)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    from uma_ladder.models import DraftMatch
+
+    with app.app_context():
+        join_code = db.session.get(DraftMatch, match_id).join_code
+
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post("/draft/join", data={"join_code": join_code})
+    for username in ("bob", "alice"):
+        client.post("/auth/logout")
+        _login(client, username, "password123")
+        client.post(f"/draft/{match_id}/ready")
+
+    import re
+
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    sel_html = re.search(
+        r'<select id="track-ban-type"[^>]*>.*?</select>', body, re.DOTALL
+    )
+    assert sel_html, "track-ban-type select not in body"
+    sel = sel_html.group(0)
+    assert ">Distance<" in sel
+    assert ">Direction<" in sel
+    assert ">Surface<" in sel
+    assert ">Venue<" in sel
+    # Old wrap-prone label gone.
+    assert ">Distance category<" not in sel
+
+
+def test_track_ban_panel_chip_uses_glyph_and_label(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """After alice submits a distance_category track ban, the panel
+    chip should render 'Banned · Distance' (not 'distance category')
+    and the round glyph should be 'Dt' (not 'DC' / 'D')."""
+    _season(app)
+    _add_preset(app)
+    _add_diverse_presets(app)
+    make_user(username="alice", password="password123")
+    make_user(username="bob", password="password123")
+
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/draft/new",
+        data={"umas_per_player": 2, "preset_pool": "custom"},
+        follow_redirects=False,
+    )
+    match_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    from uma_ladder.models import DraftMatch
+
+    with app.app_context():
+        join_code = db.session.get(DraftMatch, match_id).join_code
+
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    client.post("/draft/join", data={"join_code": join_code})
+    for username in ("bob", "alice"):
+        client.post("/auth/logout")
+        _login(client, username, "password123")
+        client.post(f"/draft/{match_id}/ready")
+
+    # alice bans Medium (distance_category).
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    client.post(
+        f"/draft/{match_id}/track-ban",
+        data={"ban_type": "distance_category", "condition_key": "Medium"},
+    )
+    resp = client.get(f"/draft/{match_id}")
+    body = resp.data.decode()
+
+    assert "Banned · Distance" in body
+    # Glyph chip wraps the literal in a div; substring match suffices.
+    assert ">Dt<" in body
+    # Old wrap-prone variants gone.
+    assert "Banned · distance category" not in body
+    assert ">DC<" not in body
+
+
 # ---------- PR-J3: ban forms must survive the 5s lobby poll ----------
 
 
