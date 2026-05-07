@@ -848,6 +848,28 @@
               </div>
             {% endif %}
 
+            {# PR-J4 — Source screenshots that seeded these results
+               via OCR. Empty for matches submitted manually. Thumbs
+               link to the full image; clicking opens in a new tab. #}
+            {% if completed_screenshots %}
+              <div class="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                <p class="label-eyebrow">OCR source screenshot{% if completed_screenshots|length > 1 %}s ({{ completed_screenshots|length }}){% endif %}</p>
+                <p class="mt-1 text-[11px] text-slate-500">Uploaded for this match. Click a thumbnail to open full size.</p>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  {% for img in completed_screenshots %}
+                    <a href="{{ url_for('ocr.serve_image', image_id=img.id) }}"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="block h-24 w-24 overflow-hidden rounded border border-slate-800 bg-slate-900/60 transition hover:border-cyan-500/50">
+                      <img src="{{ url_for('ocr.serve_image', image_id=img.id) }}"
+                           alt="match #{{ match.id }} OCR source {{ loop.index }}"
+                           class="h-full w-full object-cover" />
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
             {% if match.forfeit_user_id %}
               <p class="mt-2 text-xs text-rose-300">
                 ⚠ Forfeit by

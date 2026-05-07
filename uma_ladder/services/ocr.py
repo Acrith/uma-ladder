@@ -237,12 +237,17 @@ def confirm_parse(
     *,
     confirmed_by_user_id: int,
     edited_rows: list[Mapping[str, Any]] | None = None,
+    draft_match_id: int | None = None,
 ) -> OcrParseAttempt:
     """Mark an attempt confirmed and store any human edits.
 
     This call only marks the parse confirmed in the audit log. Writing
     actual race results remains the caller's responsibility — the
     confirmed parse is metadata, not a result.
+
+    `draft_match_id` (PR-J4) ties the confirmed attempt to the draft
+    match whose results it seeded so the completed-match card can
+    surface the source screenshots later.
     """
     attempt = db.session.get(OcrParseAttempt, attempt_id)
     if attempt is None:
@@ -254,5 +259,89 @@ def confirm_parse(
     attempt.confirmed_by_user_id = confirmed_by_user_id
     attempt.confirmed_at = datetime.now(UTC)
     attempt.status = OcrParseStatus.CONFIRMED
+    if draft_match_id is not None:
+        attempt.draft_match_id = draft_match_id
     db.session.commit()
     return attempt
+
+
+def get_draft_match_screenshots(draft_match_id: int) -> list[UploadedImage]:
+    """Return source UploadedImages for every confirmed OCR attempt
+    tied to this draft match. Includes the primary uploaded_image_id
+    plus any extras stashed in parsed_json["screenshot_image_ids"]
+    during a multi-screenshot upload (services/draft routes), in
+    upload order, deduped by image id.
+    """
+    attempts = (
+        db.session.query(OcrParseAttempt)
+        .filter(
+            OcrParseAttempt.draft_match_id == draft_match_id,
+            OcrParseAttempt.status == OcrParseStatus.CONFIRMED,
+        )
+        .order_by(OcrParseAttempt.created_at.asc())
+        .all()
+    )
+    seen: set[int] = set()
+    image_ids: list[int] = []
+    for att in attempts:
+        extras = (att.parsed_json or {}).get("screenshot_image_ids") or []
+        # Primary first, then any extras the multi-upload merged in.
+        for img_id in [att.uploaded_image_id, *extras]:
+            if img_id is None or img_id in seen:
+                continue
+            seen.add(img_id)
+            image_ids.append(img_id)
+    if not image_ids:
+        return []
+    images = (
+        db.session.query(UploadedImage)
+        .filter(UploadedImage.id.in_(image_ids))
+        .all()
+    )
+    by_id = {img.id: img for img in images}
+    return [by_id[i] for i in image_ids if i in by_id]
+
+
+def user_can_view_image(image_id: int, user_id: int) -> bool:
+    """PR-J4 access widening — the legacy rule was uploader-only
+    (plus admin). For OCR_RESULT screenshots tied to a draft match,
+    both match participants need to see the screenshots on the
+    completed-match card. This helper answers that single question
+    so `ocr.serve_image` can stay short.
+    """
+    from ..models import DraftMatch
+
+    rows = (
+        db.session.query(OcrParseAttempt)
+        .filter(
+            OcrParseAttempt.uploaded_image_id == image_id,
+            OcrParseAttempt.draft_match_id.isnot(None),
+        )
+        .all()
+    )
+    match_ids = {a.draft_match_id for a in rows if a.draft_match_id}
+    # Multi-screenshot uploads keep the extra images only on the
+    # primary attempt's parsed_json. Walk the confirmed primaries to
+    # catch those.
+    extra_primaries = (
+        db.session.query(OcrParseAttempt)
+        .filter(
+            OcrParseAttempt.draft_match_id.isnot(None),
+            OcrParseAttempt.status == OcrParseStatus.CONFIRMED,
+        )
+        .all()
+    )
+    for att in extra_primaries:
+        extras = (att.parsed_json or {}).get("screenshot_image_ids") or []
+        if image_id in extras and att.draft_match_id is not None:
+            match_ids.add(att.draft_match_id)
+    if not match_ids:
+        return False
+    matches = (
+        db.session.query(DraftMatch)
+        .filter(DraftMatch.id.in_(match_ids))
+        .all()
+    )
+    return any(
+        user_id in (m.host_user_id, m.opponent_user_id) for m in matches
+    )

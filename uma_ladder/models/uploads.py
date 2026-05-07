@@ -55,6 +55,16 @@ class OcrParseAttempt(db.Model):
     confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # PR-J4 — link confirmed attempts to the draft match whose results
+    # they seeded so the completed-match card can surface the source
+    # screenshots and so opponents (not just the uploader) can view
+    # them. Nullable: pre-J4 attempts and stat-detail/profile uploads
+    # leave it null.
+    draft_match_id: Mapped[int | None] = mapped_column(
+        ForeignKey("draft_matches.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

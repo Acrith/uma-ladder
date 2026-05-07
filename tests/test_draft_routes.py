@@ -339,6 +339,140 @@ def test_uma_ban_tile_picker_marks_oshi_and_banned(
     assert "Banned" in body
 
 
+# ---------- PR-J4: completed-match card surfaces OCR screenshots ----------
+
+
+def test_completed_match_renders_ocr_source_screenshots(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """When a draft match's results were submitted via the OCR
+    flow, the completed card should show thumbnails of the source
+    screenshots so participants can verify the parse."""
+    import io
+
+    from uma_ladder.models import (
+        DraftMatch,
+        DraftMatchStatus,
+        Season,
+        SeasonStatus,
+    )
+    from uma_ladder.services import ocr as ocr_service
+
+    _add_preset(app)
+    host = make_user(username="host", password="password123")
+    opp = make_user(username="opp", password="password123")
+
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+        from datetime import UTC, datetime, timedelta
+
+        s = db.session.query(Season).first()
+        if s is None:
+            now = datetime.now(UTC)
+            s = Season(
+                name="S",
+                starts_at=now - timedelta(days=1),
+                ends_at=now + timedelta(days=10),
+                status=SeasonStatus.ACTIVE,
+            )
+            db.session.add(s)
+            db.session.commit()
+
+        match = DraftMatch(
+            season_id=s.id,
+            host_user_id=host["id"],
+            opponent_user_id=opp["id"],
+            join_code="J4SCR",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+        )
+        db.session.add(match)
+        db.session.commit()
+        match_id = match.id
+
+        png = bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+            "53de0000000c4944415408d76368686800000005000170d80b240000000049"
+            "454e44ae426082"
+        )
+        from werkzeug.datastructures import FileStorage
+
+        image = ocr_service.save_uploaded_image(
+            FileStorage(
+                stream=io.BytesIO(png),
+                filename="r.png",
+                content_type="image/png",
+            ),
+            uploader_user_id=host["id"],
+        )
+        attempt = ocr_service.run_parse(image)
+        ocr_service.confirm_parse(
+            attempt.id,
+            confirmed_by_user_id=host["id"],
+            draft_match_id=match_id,
+        )
+        image_id = image.id
+
+    # Opponent loads the completed-match page — the screenshot
+    # thumbnail must be present (which also implies the link grants
+    # them serve_image access via PR-J4).
+    _login(client, "opp", "password123")
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "OCR source screenshot" in body
+    assert f"/ocr/uploads/{image_id}" in body
+
+
+def test_completed_match_without_ocr_omits_screenshot_strip(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Manually-entered (non-OCR) results don't trip the screenshot
+    section — no empty card, no broken thumbnails."""
+    from uma_ladder.models import (
+        DraftMatch,
+        DraftMatchStatus,
+        Season,
+        SeasonStatus,
+    )
+
+    _add_preset(app)
+    host = make_user(username="host", password="password123")
+    make_user(username="opp", password="password123")
+
+    with app.app_context():
+        from datetime import UTC, datetime, timedelta
+
+        s = db.session.query(Season).first()
+        if s is None:
+            now = datetime.now(UTC)
+            s = Season(
+                name="S",
+                starts_at=now - timedelta(days=1),
+                ends_at=now + timedelta(days=10),
+                status=SeasonStatus.ACTIVE,
+            )
+            db.session.add(s)
+            db.session.commit()
+        match = DraftMatch(
+            season_id=s.id,
+            host_user_id=host["id"],
+            join_code="J4NOSCR",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+        )
+        db.session.add(match)
+        db.session.commit()
+        match_id = match.id
+
+    _login(client, "host", "password123")
+    resp = client.get(f"/draft/{match_id}")
+    assert resp.status_code == 200
+    assert "OCR source screenshot" not in resp.data.decode()
+
+
 # ---------- PR-J3: ban forms must survive the 5s lobby poll ----------
 
 

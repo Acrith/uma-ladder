@@ -277,6 +277,15 @@ def detail(match_id: int) -> object:
         if match.status == DraftMatchStatus.COMPLETED
         else []
     )
+    # PR-J4 — surface the OCR source screenshots that seeded the
+    # results so participants can verify what was parsed. Only
+    # populated when results were submitted via the OCR flow;
+    # manual-entry matches will return [].
+    completed_screenshots = (
+        ocr_service.get_draft_match_screenshots(match.id)
+        if match.status == DraftMatchStatus.COMPLETED
+        else []
+    )
     outgoing_invites = (
         draft_service.list_outgoing_invites_for_match(match.id)
         if match.status == DraftMatchStatus.WAITING_FOR_OPPONENT
@@ -299,6 +308,7 @@ def detail(match_id: int) -> object:
         banned_outfit_ids=banned_outfit_ids,
         completed_results=completed_results,
         completed_elo=completed_elo,
+        completed_screenshots=completed_screenshots,
         outgoing_invites=outgoing_invites,
     )
 
@@ -647,14 +657,16 @@ def upload_result_screenshot(match_id: int) -> object:
     merged_rows = sorted(by_placement.values(), key=lambda r: r["placement"])
     merged_rows.extend(unplaced)
     primary = attempts[0]
-    primary.parsed_json = dict(primary.parsed_json or {})
-    primary.parsed_json["rows"] = merged_rows
-    # Track every UploadedImage that contributed to this merged
-    # parse so the review page can render all the source screenshots
-    # side by side, not just the primary one.
-    primary.parsed_json["screenshot_image_ids"] = [
+    # Build the full dict before assigning so SQLAlchemy's change
+    # tracker sees a single replacement on a plain JSON column.
+    # In-place mutations after assignment aren't reliably persisted
+    # without a MutableDict wrapper.
+    new_parsed = dict(primary.parsed_json or {})
+    new_parsed["rows"] = merged_rows
+    new_parsed["screenshot_image_ids"] = [
         a.uploaded_image_id for a in attempts
     ]
+    primary.parsed_json = new_parsed
     db.session.commit()
     return redirect(
         url_for(
@@ -763,7 +775,9 @@ def results_from_ocr(match_id: int, attempt_id: int) -> object:
                 match_id, lines, confirmed_by_user_id=current_user.id
             )
             ocr_service.confirm_parse(
-                attempt.id, confirmed_by_user_id=current_user.id
+                attempt.id,
+                confirmed_by_user_id=current_user.id,
+                draft_match_id=match.id,
             )
         except draft_service.DraftError as exc:
             flash(str(exc))

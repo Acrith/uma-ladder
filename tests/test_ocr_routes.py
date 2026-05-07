@@ -147,3 +147,113 @@ def test_serve_image_requires_owner(
     _login(client, "bob", "password123")
     resp = client.get(f"/ocr/uploads/{image_id}")
     assert resp.status_code == 403
+
+
+# ---------- PR-J4 — opponent of a linked draft match can view ----------
+
+
+def test_serve_image_allows_opponent_of_linked_match(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Regression target for the user-reported gap: opponents could
+    not see screenshots their match-mate uploaded. After PR-J4, the
+    confirmed-attempt link grants both participants view access; an
+    unrelated user is still 403."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import (
+        DraftMatch,
+        DraftMatchStatus,
+        Season,
+        SeasonStatus,
+    )
+    from uma_ladder.services import ocr as ocr_service
+
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+    host = make_user(username="host", password="password123")
+    opp = make_user(username="opp", password="password123")
+    make_user(username="snoop", password="password123")
+
+    # Host uploads + parses a screenshot, then we manually link a
+    # confirmed attempt to a draft match where opp is a participant.
+    _login(client, "host", "password123")
+    client.post(
+        "/ocr/upload",
+        data={"image": (io.BytesIO(_png()), "race.png")},
+        content_type="multipart/form-data",
+    )
+    with app.app_context():
+        image = db.session.query(UploadedImage).first()
+        attempt = (
+            db.session.query(OcrParseAttempt)
+            .filter_by(uploaded_image_id=image.id)
+            .first()
+        )
+        attempt.status = OcrParseStatus.PARSED
+        db.session.commit()
+        s = db.session.query(Season).first()
+        if s is None:
+            now = datetime.now(UTC)
+            s = Season(
+                name="S",
+                starts_at=now - timedelta(days=1),
+                ends_at=now + timedelta(days=10),
+                status=SeasonStatus.ACTIVE,
+            )
+            db.session.add(s)
+            db.session.commit()
+        match = DraftMatch(
+            season_id=s.id,
+            host_user_id=host["id"],
+            opponent_user_id=opp["id"],
+            join_code="J4VIEW",
+            umas_per_player=2,
+            preset_pool="custom",
+            status=DraftMatchStatus.COMPLETED,
+        )
+        db.session.add(match)
+        db.session.commit()
+        ocr_service.confirm_parse(
+            attempt.id,
+            confirmed_by_user_id=host["id"],
+            draft_match_id=match.id,
+        )
+        image_id = image.id
+
+    # Opponent (didn't upload, isn't admin) — allowed by virtue of
+    # being a match participant.
+    client.post("/auth/logout")
+    _login(client, "opp", "password123")
+    resp = client.get(f"/ocr/uploads/{image_id}")
+    assert resp.status_code == 200
+
+    # Stranger — still 403.
+    client.post("/auth/logout")
+    _login(client, "snoop", "password123")
+    resp = client.get(f"/ocr/uploads/{image_id}")
+    assert resp.status_code == 403
+
+
+def test_serve_image_admin_keeps_access(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Admin override on serve_image is independent of the J4 link."""
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+    make_user(username="alice", password="password123")
+    make_user(username="root", password="password123", role=Role.ADMIN)
+
+    _login(client, "alice", "password123")
+    client.post(
+        "/ocr/upload",
+        data={"image": (io.BytesIO(_png()), "race.png")},
+        content_type="multipart/form-data",
+    )
+    with app.app_context():
+        image_id = db.session.query(UploadedImage).first().id
+
+    client.post("/auth/logout")
+    _login(client, "root", "password123")
+    resp = client.get(f"/ocr/uploads/{image_id}")
+    assert resp.status_code == 200
