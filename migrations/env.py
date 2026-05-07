@@ -96,19 +96,6 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
-        # CRITICAL — disable FKs during migrations on SQLite. Our
-        # `_enable_sqlite_foreign_keys` listener in uma_ladder/__init__.py
-        # turns PRAGMA foreign_keys = ON on every new connection so
-        # CASCADE deletes work at runtime. Alembic's `batch_alter_table`
-        # recreate-dance for SQLite does `DROP TABLE <parent>` without
-        # disabling FKs first — and SQLite documents that DROP TABLE
-        # with FKs on performs an implicit `DELETE FROM` first, which
-        # then CASCADEs to every child row referencing the parent.
-        # That's how PR-J10's batch_alter_table on `users` wiped
-        # user_profiles + draft_matches in production.
-        if connection.engine.dialect.name == "sqlite":
-            connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
-
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),
