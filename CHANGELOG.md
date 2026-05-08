@@ -8,6 +8,11 @@ log for the full history.
 
 ### Quality of life
 
+- **Targeted Official Matches.** When creating an official race,
+  organizers can now mark it as **Private** — only the organizer
+  and explicitly invited users see it on the index or can register.
+  Manage invitees on the race detail page after creating it.
+  Default stays Public.
 - **In-app inbox.** A bell icon in the navbar shows when you have
   notifications waiting. Draft invites surface here automatically
   (no more discovering them only by visiting the Draft page).

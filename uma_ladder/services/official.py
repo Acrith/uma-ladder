@@ -10,10 +10,12 @@ from sqlalchemy import case, func, select
 from ..extensions import db
 from ..models import (
     OfficialRace,
+    OfficialRaceInvitee,
     OfficialRaceRegistration,
     OfficialRaceResult,
     OfficialRaceResultSkill,
     OfficialRaceStatus,
+    OfficialRaceVisibility,
     RegistrationStatus,
     Season,
     UmaSkill,
@@ -60,6 +62,10 @@ class CreateRaceRequest:
     race_season: str | None = None
     weather: str | None = None
     ground_condition: str | None = None
+    # PR-J13 — defaults to public so callers that don't care
+    # behave as before. Accepts "public" or "private"; "club" is
+    # rejected here until the deferred Club follow-up lands.
+    visibility: str | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +90,12 @@ def _as_utc(dt: datetime) -> datetime:
     return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
+_VALID_CREATE_VISIBILITIES = {
+    OfficialRaceVisibility.PUBLIC.value,
+    OfficialRaceVisibility.PRIVATE.value,
+}
+
+
 def create_race(req: CreateRaceRequest) -> OfficialRace:
     season = db.session.get(Season, req.season_id)
     if season is None:
@@ -95,6 +107,13 @@ def create_race(req: CreateRaceRequest) -> OfficialRace:
         weather=req.weather,
         ground_condition=req.ground_condition,
     )
+    visibility = (
+        req.visibility or OfficialRaceVisibility.PUBLIC.value
+    ).strip().lower()
+    if visibility not in _VALID_CREATE_VISIBILITIES:
+        # CLUB is reserved for the deferred follow-up; reject here
+        # so the form can't sneak it through before that work.
+        raise OfficialError(f"unsupported visibility: {visibility!r}")
     race = OfficialRace(
         season_id=req.season_id,
         preset_id=req.preset_id,
@@ -107,10 +126,110 @@ def create_race(req: CreateRaceRequest) -> OfficialRace:
         race_season=race_season,
         weather=weather,
         ground_condition=ground,
+        visibility=visibility,
     )
     db.session.add(race)
     db.session.commit()
     return race
+
+
+# ---------- PR-J13: visibility + invitees ----------
+
+
+def list_invitees(race_id: int) -> Sequence[OfficialRaceInvitee]:
+    return list(
+        db.session.scalars(
+            select(OfficialRaceInvitee)
+            .where(OfficialRaceInvitee.official_race_id == race_id)
+            .order_by(OfficialRaceInvitee.created_at.asc())
+        )
+    )
+
+
+def add_invitee(
+    race_id: int,
+    *,
+    invitee_username: str,
+    invited_by_user_id: int,
+) -> OfficialRaceInvitee:
+    """Add a user to a Private race's allowlist. Idempotent —
+    re-adding an already-invited user is a no-op (returns the
+    existing row). Refuses on Public races (no allowlist semantics
+    there) and on unknown usernames."""
+    race = _get_race(race_id)
+    if race.visibility != OfficialRaceVisibility.PRIVATE.value:
+        raise OfficialError(
+            "invitees only apply to private races"
+        )
+    target = db.session.scalars(
+        select(User).where(
+            User.username == invitee_username.strip().lower()
+        )
+    ).first()
+    if target is None:
+        raise OfficialError(f"no user named {invitee_username!r}")
+    existing = db.session.scalars(
+        select(OfficialRaceInvitee).where(
+            OfficialRaceInvitee.official_race_id == race_id,
+            OfficialRaceInvitee.user_id == target.id,
+        )
+    ).first()
+    if existing is not None:
+        return existing
+    invitee = OfficialRaceInvitee(
+        official_race_id=race_id,
+        user_id=target.id,
+        invited_by_user_id=invited_by_user_id,
+    )
+    db.session.add(invitee)
+    db.session.commit()
+    return invitee
+
+
+def remove_invitee(race_id: int, *, user_id: int) -> int:
+    """Remove a user from a Private race's allowlist. Returns
+    count removed (0 or 1). Does NOT also unregister the user if
+    they had registered — that's a separate organizer action.
+    Reasoning: pulling someone off the allowlist may be a
+    correction (typo invite) and the registration cleanup should
+    be deliberate."""
+    invitee = db.session.scalars(
+        select(OfficialRaceInvitee).where(
+            OfficialRaceInvitee.official_race_id == race_id,
+            OfficialRaceInvitee.user_id == user_id,
+        )
+    ).first()
+    if invitee is None:
+        return 0
+    db.session.delete(invitee)
+    db.session.commit()
+    return 1
+
+
+def user_can_view_race(race: OfficialRace, *, user_id: int | None) -> bool:
+    """Single source of truth for "is this race visible to this
+    viewer?". Drives both the index list and the detail-page gate.
+
+    - Public race: anyone (logged in or not) can view.
+    - Private race: organizer + invitees + senior_organizer+
+      moderators. Anonymous users see nothing for Private.
+    """
+    if race.visibility == OfficialRaceVisibility.PUBLIC.value:
+        return True
+    if user_id is None:
+        return False
+    if user_id == race.organizer_user_id:
+        return True
+    user = db.session.get(User, user_id)
+    if user is not None and user.has_at_least("senior_organizer"):
+        return True
+    invitee = db.session.scalars(
+        select(OfficialRaceInvitee).where(
+            OfficialRaceInvitee.official_race_id == race.id,
+            OfficialRaceInvitee.user_id == user_id,
+        )
+    ).first()
+    return invitee is not None
 
 
 def open_registration(
@@ -165,6 +284,12 @@ def register(race_id: int, user_id: int) -> OfficialRaceRegistration:
     race = _get_race(race_id)
     if race.status != OfficialRaceStatus.REGISTRATION_OPEN:
         raise InvalidRaceStateError("registration is not open")
+    # PR-J13 — Private races gate registration on the invitee
+    # allowlist. The detail page is already invisible to non-
+    # invitees (user_can_view_race), but defending in depth here
+    # in case someone POSTs the register endpoint directly.
+    if not user_can_view_race(race, user_id=user_id):
+        raise OfficialError("not invited to this private race")
 
     # Look up *any* existing row for this (race, user). The
     # uq_official_race_registrations_race_user constraint forbids two
@@ -431,12 +556,21 @@ def season_standing_for_user(
     return None
 
 
-def list_races(*, season_id: int | None = None) -> Sequence[OfficialRace]:
+def list_races(
+    *,
+    season_id: int | None = None,
+    viewer_user_id: int | None = None,
+) -> Sequence[OfficialRace]:
+    """List races, scoped to what `viewer_user_id` is allowed to
+    see (PR-J13). Pass ``viewer_user_id=None`` for anonymous (only
+    sees Public races) or the moderator/admin path which already
+    has full access via ``user_can_view_race``."""
     stmt = select(OfficialRace)
     if season_id is not None:
         stmt = stmt.where(OfficialRace.season_id == season_id)
     stmt = stmt.order_by(OfficialRace.created_at.desc())
-    return list(db.session.scalars(stmt))
+    rows = list(db.session.scalars(stmt))
+    return [r for r in rows if user_can_view_race(r, user_id=viewer_user_id)]
 
 
 _UPCOMING_STATUSES = (
@@ -448,7 +582,10 @@ _UPCOMING_STATUSES = (
 
 
 def list_upcoming_races(
-    *, season_id: int | None = None, limit: int | None = None
+    *,
+    season_id: int | None = None,
+    limit: int | None = None,
+    viewer_user_id: int | None = None,
 ) -> Sequence[OfficialRace]:
     """Races a player can still join or that are about to launch — used
     by the dashboard upcoming-races card. Excludes draft (organiser still
@@ -459,6 +596,12 @@ def list_upcoming_races(
     SQLite NULLs sort before non-NULLs by default, so we coalesce to a
     far-future timestamp to keep unscheduled races below the scheduled
     ones in the same query.
+
+    PR-J13: scope to what `viewer_user_id` is allowed to see — Private
+    races appear only for the organizer + invitees + moderators+. We
+    over-fetch then filter in Python to keep the visibility rule in
+    one place; with `limit` set, we apply the limit AFTER filtering
+    so the caller gets the requested number of *visible* rows.
     """
     far_future = datetime(9999, 1, 1, tzinfo=UTC)
     stmt = (
@@ -471,9 +614,11 @@ def list_upcoming_races(
     )
     if season_id is not None:
         stmt = stmt.where(OfficialRace.season_id == season_id)
+    rows = list(db.session.scalars(stmt))
+    visible = [r for r in rows if user_can_view_race(r, user_id=viewer_user_id)]
     if limit is not None:
-        stmt = stmt.limit(limit)
-    return list(db.session.scalars(stmt))
+        visible = visible[:limit]
+    return visible
 
 
 def get_race(race_id: int) -> OfficialRace:

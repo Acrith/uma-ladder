@@ -37,9 +37,14 @@ bp = Blueprint("official", __name__, template_folder="templates")
 
 @bp.get("/")
 def index() -> object:
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
-    from ..models import OfficialRace, OfficialRaceStatus, Season
+    from ..models import (
+        OfficialRace,
+        OfficialRaceStatus,
+        OfficialRaceVisibility,
+        Season,
+    )
 
     page = max(1, request.args.get("page", 1, type=int))
     status = (request.args.get("status") or "").strip()
@@ -52,14 +57,21 @@ def index() -> object:
     if season_id_raw.isdigit():
         stmt = stmt.where(OfficialRace.season_id == int(season_id_raw))
 
-    total = db.session.scalar(
-        select(func.count()).select_from(stmt.subquery())
-    )
-    races = list(
-        db.session.scalars(
-            stmt.limit(page_size).offset((page - 1) * page_size)
-        )
-    )
+    # PR-J13 — apply visibility filter in Python so all access
+    # logic flows through user_can_view_race. Over-fetch +
+    # post-filter; for the small ladder scale this is fine, and
+    # the alternative (computing visibility in SQL) would push
+    # auth into the query layer where it's easier to forget on
+    # the next route. Pagination math runs against the filtered
+    # set.
+    viewer_id = current_user.id if current_user.is_authenticated else None
+    all_rows = list(db.session.scalars(stmt))
+    visible = [
+        r for r in all_rows
+        if official_service.user_can_view_race(r, user_id=viewer_id)
+    ]
+    total = len(visible)
+    races = visible[(page - 1) * page_size : page * page_size]
     pages = max(1, (total + page_size - 1) // page_size)
 
     seasons = list(
@@ -71,6 +83,7 @@ def index() -> object:
         races=races,
         seasons=seasons,
         statuses=[s.value for s in OfficialRaceStatus],
+        visibilities=[v.value for v in OfficialRaceVisibility],
         page=page,
         pages=pages,
         total=total,
@@ -107,6 +120,7 @@ def new() -> object:
                     race_season=form.race_season.data or None,
                     weather=form.weather.data or None,
                     ground_condition=form.ground_condition.data or None,
+                    visibility=form.visibility.data or None,
                 )
             )
         except official_service.OfficialError as exc:
@@ -127,7 +141,20 @@ def detail(race_id: int) -> object:
         race = official_service.get_race(race_id)
     except official_service.RaceNotFoundError:
         abort(404)
+    # PR-J13 — Private races are 404 to non-invitees so the URL
+    # doesn't even confirm the race exists. Organizer + invitees
+    # + senior_organizer+ moderators see normally.
+    viewer_id = current_user.id if current_user.is_authenticated else None
+    if not official_service.user_can_view_race(race, user_id=viewer_id):
+        abort(404)
     registrations = official_service.list_registrations(race_id)
+    # PR-J13 — Private-race invitee list shown only when viewing
+    # is gated (so we don't waste a query for Public races).
+    invitees = (
+        official_service.list_invitees(race_id)
+        if race.visibility != "public"
+        else []
+    )
     # Pull existing race results so the page can render a per-result
     # "Add details" upload form (PR19b OCR enrichment).
     from sqlalchemy import select as _select  # local import to keep top tidy
@@ -147,12 +174,69 @@ def detail(race_id: int) -> object:
         "official/detail.html",
         race=race,
         registrations=registrations,
+        invitees=invitees,
         results=results,
         room_code_form=room_code_form,
         results_form=results_form,
         csrf_form=csrf_form,
         room_code_expired=expired,
     )
+
+
+# ---------- PR-J13: invitee management ----------
+
+
+@bp.post("/<int:race_id>/invitees")
+@min_role_required(Role.ORGANIZER)
+def add_invitee(race_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    try:
+        race = official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    from ..services.permissions import assert_can_act_on_race
+
+    try:
+        assert_can_act_on_race(race, by_user_id=current_user.id)
+    except PermissionDeniedError:
+        abort(403)
+    username = (request.form.get("invitee_username") or "").strip()
+    if not username:
+        flash("Enter a username to invite.")
+        return redirect(url_for("official.detail", race_id=race_id))
+    try:
+        official_service.add_invitee(
+            race_id,
+            invitee_username=username,
+            invited_by_user_id=current_user.id,
+        )
+        flash(f"Invited @{username}.")
+    except official_service.OfficialError as exc:
+        flash(str(exc))
+    return redirect(url_for("official.detail", race_id=race_id))
+
+
+@bp.post("/<int:race_id>/invitees/<int:user_id>/remove")
+@min_role_required(Role.ORGANIZER)
+def remove_invitee(race_id: int, user_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    try:
+        race = official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    from ..services.permissions import assert_can_act_on_race
+
+    try:
+        assert_can_act_on_race(race, by_user_id=current_user.id)
+    except PermissionDeniedError:
+        abort(403)
+    n = official_service.remove_invitee(race_id, user_id=user_id)
+    flash(f"Removed {n} invitee(s).")
+    return redirect(url_for("official.detail", race_id=race_id))
 
 
 @bp.post("/<int:race_id>/open")
@@ -195,6 +279,12 @@ def register(race_id: int) -> object:
     except official_service.RaceFullError:
         flash("This race is full.")
     except official_service.InvalidRaceStateError as exc:
+        flash(str(exc))
+    except official_service.OfficialError as exc:
+        # PR-J13 — covers "not invited to this private race". A
+        # non-invitee shouldn't have reached this URL anyway since
+        # the detail page 404s; keep the message generic so we
+        # don't leak Private-race existence.
         flash(str(exc))
     return redirect(url_for("official.detail", race_id=race_id))
 

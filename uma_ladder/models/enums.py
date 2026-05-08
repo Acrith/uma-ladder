@@ -86,6 +86,23 @@ class OfficialRaceStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class OfficialRaceVisibility(StrEnum):
+    """PR-J13 — race targeting.
+
+    PUBLIC  — visible on the index, anyone can register.
+    PRIVATE — visible only to the organizer + invitees; an explicit
+              invitee list (`official_race_invitees`) gates both
+              viewing and registration.
+    CLUB    — reserved for the future Club-only follow-up. Not
+              accepted yet by the create form; the column allows it
+              so the schema doesn't have to migrate twice.
+    """
+
+    PUBLIC = "public"
+    PRIVATE = "private"
+    CLUB = "club"
+
+
 class RegistrationStatus(StrEnum):
     REGISTERED = "registered"
     CANCELLED = "cancelled"

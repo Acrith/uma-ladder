@@ -131,6 +131,21 @@
         </div>
       </div>
 
+      {# PR-J13 — visibility selector. Public is the default;
+         Private adds an invitee allowlist (managed from the
+         race detail page after creation). #}
+      <div>
+        <label class="text-sm text-slate-300">{{ form.visibility.label.text }}</label>
+        {{ form.visibility(class="input-base mt-1") }}
+        <p class="mt-1 text-[11px] text-slate-500">
+          <strong class="text-slate-400">Public</strong> — visible on the race
+          index, anyone can register.
+          <strong class="text-slate-400">Private</strong> — only the organizer +
+          invitees see and can register; manage invitees on the race page after
+          creation.
+        </p>
+      </div>
+
       <div>
         <label class="text-sm text-slate-300">{{ form.notes.label.text }}</label>
         {{ form.notes(class="input-base mt-1", rows=3) }}

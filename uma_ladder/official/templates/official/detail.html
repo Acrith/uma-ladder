@@ -10,6 +10,10 @@
       <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
         {{ chip("Official", "amber") }}
         {{ official_status_chip(race.status) }}
+        {# PR-J13 — surface Private as a visual cue. Public stays
+           quiet so the index isn't full of redundant "Public"
+           chips. #}
+        {% if race.visibility == "private" %}{{ chip("🔒 Private", "fuchsia") }}{% endif %}
         {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
         {% if race.preset %}{{ chip(race.preset.name, "violet") }}{% endif %}
         {% if race.scheduled_at %}{{ chip("⏰ " + race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC'), "amber") }}{% endif %}
@@ -72,6 +76,50 @@
   {% endif %}
 
   <section class="mt-6 grid gap-4 lg:grid-cols-3">
+
+    {# PR-J13 — invitee management card. Visible only on Private
+       races, and only for organizer / senior_organizer+. #}
+    {% if race.visibility == "private" and current_user.is_authenticated and current_user.has_at_least('organizer') %}
+      {% call card(class="p-5 lg:col-span-2") %}
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Invitees</h2>
+          <span class="text-xs text-slate-500">{{ invitees|length }} invited</span>
+        </div>
+        <p class="mt-1 text-xs text-slate-500">
+          Only the organizer and the users below can see this race or register.
+        </p>
+        <form method="post"
+              action="{{ url_for('official.add_invitee', race_id=race.id) }}"
+              class="mt-3 flex gap-2">
+          {{ csrf_form.hidden_tag() }}
+          <input type="text"
+                 name="invitee_username"
+                 placeholder="username"
+                 autocomplete="off"
+                 class="input-base flex-1" />
+          <button class="btn-primary">Invite</button>
+        </form>
+        {% if invitees %}
+          <ul class="mt-3 space-y-1.5">
+            {% for inv in invitees %}
+              <li class="flex items-center gap-2 text-sm">
+                <span class="h-1.5 w-1.5 rounded-full bg-fuchsia-400"></span>
+                <a class="flex-1 text-slate-200 hover:text-fuchsia-300"
+                   href="{{ url_for('profiles.public', username=inv.user.username) }}">@{{ inv.user.username }}</a>
+                <form method="post"
+                      action="{{ url_for('official.remove_invitee', race_id=race.id, user_id=inv.user_id) }}"
+                      onsubmit="return confirm('Uninvite @{{ inv.user.username }}?');">
+                  {{ csrf_form.hidden_tag() }}
+                  <button type="submit" class="text-xs text-rose-400 hover:text-rose-300" title="Uninvite">×</button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="mt-3 text-sm text-slate-500">Nobody invited yet.</p>
+        {% endif %}
+      {% endcall %}
+    {% endif %}
 
     {# Registrations #}
     {% call card(class="p-5 lg:col-span-1") %}

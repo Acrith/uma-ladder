@@ -15,7 +15,7 @@ primary_region = 'fra'
   TAILWIND_BUILT = '1'
 
 [[mounts]]
-  source = 'uma_ladder_uploads'
+  source = 'uma_ladder_uploads_v3'
   destination = '/app/instance'
 
 [http_service]

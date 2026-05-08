@@ -20,6 +20,7 @@ from .enums import (
     NotificationTarget,
     OcrParseStatus,
     OfficialRaceStatus,
+    OfficialRaceVisibility,
     PresetSource,
     RaceSeason,
     RegistrationStatus,
@@ -32,6 +33,7 @@ from .inbox import UserNotification
 from .notifications import DiscordNotificationAttempt
 from .official_races import (
     OfficialRace,
+    OfficialRaceInvitee,
     OfficialRaceRegistration,
     OfficialRaceResult,
     OfficialRaceResultSkill,
@@ -68,10 +70,12 @@ __all__ = [
     "OcrParseAttempt",
     "OcrParseStatus",
     "OfficialRace",
+    "OfficialRaceInvitee",
     "OfficialRaceRegistration",
     "OfficialRaceResult",
     "OfficialRaceResultSkill",
     "OfficialRaceStatus",
+    "OfficialRaceVisibility",
     "PresetSource",
     "RacePreset",
     "RaceSeason",

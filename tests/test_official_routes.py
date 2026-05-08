@@ -791,3 +791,232 @@ def test_race_organizer_can_still_act_on_their_own_race(
     # orgA still logged in from the create call.
     assert client.post(f"/official/{race_id}/open").status_code == 302
     assert client.post(f"/official/{race_id}/close").status_code == 302
+
+
+# ---------- PR-J13: targeted (Public/Private) races ----------
+
+
+def _create_private_race(
+    app: Flask, organizer_id: int
+) -> int:
+    """Create a Private race directly via service to keep tests
+    tight (form route exercised separately)."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Private Cup",
+                organizer_user_id=organizer_id,
+                preset_id=pid,
+                visibility="private",
+            )
+        )
+        return race.id
+
+
+def test_create_form_accepts_visibility_private(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The form goes through visibility=private end-to-end. Smoke
+    test that wires CreateRaceRequest.visibility into the model."""
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    _login(client, "org", "password123")
+
+    resp = client.post(
+        "/official/new",
+        data={
+            "season_id": str(sid),
+            "name": "Private Cup",
+            "preset_id": str(pid),
+            "visibility": "private",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    from uma_ladder.models import OfficialRace
+
+    with app.app_context():
+        race = db.session.query(OfficialRace).first()
+        assert race is not None
+        assert race.visibility == "private"
+
+
+def test_index_hides_private_from_uninvited_users(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Anonymous + non-invited users don't see Private races on
+    the index. Organizer + invitees do."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    _create_private_race(app, organizer_id=org["id"])
+    make_user(username="snoop", password="password123", role=Role.USER)
+
+    # Anonymous: race must not appear.
+    resp = client.get("/official/")
+    body = resp.data.decode()
+    assert "Private Cup" not in body
+
+    # Non-invited user: same.
+    _login(client, "snoop", "password123")
+    body = client.get("/official/").data.decode()
+    assert "Private Cup" not in body
+
+    # Organizer: sees it.
+    client.post("/auth/logout")
+    _login(client, "org", "password123")
+    body = client.get("/official/").data.decode()
+    assert "Private Cup" in body
+
+
+def test_detail_404_for_uninvited(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Private detail returns 404 (not 403) so the URL doesn't
+    even confirm the race exists to non-invitees."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    make_user(username="snoop", password="password123", role=Role.USER)
+
+    # Anonymous
+    assert client.get(f"/official/{race_id}").status_code == 404
+    # Non-invited
+    _login(client, "snoop", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 404
+
+
+def test_invite_grants_view_and_register(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """After an organizer invites a user, that user can see + register
+    for the Private race."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    make_user(username="alice", password="password123", role=Role.USER)
+
+    _login(client, "org", "password123")
+    resp = client.post(
+        f"/official/{race_id}/invitees",
+        data={"invitee_username": "alice"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    # Open registration so invitee can register.
+    client.post(f"/official/{race_id}/open")
+
+    # Switch to alice — she now sees the detail page.
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    detail = client.get(f"/official/{race_id}")
+    assert detail.status_code == 200
+    assert b"Private Cup" in detail.data
+    # And she can register.
+    reg = client.post(
+        f"/official/{race_id}/register",
+        follow_redirects=False,
+    )
+    assert reg.status_code == 302
+
+
+def test_register_blocked_for_non_invitee(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Defense-in-depth: even if a non-invitee POSTs the register
+    endpoint directly, the service refuses."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    snoop = make_user(username="snoop", password="password123", role=Role.USER)
+
+    # Open registration
+    with app.app_context():
+        official_service.open_registration(race_id)
+
+    _login(client, "snoop", "password123")
+    client.post(f"/official/{race_id}/register", follow_redirects=False)
+    # Detail returns 404, but the register POST goes through min_role +
+    # service. The service raises OfficialError → flashed; redirect home.
+    # Either 404 or 302 with no registration is acceptable here. What
+    # matters: no DB row was created.
+    from uma_ladder.models import OfficialRaceRegistration
+
+    with app.app_context():
+        regs = db.session.query(OfficialRaceRegistration).filter_by(
+            user_id=snoop["id"]
+        ).count()
+        assert regs == 0
+
+
+def test_remove_invitee_revokes_access(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Pulling someone off the invitee list immediately makes the
+    Private race invisible to them again."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    alice = make_user(username="alice", password="password123", role=Role.USER)
+    with app.app_context():
+        official_service.add_invitee(
+            race_id,
+            invitee_username="alice",
+            invited_by_user_id=org["id"],
+        )
+
+    _login(client, "alice", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+    # Organizer removes alice.
+    client.post("/auth/logout")
+    _login(client, "org", "password123")
+    resp = client.post(
+        f"/official/{race_id}/invitees/{alice['id']}/remove",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    # Alice can no longer see the race.
+    client.post("/auth/logout")
+    _login(client, "alice", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 404
+
+
+def test_senior_organizer_can_view_private_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Senior organizers act as moderators per docs/permissions.md;
+    they should see Private races without being explicitly invited."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    make_user(username="sr", password="password123", role=Role.SENIOR_ORGANIZER)
+
+    _login(client, "sr", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+
+def test_create_rejects_unsupported_visibility(
+    app: Flask, make_user
+) -> None:
+    """`club` reserved for the deferred follow-up — must be rejected
+    at the service layer until that work lands."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", role=Role.ORGANIZER)
+    with app.app_context(), pytest.raises(official_service.OfficialError):
+        official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Club Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="club",
+            )
+        )

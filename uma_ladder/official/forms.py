@@ -52,6 +52,16 @@ class CreateOfficialRaceForm(FlaskForm):
                  ("Soft", "Soft"), ("Heavy", "Heavy")],
         validators=[Optional(), AnyOf(["", "Firm", "Good", "Soft", "Heavy"])],
     )
+    # PR-J13 — race targeting. Public is the default. Private
+    # adds an invitee allowlist that gates both view + register.
+    # Club is reserved for the deferred follow-up — not a choice
+    # here yet.
+    visibility = SelectField(
+        "Visibility",
+        choices=[("public", "Public"), ("private", "Private")],
+        default="public",
+        validators=[DataRequired(), AnyOf(["public", "private"])],
+    )
 
 
 class RoomCodeForm(FlaskForm):

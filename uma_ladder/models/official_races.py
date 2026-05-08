@@ -13,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..extensions import db
-from .enums import OfficialRaceStatus, RegistrationStatus
+from .enums import OfficialRaceStatus, OfficialRaceVisibility, RegistrationStatus
 
 
 def _utcnow() -> datetime:
@@ -52,6 +52,16 @@ class OfficialRace(db.Model):
     )
     max_players: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # PR-J13 — race targeting. PUBLIC (default) → visible on the
+    # index. PRIVATE → only organizer + invitees see it. CLUB
+    # reserved for the deferred follow-up.
+    visibility: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=OfficialRaceVisibility.PUBLIC,
+        server_default=OfficialRaceVisibility.PUBLIC.value,
+        index=True,
+    )
     # Race-day conditions (PR-G3). Nullable so legacy rows still load;
     # the organizer form encourages — but doesn't yet require — values.
     race_season: Mapped[str | None] = mapped_column(String(8), nullable=True)
@@ -180,3 +190,52 @@ class OfficialRaceResultSkill(db.Model):
     )
 
     skill = relationship("UmaSkill", lazy="joined")
+
+
+class OfficialRaceInvitee(db.Model):
+    """PR-J13 — invitee list for Private races.
+
+    A row here means the organizer explicitly invited this user
+    to a Private race. The presence of a row gates both viewing
+    and registration; without one (and not being the organizer
+    or a moderator+) the race is invisible.
+
+    Plain INSERT/DELETE managed from the race detail page; no
+    accept/decline state — being invited IS the access grant. If
+    the future Club-only path needs more nuance (e.g. revoked
+    invites), this table can grow a status column later.
+    """
+
+    __tablename__ = "official_race_invitees"
+    __table_args__ = (
+        UniqueConstraint(
+            "official_race_id",
+            "user_id",
+            name="uq_official_race_invitees_race_user",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    official_race_id: Mapped[int] = mapped_column(
+        ForeignKey("official_races.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    invited_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    user = relationship(
+        "User", lazy="joined", foreign_keys=[user_id]
+    )
+    invited_by = relationship(
+        "User", lazy="joined", foreign_keys=[invited_by_user_id]
+    )
