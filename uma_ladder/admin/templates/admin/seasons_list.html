@@ -55,43 +55,33 @@
                 <td class="px-4 py-2 text-right">
                   <div class="flex items-center justify-end gap-2 text-xs">
                     <a href="{{ url_for('admin.season_edit', season_id=s.id) }}" class="text-cyan-300 hover:text-cyan-200">Edit</a>
-                    {# PR-J15 — native <select> instead of an absolute-
-                       positioned <details> popover. Browsers render
-                       native selects in their own popup layer that
-                       escapes parent `overflow:hidden` clipping (the
-                       table wrapper has overflow-x-auto for narrow
-                       screens, which forces overflow-y to clip too).
-                       The previous implementation was getting trapped
-                       inside the card and forcing the wrapper to
-                       scroll. #}
-                    <form method="post"
-                          action="{{ url_for('admin.season_set_status', season_id=s.id) }}"
-                          class="inline">
-                      {{ csrf_form.hidden_tag() }}
-                      {# PR-J16 — reusable popover widget. The
-                         panel uses `position: fixed` (handled by
-                         static/js/popover.js) so it escapes the
-                         table wrapper's overflow clipping. Trigger
-                         keeps the original "Status ▾" plain-text
-                         chip aesthetic. #}
-                      <div data-popover class="inline-block">
-                        <button type="button"
-                                data-popover-trigger
-                                class="cursor-pointer text-slate-400 hover:text-slate-200">
-                          Status ▾
-                        </button>
-                        <div data-popover-panel
-                             class="hidden fixed z-50 w-40 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
-                          {% for status in statuses if status != s.status %}
-                            <form method="post" action="{{ url_for('admin.season_set_status', season_id=s.id) }}">
-                              {{ csrf_form.hidden_tag() }}
-                              <input type="hidden" name="status" value="{{ status }}" />
-                              <button class="block w-full text-left px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-cyan-200 rounded">→ {{ status }}</button>
-                            </form>
-                          {% endfor %}
-                        </div>
+                    {# PR-J16 — reusable popover widget. The
+                       panel uses `position: fixed` (handled by
+                       static/js/popover.js) so it escapes the
+                       table wrapper's overflow clipping. Trigger
+                       keeps the original "Status ▾" plain-text
+                       chip aesthetic. Each status option is its
+                       own form INSIDE the panel; no outer form
+                       wrapper (HTML5 forbids nested forms and the
+                       browser would auto-close it, breaking the
+                       click handler). #}
+                    <div data-popover class="inline-block">
+                      <button type="button"
+                              data-popover-trigger
+                              class="cursor-pointer text-slate-400 hover:text-slate-200">
+                        Status ▾
+                      </button>
+                      <div data-popover-panel
+                           class="hidden fixed z-50 w-40 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
+                        {% for status in statuses if status != s.status %}
+                          <form method="post" action="{{ url_for('admin.season_set_status', season_id=s.id) }}">
+                            {{ csrf_form.hidden_tag() }}
+                            <input type="hidden" name="status" value="{{ status }}" />
+                            <button class="block w-full text-left px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-cyan-200 rounded">→ {{ status }}</button>
+                          </form>
+                        {% endfor %}
                       </div>
-                    </form>
+                    </div>
                   </div>
                 </td>
               </tr>
