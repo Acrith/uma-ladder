@@ -186,6 +186,36 @@ def detail(race_id: int) -> object:
 # ---------- PR-J13: invitee management ----------
 
 
+@bp.post("/<int:race_id>/visibility")
+@min_role_required(Role.ORGANIZER)
+def change_visibility(race_id: int) -> object:
+    """PR-J14 — toggle Public ↔ Private after creation. The
+    Public→Private path auto-promotes existing registrants into
+    the invitee allowlist so they keep access to a race they
+    already joined."""
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    new_visibility = (request.form.get("visibility") or "").strip()
+    try:
+        official_service.change_visibility(
+            race_id,
+            new_visibility=new_visibility,
+            by_user_id=current_user.id,
+        )
+    except official_service.RaceNotFoundError:
+        abort(404)
+    except PermissionDeniedError:
+        abort(403)
+    except official_service.InvalidRaceStateError as exc:
+        flash(str(exc))
+    except official_service.OfficialError as exc:
+        flash(str(exc))
+    else:
+        flash(f"Race visibility set to {new_visibility}.")
+    return redirect(url_for("official.detail", race_id=race_id))
+
+
 @bp.post("/<int:race_id>/invitees")
 @min_role_required(Role.ORGANIZER)
 def add_invitee(race_id: int) -> object:

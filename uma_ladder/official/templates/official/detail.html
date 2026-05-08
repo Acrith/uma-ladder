@@ -43,6 +43,28 @@
             <button class="btn-ghost">Close registration</button>
           </form>
         {% endif %}
+        {# PR-J14 — visibility toggle. Hidden on terminal states.
+           Public→Private auto-promotes current registrants into
+           the invitee allowlist so they don't lose access. #}
+        {% if race.status not in ('cancelled', 'completed') %}
+          {% if race.visibility == 'public' %}
+            <form method="post"
+                  action="{{ url_for('official.change_visibility', race_id=race.id) }}"
+                  onsubmit="return confirm('Make this race PRIVATE? Existing registrations will be auto-added to the invitee list.');">
+              {{ csrf_form.hidden_tag() }}
+              <input type="hidden" name="visibility" value="private" />
+              <button type="submit" class="text-xs text-fuchsia-300 hover:text-fuchsia-200">🔒 Make private</button>
+            </form>
+          {% else %}
+            <form method="post"
+                  action="{{ url_for('official.change_visibility', race_id=race.id) }}"
+                  onsubmit="return confirm('Open this race to the PUBLIC? Anyone will be able to view + register.');">
+              {{ csrf_form.hidden_tag() }}
+              <input type="hidden" name="visibility" value="public" />
+              <button type="submit" class="text-xs text-cyan-300 hover:text-cyan-200">🌐 Make public</button>
+            </form>
+          {% endif %}
+        {% endif %}
         {# Cancel race — organiser+. Hidden once cancelled or completed. #}
         {% if race.status not in ('cancelled', 'completed') %}
           <form method="post"

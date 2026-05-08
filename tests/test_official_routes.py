@@ -1020,3 +1020,164 @@ def test_create_rejects_unsupported_visibility(
                 visibility="club",
             )
         )
+
+
+# ---------- PR-J14: change visibility on existing races ----------
+
+
+def test_change_visibility_public_to_private_auto_invites_registrants(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The interesting transition — flipping a Public race that
+    already has registrations to Private must keep those users
+    able to access the race. We do that by auto-adding them to
+    the invitee allowlist."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    alice = make_user(username="alice", password="password123", role=Role.USER)
+    bob = make_user(username="bob", password="password123", role=Role.USER)
+
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Promote Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="public",
+            )
+        )
+        race_id = race.id
+        official_service.open_registration(race_id)
+        official_service.register(race_id, alice["id"])
+        official_service.register(race_id, bob["id"])
+
+        official_service.change_visibility(
+            race_id, new_visibility="private", by_user_id=org["id"]
+        )
+
+        invitees = official_service.list_invitees(race_id)
+        invitee_user_ids = {inv.user_id for inv in invitees}
+        assert alice["id"] in invitee_user_ids
+        assert bob["id"] in invitee_user_ids
+
+    # Both can still see the now-Private race.
+    _login(client, "alice", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+    client.post("/auth/logout")
+    _login(client, "bob", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+
+def test_change_visibility_private_to_public_opens_gate(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Private→Public just flips the field; nobody's blocked anymore."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    make_user(username="snoop", password="password123", role=Role.USER)
+
+    # Snoop locked out while Private.
+    _login(client, "snoop", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 404
+    client.post("/auth/logout")
+
+    # Organizer flips to Public.
+    _login(client, "org", "password123")
+    resp = client.post(
+        f"/official/{race_id}/visibility",
+        data={"visibility": "public"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    # Snoop now sees the race.
+    client.post("/auth/logout")
+    _login(client, "snoop", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+
+def test_change_visibility_rejected_on_completed_race(
+    app: Flask, make_user
+) -> None:
+    """Changing a finished race's visibility serves no purpose and
+    would rewrite history. Refuse."""
+    from uma_ladder.models import OfficialRace
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", role=Role.ORGANIZER)
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Done Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+            )
+        )
+        # Force COMPLETED state; the natural transition involves
+        # results submission which is more setup than this test
+        # needs.
+        db.session.get(OfficialRace, race.id).status = (
+            OfficialRaceStatus.COMPLETED
+        )
+        db.session.commit()
+        with pytest.raises(official_service.InvalidRaceStateError):
+            official_service.change_visibility(
+                race.id,
+                new_visibility="private",
+                by_user_id=org["id"],
+            )
+
+
+def test_change_visibility_requires_organizer_or_moderator(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Random users cannot flip a race they don't own. Senior
+    organizer (moderator) can flip any."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    make_user(username="other_org", password="password123", role=Role.ORGANIZER)
+
+    # Different organizer cannot flip someone else's race.
+    _login(client, "other_org", "password123")
+    resp = client.post(
+        f"/official/{race_id}/visibility",
+        data={"visibility": "public"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+
+    # Senior organizer (moderator) can flip any race.
+    client.post("/auth/logout")
+    make_user(username="sr", password="password123", role=Role.SENIOR_ORGANIZER)
+    _login(client, "sr", "password123")
+    resp = client.post(
+        f"/official/{race_id}/visibility",
+        data={"visibility": "public"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+
+def test_change_visibility_no_op_on_same_value(
+    app: Flask, make_user
+) -> None:
+    """Flipping to the current value is a no-op (not an error).
+    Avoids the form caller having to know what they were."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", role=Role.ORGANIZER)
+    race_id = _create_private_race(app, organizer_id=org["id"])
+    with app.app_context():
+        race = official_service.change_visibility(
+            race_id,
+            new_visibility="private",
+            by_user_id=org["id"],
+        )
+        assert race.visibility == "private"

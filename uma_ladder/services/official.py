@@ -206,6 +206,87 @@ def remove_invitee(race_id: int, *, user_id: int) -> int:
     return 1
 
 
+# PR-J14 — terminal states where flipping visibility serves no
+# purpose; refuse so the page can't get into weird states (e.g.
+# "make completed race private" hiding historical results).
+_TERMINAL_RACE_STATUSES = frozenset(
+    {OfficialRaceStatus.CANCELLED, OfficialRaceStatus.COMPLETED}
+)
+
+
+def change_visibility(
+    race_id: int,
+    *,
+    new_visibility: str,
+    by_user_id: int,
+) -> OfficialRace:
+    """Toggle a race between Public and Private after creation
+    (PR-J14). Used by organizers who realised a Public race should
+    have been Private (or vice versa).
+
+    Public → Private auto-promotes everyone currently in the
+    REGISTERED state into the invitee allowlist so they don't lose
+    access to a race they already joined. (Cancelled registrations
+    aren't re-granted.)
+
+    Private → Public just opens the gate; existing invitee rows
+    stay but become harmless.
+
+    Refuses on terminal states (CANCELLED / COMPLETED) — changing
+    a finished race's visibility serves no purpose and would
+    rewrite history. Only the organizer (and senior_organizer+
+    moderators per `assert_can_act_on_race`) may flip.
+    """
+    race = _get_race(race_id)
+    from .permissions import assert_can_act_on_race
+
+    assert_can_act_on_race(race, by_user_id=by_user_id)
+
+    new_visibility = new_visibility.strip().lower()
+    if new_visibility not in _VALID_CREATE_VISIBILITIES:
+        raise OfficialError(f"unsupported visibility: {new_visibility!r}")
+    if race.status in _TERMINAL_RACE_STATUSES:
+        raise InvalidRaceStateError(
+            f"cannot change visibility on a {race.status} race"
+        )
+    if race.visibility == new_visibility:
+        return race  # no-op
+
+    if new_visibility == OfficialRaceVisibility.PRIVATE.value:
+        # Public → Private: protect existing registrants. Pull the
+        # active registrations and ensure each user has a matching
+        # invitee row. Idempotent — if any user is somehow already
+        # invited, we skip them.
+        active_regs = db.session.scalars(
+            select(OfficialRaceRegistration).where(
+                OfficialRaceRegistration.official_race_id == race_id,
+                OfficialRaceRegistration.status == RegistrationStatus.REGISTERED,
+            )
+        ).all()
+        existing_invitees = {
+            inv.user_id
+            for inv in db.session.scalars(
+                select(OfficialRaceInvitee).where(
+                    OfficialRaceInvitee.official_race_id == race_id
+                )
+            )
+        }
+        for reg in active_regs:
+            if reg.user_id in existing_invitees:
+                continue
+            db.session.add(
+                OfficialRaceInvitee(
+                    official_race_id=race_id,
+                    user_id=reg.user_id,
+                    invited_by_user_id=by_user_id,
+                )
+            )
+
+    race.visibility = new_visibility
+    db.session.commit()
+    return race
+
+
 def user_can_view_race(race: OfficialRace, *, user_id: int | None) -> bool:
     """Single source of truth for "is this race visible to this
     viewer?". Drives both the index list and the detail-page gate.

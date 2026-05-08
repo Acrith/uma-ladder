@@ -4,7 +4,7 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
-## 2026-05-07
+## 2026-05-08
 
 ### Quality of life
 
@@ -13,11 +13,20 @@ log for the full history.
   and explicitly invited users see it on the index or can register.
   Manage invitees on the race detail page after creating it.
   Default stays Public.
+- **Race visibility can be changed after creation.** Switching a
+  race from Public to Private auto-adds everyone already
+  registered to the invitee list, so nobody loses access to a race
+  they already joined. Switching the other way just opens the gate.
 - **In-app inbox.** A bell icon in the navbar shows when you have
   notifications waiting. Draft invites surface here automatically
   (no more discovering them only by visiting the Draft page).
   Clicking the bell marks them read; accept / decline / cancel
   cleans them up.
+
+## 2026-05-07
+
+### Quality of life
+
 - **Profile clubs link to uma.moe.** The Club tile on a public
   profile now opens the club's uma.moe page in a new tab.
 - **Track-ban panel layout fixed.** Distance and Direction bans
