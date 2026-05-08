@@ -201,12 +201,28 @@ def test_seasons_list_renders_active_marker(
     assert "Active:" in body  # the header active-season hint
 
 
-def test_seasons_list_status_uses_native_select(
+def test_popover_js_loaded_globally(
+    client: FlaskClient,
+) -> None:
+    """The popover widget script must be in base.html so any page
+    using `data-popover` markup just works without per-page
+    wiring. Smokes the static asset path too."""
+    resp = client.get("/")
+    body = resp.data.decode()
+    assert "/static/js/popover.js" in body
+
+
+def test_seasons_list_status_uses_popover_widget(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
-    """PR-J15 — the status changer must be a native <select>, not
-    a <details>-based popover. Native selects render in a popup
-    layer that escapes the table wrapper's overflow clipping."""
+    """PR-J15 / PR-J16 — the status changer must use the reusable
+    [data-popover] widget. The widget renders its panel via
+    `position: fixed` so it escapes the table wrapper's overflow
+    clipping. Guards against:
+    - reintroducing a `<details>`-popover that clips inside the
+      card (the original bug).
+    - reverting to a native `<select>` whose OS popup styling
+      collided with the dark theme."""
     make_user(username="adm", role=Role.ADMIN)
     with app.app_context():
         seasons_service.create_season(
@@ -218,12 +234,13 @@ def test_seasons_list_status_uses_native_select(
     _login(client, "adm")
     resp = client.get("/admin/seasons")
     body = resp.data.decode()
-    # Native select with the right name + onchange autosubmit.
-    assert '<select name="status"' in body
-    assert "this.form.submit()" in body
-    # Old `<details>` clipping pattern must be gone — guard against
-    # a future template refactor reintroducing it.
+    # Popover widget present.
+    assert "data-popover" in body
+    assert "data-popover-trigger" in body
+    assert "data-popover-panel" in body
+    # Old patterns gone.
     assert "Status ▾</summary>" not in body
+    assert '<select name="status"' not in body
 
 
 def test_admin_index_shows_seasons_tile(

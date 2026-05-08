@@ -8,6 +8,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    {# PR-J16 — reusable popover widget (escapes parent overflow
+       via position:fixed). Used by the admin seasons status menu;
+       any future contextual menu can reuse the same data-popover
+       contract. #}
+    <script src="{{ url_for('static', filename='js/popover.js') }}" defer></script>
     {% if config.DEBUG and not config.TAILWIND_BUILT %}
       <script src="https://cdn.tailwindcss.com"></script>
       <script>
