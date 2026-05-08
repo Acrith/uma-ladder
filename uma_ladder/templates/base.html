@@ -8,6 +8,27 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    {# PR-J17 — close dropdown-style <details> on outside click /
+       Escape. Opt-in via `data-autoclose-outside` so in-page
+       expandable sections (e.g. draft setup walkthrough) aren't
+       affected — only contextual menus that mark themselves. #}
+    <script>
+      document.addEventListener("click", function (e) {
+        document
+          .querySelectorAll("details[open][data-autoclose-outside]")
+          .forEach(function (d) {
+            if (!d.contains(e.target)) d.removeAttribute("open");
+          });
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key !== "Escape") return;
+        document
+          .querySelectorAll("details[open][data-autoclose-outside]")
+          .forEach(function (d) {
+            d.removeAttribute("open");
+          });
+      });
+    </script>
     {% if config.DEBUG and not config.TAILWIND_BUILT %}
       <script src="https://cdn.tailwindcss.com"></script>
       <script>

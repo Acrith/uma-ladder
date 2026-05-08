@@ -201,6 +201,37 @@ def test_seasons_list_renders_active_marker(
     assert "Active:" in body  # the header active-season hint
 
 
+def test_seasons_list_status_details_has_autoclose_attribute(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-J17 — the status `<details>` must carry
+    `data-autoclose-outside` so the global handler in base.html
+    closes it on outside-click / Escape. Without the attribute
+    the dropdown stays open until clicked again."""
+    make_user(username="adm", role=Role.ADMIN)
+    with app.app_context():
+        seasons_service.create_season(
+            name="X",
+            starts_at=datetime.now(UTC),
+            ends_at=datetime.now(UTC) + timedelta(days=10),
+            status=SeasonStatus.PLANNED,
+        )
+    _login(client, "adm")
+    body = client.get("/admin/seasons").data.decode()
+    assert "<details data-autoclose-outside" in body
+
+
+def test_base_layout_ships_details_autoclose_handler(
+    client: FlaskClient,
+) -> None:
+    """The handler is inline in base.html so every page gets it.
+    Smokes that the script block is present on a page that uses
+    base.html (the dashboard)."""
+    body = client.get("/").data.decode()
+    assert "data-autoclose-outside" in body
+    assert "removeAttribute(\"open\")" in body
+
+
 def test_seasons_list_status_dropdown_not_clipped(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
