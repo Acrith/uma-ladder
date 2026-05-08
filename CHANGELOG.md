@@ -22,6 +22,10 @@ log for the full history.
   (no more discovering them only by visiting the Draft page).
   Clicking the bell marks them read; accept / decline / cancel
   cleans them up.
+- **Admin seasons status dropdown fix.** The status changer on
+  the admin Seasons list no longer clips inside the table — uses
+  a native browser dropdown that escapes the layout boundary.
+  Admin-only, so most users won't notice; admins definitely will.
 
 ## 2026-05-07
 

@@ -201,6 +201,31 @@ def test_seasons_list_renders_active_marker(
     assert "Active:" in body  # the header active-season hint
 
 
+def test_seasons_list_status_uses_native_select(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-J15 — the status changer must be a native <select>, not
+    a <details>-based popover. Native selects render in a popup
+    layer that escapes the table wrapper's overflow clipping."""
+    make_user(username="adm", role=Role.ADMIN)
+    with app.app_context():
+        seasons_service.create_season(
+            name="ToggleS",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=10),
+            status=SeasonStatus.PLANNED,
+        )
+    _login(client, "adm")
+    resp = client.get("/admin/seasons")
+    body = resp.data.decode()
+    # Native select with the right name + onchange autosubmit.
+    assert '<select name="status"' in body
+    assert "this.form.submit()" in body
+    # Old `<details>` clipping pattern must be gone — guard against
+    # a future template refactor reintroducing it.
+    assert "Status ▾</summary>" not in body
+
+
 def test_admin_index_shows_seasons_tile(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

@@ -55,18 +55,29 @@
                 <td class="px-4 py-2 text-right">
                   <div class="flex items-center justify-end gap-2 text-xs">
                     <a href="{{ url_for('admin.season_edit', season_id=s.id) }}" class="text-cyan-300 hover:text-cyan-200">Edit</a>
-                    <details class="relative">
-                      <summary class="cursor-pointer list-none text-slate-400 hover:text-slate-200">Status ▾</summary>
-                      <div class="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
+                    {# PR-J15 — native <select> instead of an absolute-
+                       positioned <details> popover. Browsers render
+                       native selects in their own popup layer that
+                       escapes parent `overflow:hidden` clipping (the
+                       table wrapper has overflow-x-auto for narrow
+                       screens, which forces overflow-y to clip too).
+                       The previous implementation was getting trapped
+                       inside the card and forcing the wrapper to
+                       scroll. #}
+                    <form method="post"
+                          action="{{ url_for('admin.season_set_status', season_id=s.id) }}"
+                          class="inline">
+                      {{ csrf_form.hidden_tag() }}
+                      <select name="status"
+                              data-current="{{ s.status }}"
+                              onchange="if (this.value === this.dataset.current) return; if (confirm('Change season status to ' + this.value + '?')) { this.form.submit(); } else { this.value = this.dataset.current; }"
+                              class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-300 hover:border-cyan-500/40">
+                        <option value="{{ s.status }}" selected>Status ▾</option>
                         {% for status in statuses if status != s.status %}
-                          <form method="post" action="{{ url_for('admin.season_set_status', season_id=s.id) }}">
-                            {{ csrf_form.hidden_tag() }}
-                            <input type="hidden" name="status" value="{{ status }}" />
-                            <button class="block w-full text-left px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-cyan-200 rounded">→ {{ status }}</button>
-                          </form>
+                          <option value="{{ status }}">→ {{ status }}</option>
                         {% endfor %}
-                      </div>
-                    </details>
+                      </select>
+                    </form>
                   </div>
                 </td>
               </tr>
