@@ -68,10 +68,16 @@
                           action="{{ url_for('admin.season_set_status', season_id=s.id) }}"
                           class="inline">
                       {{ csrf_form.hidden_tag() }}
+                      {# `appearance-none` strips the browser-default
+                         arrow + chrome so the trigger looks like the
+                         original "Status ▾" plain-text chip. The
+                         popup itself stays OS-native, which is what
+                         lets it escape the table wrapper's overflow
+                         clipping. #}
                       <select name="status"
                               data-current="{{ s.status }}"
                               onchange="if (this.value === this.dataset.current) return; if (confirm('Change season status to ' + this.value + '?')) { this.form.submit(); } else { this.value = this.dataset.current; }"
-                              class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-300 hover:border-cyan-500/40">
+                              class="cursor-pointer appearance-none border-0 bg-transparent px-1 py-0.5 text-xs text-slate-400 hover:text-slate-200 focus:rounded focus:outline-none focus:ring-1 focus:ring-cyan-500/40">
                         <option value="{{ s.status }}" selected>Status ▾</option>
                         {% for status in statuses if status != s.status %}
                           <option value="{{ status }}">→ {{ status }}</option>
