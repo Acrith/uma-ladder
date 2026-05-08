@@ -201,28 +201,17 @@ def test_seasons_list_renders_active_marker(
     assert "Active:" in body  # the header active-season hint
 
 
-def test_popover_js_loaded_globally(
-    client: FlaskClient,
-) -> None:
-    """The popover widget script must be in base.html so any page
-    using `data-popover` markup just works without per-page
-    wiring. Smokes the static asset path too."""
-    resp = client.get("/")
-    body = resp.data.decode()
-    assert "/static/js/popover.js" in body
-
-
-def test_seasons_list_status_uses_popover_widget(
+def test_seasons_list_status_dropdown_not_clipped(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
-    """PR-J15 / PR-J16 — the status changer must use the reusable
-    [data-popover] widget. The widget renders its panel via
-    `position: fixed` so it escapes the table wrapper's overflow
-    clipping. Guards against:
-    - reintroducing a `<details>`-popover that clips inside the
-      card (the original bug).
-    - reverting to a native `<select>` whose OS popup styling
-      collided with the dark theme."""
+    """PR-J16 — the status changer uses a native `<details>`
+    dropdown. The card has NO `overflow-hidden` and the table has
+    NO `overflow-x-auto` wrapper — both were trapping the
+    absolutely-positioned panel inside the card and forcing the
+    wrapper to scroll vertically (the original bug).
+
+    This test guards against either of those rules being
+    reintroduced on the seasons admin page."""
     make_user(username="adm", role=Role.ADMIN)
     with app.app_context():
         seasons_service.create_season(
@@ -232,15 +221,27 @@ def test_seasons_list_status_uses_popover_widget(
             status=SeasonStatus.PLANNED,
         )
     _login(client, "adm")
-    resp = client.get("/admin/seasons")
-    body = resp.data.decode()
-    # Popover widget present.
-    assert "data-popover" in body
-    assert "data-popover-trigger" in body
-    assert "data-popover-panel" in body
-    # Old patterns gone.
-    assert "Status ▾</summary>" not in body
-    assert '<select name="status"' not in body
+    body = client.get("/admin/seasons").data.decode()
+
+    # The original native dropdown is back.
+    assert "<summary" in body
+    assert "Status ▾" in body
+
+    # Critical guards: the overflow rules that broke this must
+    # not return on the seasons admin page.
+    import re
+
+    # Find the card surrounding the seasons table — the card
+    # macro renders `surface-card` as the wrapper class.
+    card_match = re.search(
+        r'<div class="surface-card[^"]*">.*?</table>',
+        body,
+        re.DOTALL,
+    )
+    assert card_match, "seasons table card not found in admin page"
+    card_html = card_match.group(0)
+    assert "overflow-hidden" not in card_html
+    assert "overflow-x-auto" not in card_html
 
 
 def test_admin_index_shows_seasons_tile(

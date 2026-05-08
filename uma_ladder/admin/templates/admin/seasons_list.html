@@ -22,8 +22,14 @@
       <a href="{{ url_for('admin.season_new') }}" class="btn-primary mt-4">+ Create the first one</a>
     </div>
   {% else %}
-    {% call card(class="mt-6 overflow-hidden") %}
-      <div class="overflow-x-auto">
+    {# PR-J16 — `overflow-hidden` removed (was on the card) and
+       the `overflow-x-auto` wrapper around the table dropped.
+       Both were trapping the absolutely-positioned status
+       dropdown inside the card box and forcing the wrapper to
+       scroll vertically. The table is admin-only and short on
+       columns; on narrow screens it'll overflow the card
+       horizontally, which is acceptable for this audience. #}
+    {% call card(class="mt-6") %}
         <table class="w-full text-sm">
           <thead class="bg-slate-900/50 text-xs uppercase tracking-wider text-slate-500">
             <tr class="text-left">
@@ -55,24 +61,13 @@
                 <td class="px-4 py-2 text-right">
                   <div class="flex items-center justify-end gap-2 text-xs">
                     <a href="{{ url_for('admin.season_edit', season_id=s.id) }}" class="text-cyan-300 hover:text-cyan-200">Edit</a>
-                    {# PR-J16 — reusable popover widget. The
-                       panel uses `position: fixed` (handled by
-                       static/js/popover.js) so it escapes the
-                       table wrapper's overflow clipping. Trigger
-                       keeps the original "Status ▾" plain-text
-                       chip aesthetic. Each status option is its
-                       own form INSIDE the panel; no outer form
-                       wrapper (HTML5 forbids nested forms and the
-                       browser would auto-close it, breaking the
-                       click handler). #}
-                    <div data-popover class="inline-block">
-                      <button type="button"
-                              data-popover-trigger
-                              class="cursor-pointer text-slate-400 hover:text-slate-200">
-                        Status ▾
-                      </button>
-                      <div data-popover-panel
-                           class="hidden fixed z-50 w-40 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
+                    {# Native `<details>` dropdown. Works because
+                       the card no longer has `overflow-hidden` and
+                       the table no longer has an `overflow-x-auto`
+                       wrapper — see card class above for context. #}
+                    <details class="relative">
+                      <summary class="cursor-pointer list-none text-slate-400 hover:text-slate-200">Status ▾</summary>
+                      <div class="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
                         {% for status in statuses if status != s.status %}
                           <form method="post" action="{{ url_for('admin.season_set_status', season_id=s.id) }}">
                             {{ csrf_form.hidden_tag() }}
@@ -81,14 +76,13 @@
                           </form>
                         {% endfor %}
                       </div>
-                    </div>
+                    </details>
                   </div>
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
-      </div>
     {% endcall %}
   {% endif %}
 
