@@ -26,6 +26,17 @@ log for the full history.
   for manually-entered handles). Hovering each glyph explains
   what it means.
 
+### Quality of life
+
+- **Cleaner top nav.** *Race Presets*, *OCR*, and *Skill list*
+  moved into a single **Tools** dropdown — less clutter for
+  players who never touch them, still one click away. Top
+  row is now Home · Official · Draft · Players · Tools.
+- **Inbox bell signals unread at a glance.** When you have
+  unread items, the bell icon now glows fuchsia (matching the
+  count badge) so you don't have to read the small digit to
+  notice. Returns to neutral once you've cleared inbox.
+
 ### Bug fixes
 
 - **Dashboard upcoming card now shows your private + club races.**

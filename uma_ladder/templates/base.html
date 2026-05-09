@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    {% from "_icons.html" import bell as icon_bell, megaphone as icon_megaphone %}
+    {% from "_icons.html" import bell as icon_bell %}
     {# PR-J17 — close dropdown-style <details> on outside click /
        Escape. Opt-in via `data-autoclose-outside` so in-page
        expandable sections (e.g. draft setup walkthrough) aren't
@@ -77,13 +77,15 @@
           <span class="bg-gradient-to-r from-cyan-300 via-cyan-200 to-fuchsia-300 bg-clip-text text-transparent">Uma Ladder</span>
         </a>
         <nav class="flex items-center gap-1 text-sm">
+          {# Primary nav: content + competitive surfaces only.
+             Power-user tools (Race Presets, OCR, Skill list) live
+             under the Tools dropdown below — they don't deserve
+             top-row real estate (PR-L3). #}
           {% set nav_links = [
             ("dashboard.index", "Home"),
             ("official.index", "Official"),
             ("draft.index", "Draft"),
             ("profiles.index", "Players"),
-            ("presets.index", "Presets"),
-            ("ocr.index", "OCR"),
           ] %}
           {% for endpoint, label in nav_links %}
             {% set active = request.endpoint == endpoint %}
@@ -92,32 +94,50 @@
               {{ label }}
             </a>
           {% endfor %}
+
+          {# Tools dropdown — Race Presets always; OCR + Skills
+             only when the viewer is organizer+ (their target
+             audience). `data-autoclose-outside` opts into the
+             global handler in this file's <head> that closes
+             contextual menus on outside-click / Escape (PR-J17).
+             Highlighted as 'active' when we're on any of the
+             tool pages so the user knows where they are. #}
+          {% set tool_endpoints = ['presets.index', 'ocr.index', 'skills.index'] %}
+          {% set tools_active = request.endpoint in tool_endpoints %}
+          <details class="relative" data-autoclose-outside>
+            <summary class="cursor-pointer list-none rounded-lg px-3 py-1.5 transition {% if tools_active %}bg-slate-800/80 text-cyan-300 shadow-glow-cyan{% else %}text-slate-300 hover:bg-slate-800/50 hover:text-slate-100{% endif %}">
+              Tools <span class="ml-0.5 text-xs">▾</span>
+            </summary>
+            <div class="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
+              <a href="{{ url_for('presets.index') }}" class="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-cyan-200">Race Presets</a>
+              {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+                <a href="{{ url_for('ocr.index') }}" class="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-cyan-200">OCR</a>
+                <a href="{{ url_for('skills.index') }}" class="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-cyan-200" title="Skill catalogue — organiser reference for OCR correction">Skill list</a>
+              {% endif %}
+            </div>
+          </details>
+
           <span class="mx-1 h-6 w-px bg-slate-800"></span>
           {% if current_user.is_authenticated %}
             <a href="{{ url_for('profiles.public', username=current_user.username) }}" class="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300">
               {{ current_user.username }}
             </a>
             {# PR-J12 — inbox bell. Badge appears only when there's
-               unread; clicking the bell auto-marks all read. #}
-            <a href="{{ url_for('inbox.index') }}" class="relative rounded-lg px-2.5 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Inbox">
+               unread; clicking the bell auto-marks all read. PR-L3
+               shifts the bell tint itself to fuchsia when unread,
+               so the unread state reads at a glance instead of
+               relying solely on the small badge digit. #}
+            {% set has_unread = unread_inbox_count and unread_inbox_count > 0 %}
+            <a href="{{ url_for('inbox.index') }}" class="relative rounded-lg px-2.5 py-1.5 hover:bg-slate-800/50 {% if has_unread %}text-fuchsia-300 hover:text-fuchsia-200{% else %}text-slate-300 hover:text-cyan-300{% endif %}" title="Inbox{% if has_unread %} ({{ unread_inbox_count }} unread){% endif %}">
               {{ icon_bell(class="h-5 w-5") }}
-              <span class="sr-only">Inbox</span>
-              {% if unread_inbox_count and unread_inbox_count > 0 %}
+              <span class="sr-only">Inbox{% if has_unread %} ({{ unread_inbox_count }} unread){% endif %}</span>
+              {% if has_unread %}
                 <span class="absolute -right-0.5 -top-0.5 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-bold leading-none text-white">{{ unread_inbox_count if unread_inbox_count < 100 else '99+' }}</span>
               {% endif %}
             </a>
-            {% if current_user.has_at_least('organizer') %}
-              <a href="{{ url_for('skills.index') }}" class="rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-800/50 hover:text-cyan-300" title="Skill catalogue (organiser reference for OCR correction)">
-                Skills
-              </a>
-            {% endif %}
             {% if current_user.has_at_least('admin') %}
               <a href="{{ url_for('admin.index') }}" class="rounded-lg px-3 py-1.5 text-amber-300 hover:bg-slate-800/50 hover:text-amber-200" title="Admin">
                 Admin
-              </a>
-              <a href="{{ url_for('notifications.index') }}" class="rounded-lg px-2.5 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Discord notifications">
-                {{ icon_megaphone(class="h-5 w-5") }}
-                <span class="sr-only">Discord notifications</span>
               </a>
             {% endif %}
             <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
