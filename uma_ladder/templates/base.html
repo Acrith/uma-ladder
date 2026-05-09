@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    {% from "_icons.html" import bell as icon_bell, megaphone as icon_megaphone %}
     {# PR-J17 — close dropdown-style <details> on outside click /
        Escape. Opt-in via `data-autoclose-outside` so in-page
        expandable sections (e.g. draft setup walkthrough) aren't
@@ -98,8 +99,8 @@
             </a>
             {# PR-J12 — inbox bell. Badge appears only when there's
                unread; clicking the bell auto-marks all read. #}
-            <a href="{{ url_for('inbox.index') }}" class="relative rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Inbox">
-              <span aria-hidden="true">🔔</span>
+            <a href="{{ url_for('inbox.index') }}" class="relative rounded-lg px-2.5 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Inbox">
+              {{ icon_bell(class="h-5 w-5") }}
               <span class="sr-only">Inbox</span>
               {% if unread_inbox_count and unread_inbox_count > 0 %}
                 <span class="absolute -right-0.5 -top-0.5 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-bold leading-none text-white">{{ unread_inbox_count if unread_inbox_count < 100 else '99+' }}</span>
@@ -114,8 +115,9 @@
               <a href="{{ url_for('admin.index') }}" class="rounded-lg px-3 py-1.5 text-amber-300 hover:bg-slate-800/50 hover:text-amber-200" title="Admin">
                 Admin
               </a>
-              <a href="{{ url_for('notifications.index') }}" class="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Discord notifications">
-                ⌬
+              <a href="{{ url_for('notifications.index') }}" class="rounded-lg px-2.5 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300" title="Discord notifications">
+                {{ icon_megaphone(class="h-5 w-5") }}
+                <span class="sr-only">Discord notifications</span>
               </a>
             {% endif %}
             <form method="post" action="{{ url_for('auth.logout') }}" class="inline">

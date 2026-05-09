@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, empty_card, stat_tile %}
+{% from "_icons.html" import pencil as icon_pencil %}
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
 
@@ -24,7 +25,7 @@
     {% if current_user.is_authenticated and current_user.id == user.id %}
       <a href="{{ url_for('profiles.me') }}"
          class="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-3 py-1.5 text-xs font-medium text-cyan-200 backdrop-blur hover:border-cyan-400/60 hover:text-cyan-100">
-        ✎ Edit profile
+        {{ icon_pencil(class="h-3.5 w-3.5") }} Edit profile
       </a>
     {% endif %}
     {% if oshi_image %}

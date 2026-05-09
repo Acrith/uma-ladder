@@ -1467,6 +1467,86 @@ def test_index_filters_club_races_by_viewer_club(
     assert "Club Cup" not in body
 
 
+def test_dashboard_upcoming_shows_invited_private_race(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-L2 regression: dashboard upcoming was filtering by Public
+    only because list_upcoming_races was called without viewer_user_id.
+    Result: invitee never saw a race they were registered for on the
+    home page. Fix passes current_user.id when authenticated."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="alice", password="password123", role=Role.USER)
+
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Invite-Only Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="private",
+                scheduled_at=datetime.now(UTC) + timedelta(hours=2),
+            )
+        )
+        race_id = race.id
+        official_service.open_registration(race_id)
+        official_service.add_invitee(
+            race_id, invitee_username="alice", invited_by_user_id=org["id"]
+        )
+
+    # Anonymous: Private race must NOT appear (regression-safe).
+    body = client.get("/").data.decode()
+    assert "Invite-Only Cup" not in body
+
+    # Invitee: race SHOULD appear on the upcoming card.
+    _login(client, "alice", "password123")
+    body = client.get("/").data.decode()
+    assert "Invite-Only Cup" in body
+
+
+def test_dashboard_upcoming_shows_club_race_to_clubmate(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Same as the Private case — Club races on the dashboard should
+    surface to club members and be hidden from outsiders."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    same = make_user(username="clubmate", password="password123", role=Role.USER)
+    rival = make_user(username="rival", password="password123", role=Role.USER)
+    _set_club_id(app, org["id"], 42)
+    _set_club_id(app, same["id"], 42)
+    _set_club_id(app, rival["id"], 99)
+
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Club-Only Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="club",
+                scheduled_at=datetime.now(UTC) + timedelta(hours=2),
+            )
+        )
+        official_service.open_registration(race.id)
+
+    _login(client, "clubmate", "password123")
+    body = client.get("/").data.decode()
+    assert "Club-Only Cup" in body
+    client.post("/auth/logout")
+
+    _login(client, "rival", "password123")
+    body = client.get("/").data.decode()
+    assert "Club-Only Cup" not in body
+
+
 def test_sync_club_id_from_trainer_idempotent(app: Flask, make_user) -> None:
     """Service-level helper round-trips circle_id and skips the
     write when the value hasn't changed (avoids commit churn on

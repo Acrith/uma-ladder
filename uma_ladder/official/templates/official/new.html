@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_components.html" import card %}
+{% from "_icons.html" import shuffle as icon_shuffle %}
 {% block title %}New official race · Uma Ladder{% endblock %}
 {% block content %}
   <p class="label-eyebrow">Official</p>
@@ -81,10 +82,10 @@
           <div>
             {# Random suggests — never auto-submits the form. #}
             <button type="button"
-                    class="btn-ghost mt-1 whitespace-nowrap"
+                    class="btn-ghost mt-1 inline-flex items-center gap-1.5 whitespace-nowrap"
                     onclick="suggestRandomPreset()"
                     title="Pick a random track from the current pool — you can still change it before creating the race.">
-              🎲 Random
+              {{ icon_shuffle(class="h-3.5 w-3.5") }} Random
             </button>
           </div>
         </div>

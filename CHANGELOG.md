@@ -26,6 +26,13 @@ log for the full history.
   for manually-entered handles). Hovering each glyph explains
   what it means.
 
+### Bug fixes
+
+- **Dashboard upcoming card now shows your private + club races.**
+  The "Official · upcoming" card on the home page was filtering
+  by Public-only, so users invited to a Private race or in a
+  Club race didn't see it from the dashboard. Fixed.
+
 ### Targeted matches
 
 - **Club-only official races.** When creating an official race,

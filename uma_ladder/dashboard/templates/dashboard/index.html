@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, chip, stat_tile, live_dot, draft_status_chip %}
+{% from "_icons.html" import clock as icon_clock %}
 {% block title %}Uma Ladder{% endblock %}
 {% block content %}
 
@@ -177,7 +178,7 @@
                   </span>
                   {% if race.scheduled_at %}
                     <span class="text-slate-700">·</span>
-                    <span class="text-amber-300">⏰ {{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+                    <span class="inline-flex items-center gap-1 text-amber-300">{{ icon_clock(class="h-3 w-3") }} {{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
                   {% endif %}
                 </p>
               </a>

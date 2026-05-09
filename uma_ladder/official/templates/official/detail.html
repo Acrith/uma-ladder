@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, chip, official_status_chip %}
+{% from "_icons.html" import lock as icon_lock, globe as icon_globe, users as icon_users, clock as icon_clock %}
 {% block title %}{{ race.name }} · Uma Ladder{% endblock %}
 {% block content %}
 
@@ -14,18 +15,29 @@
            Public stays quiet so the index isn't full of redundant
            "Public" chips. Club shows the organizer's club name
            when known so non-members understand why they're seeing
-           it (or won't see it at all from the index). #}
-        {% if race.visibility == "private" %}{{ chip("🔒 Private", "fuchsia") }}{% endif %}
+           it (or won't see it at all from the index). PR-L2 swaps
+           emoji glyphs for inline stroke SVGs.
+           Inlining the chip span here rather than going through
+           the chip() macro because it doesn't accept icon slots
+           today; the styling matches the macro 1:1. #}
+        {% if race.visibility == "private" %}
+          <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/30">
+            {{ icon_lock(class="h-3 w-3") }} Private
+          </span>
+        {% endif %}
         {% if race.visibility == "club" %}
-          {% if club_name %}
-            {{ chip("🏠 Club: " ~ club_name, "cyan") }}
-          {% else %}
-            {{ chip("🏠 Club only", "cyan") }}
-          {% endif %}
+          <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
+            {{ icon_users(class="h-3 w-3") }}
+            {% if club_name %}Club: {{ club_name }}{% else %}Club only{% endif %}
+          </span>
         {% endif %}
         {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
         {% if race.preset %}{{ chip(race.preset.name, "violet") }}{% endif %}
-        {% if race.scheduled_at %}{{ chip("⏰ " + race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC'), "amber") }}{% endif %}
+        {% if race.scheduled_at %}
+          <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-300 border-amber-500/30">
+            {{ icon_clock(class="h-3 w-3") }} {{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}
+          </span>
+        {% endif %}
         {% if race.race_season %}{{ chip(race.race_season, "slate") }}{% endif %}
         {% if race.weather %}
           {% set weather_tone = {'Sunny': 'amber', 'Cloudy': 'slate', 'Rainy': 'cyan', 'Snowy': 'cyan'}[race.weather] %}
@@ -65,7 +77,9 @@
                   onsubmit="return confirm('Open this race to the PUBLIC? Anyone will be able to view + register.');">
               {{ csrf_form.hidden_tag() }}
               <input type="hidden" name="visibility" value="public" />
-              <button type="submit" class="text-xs text-cyan-300 hover:text-cyan-200">🌐 Make public</button>
+              <button type="submit" class="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">
+                {{ icon_globe(class="h-3.5 w-3.5") }} Make public
+              </button>
             </form>
           {% endif %}
           {% if race.visibility != 'private' %}
@@ -74,7 +88,9 @@
                   onsubmit="return confirm('Make this race PRIVATE? Existing registrations will be auto-added to the invitee list.');">
               {{ csrf_form.hidden_tag() }}
               <input type="hidden" name="visibility" value="private" />
-              <button type="submit" class="text-xs text-fuchsia-300 hover:text-fuchsia-200">🔒 Make private</button>
+              <button type="submit" class="inline-flex items-center gap-1 text-xs text-fuchsia-300 hover:text-fuchsia-200">
+                {{ icon_lock(class="h-3.5 w-3.5") }} Make private
+              </button>
             </form>
           {% endif %}
           {% if race.visibility != 'club' %}
@@ -83,7 +99,9 @@
                   onsubmit="return confirm('Lock this race to your CLUB? Existing registrations will be auto-added to the invitee list so they keep access.');">
               {{ csrf_form.hidden_tag() }}
               <input type="hidden" name="visibility" value="club" />
-              <button type="submit" class="text-xs text-cyan-300 hover:text-cyan-200">🏠 Make club-only</button>
+              <button type="submit" class="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">
+                {{ icon_users(class="h-3.5 w-3.5") }} Make club-only
+              </button>
             </form>
           {% endif %}
         {% endif %}

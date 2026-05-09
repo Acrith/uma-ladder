@@ -24,7 +24,15 @@ def index() -> object:
     draft_top5 = (
         draft_service.season_elo_ladder(season.id, limit=5) if season is not None else []
     )
-    upcoming_official = official_service.list_upcoming_races(limit=5)
+    # PR-L2 — pass viewer_user_id so the upcoming card surfaces
+    # non-Public races the viewer is allowed to see (Private races
+    # they're invited to, Club races where they share the
+    # organizer's club_id). Without this, list_upcoming_races
+    # silently filters down to Public-only for everyone.
+    viewer_id = current_user.id if current_user.is_authenticated else None
+    upcoming_official = official_service.list_upcoming_races(
+        limit=5, viewer_user_id=viewer_id
+    )
     # Pre-compute registration counts so the template doesn't need a
     # service call inside the loop.
     upcoming_with_counts = [
