@@ -109,12 +109,23 @@
               </span>
             {% endif %}
             {% if profile.discord_handle %}
+              {# PR-K3 — three states for the trailing chip glyph:
+                 1. discord_verified (auth_identity row exists):
+                    bright cyan ✓ — proven via OAuth, can be
+                    @-mentioned, identity is who they say they are.
+                 2. discord_user_id only (manual entry, no link):
+                    soft emerald @ — pings will fire, but the
+                    snowflake hasn't been verified against Discord.
+                 3. neither: no glyph — display-only handle. #}
               <span class="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/5 px-2.5 py-1 text-xs text-violet-200">
                 <span class="text-slate-500">Discord</span>
                 <span>{{ profile.discord_handle }}</span>
-                {% if profile.discord_user_id %}
+                {% if discord_verified %}
+                  <span class="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold leading-none text-cyan-200 shadow-glow-cyan"
+                        title="Verified — this Discord account is linked via OAuth and ping-enabled.">✓</span>
+                {% elif profile.discord_user_id %}
                   <span class="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-semibold leading-none text-emerald-300"
-                        title="Pings enabled — Uma Ladder will @-mention you in Discord for actions you can take">@</span>
+                        title="Pings enabled — Uma Ladder will @-mention this user in Discord. ID was entered manually (not OAuth-verified).">@</span>
                 {% endif %}
               </span>
             {% endif %}

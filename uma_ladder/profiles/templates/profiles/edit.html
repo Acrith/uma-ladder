@@ -174,9 +174,23 @@
             </div>
           </div>
           {% if discord_identity %}
-            <span class="shrink-0 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-0.5 text-[11px] font-medium text-emerald-200">
-              ✓ Linked
-            </span>
+            <div class="shrink-0 flex items-center gap-2">
+              <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-0.5 text-[11px] font-medium text-emerald-200">
+                ✓ Linked
+              </span>
+              {# Unlink — confirm dialog because losing the link
+                 also clears UserProfile.discord_user_id, killing
+                 ping-targeting until re-linked or re-entered. #}
+              <form method="post"
+                    action="{{ url_for('auth.discord_unlink') }}"
+                    onsubmit="return confirm('Unlink Discord? Your verified Discord ID will be cleared from your profile (Discord handle stays). You can re-link anytime.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit"
+                        class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/40 px-2.5 py-1 text-[11px] font-medium text-slate-400 hover:border-rose-500/50 hover:text-rose-200">
+                  Unlink
+                </button>
+              </form>
+            </div>
           {% else %}
             <a href="{{ url_for('auth.discord_start') }}"
                class="shrink-0 inline-flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-100 hover:border-violet-400 hover:bg-violet-500/20">

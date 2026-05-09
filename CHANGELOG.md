@@ -16,6 +16,15 @@ log for the full history.
   log in normally first and clicking "Continue with Discord" links
   the two — your Discord ID becomes the verified source for
   notification pings, replacing the manual handle field.
+- **Link / unlink Discord on the profile editor.** A new
+  "Linked accounts" card on `/profiles/me` shows whether your
+  Discord is linked and lets you connect or disconnect it
+  without going through the login page.
+- **Verified badge on public profiles.** The Discord chip on a
+  player's public profile now shows a bright cyan ✓ when the
+  account is OAuth-verified (vs the existing soft `@` glyph
+  for manually-entered handles). Hovering each glyph explains
+  what it means.
 
 ## 2026-05-08
 

@@ -188,6 +188,16 @@ def public(username: str) -> object:
     # None for missing code / 404 / network error / malformed JSON —
     # the template just doesn't render the card in that case.
     trainer = uma_moe_service.fetch_trainer_summary(profile.friend_code)
+    # PR-K3 — surface whether the Discord identity on this profile
+    # was verified via OAuth (auth_identities row exists) vs.
+    # manually typed by the user. Drives the badge variant on the
+    # Discord chip in the hero.
+    discord_verified = (
+        identity_service.find_identity("discord", profile.discord_user_id)
+        is not None
+        if profile.discord_user_id
+        else False
+    )
     return render_template(
         "profiles/public.html",
         user=user,
@@ -203,4 +213,5 @@ def public(username: str) -> object:
         active_season=active_season,
         standing=standing,
         trainer=trainer,
+        discord_verified=discord_verified,
     )

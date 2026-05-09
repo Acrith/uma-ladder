@@ -302,3 +302,34 @@ def discord_callback() -> object:
     login_user(user)
     flash(f"Welcome, {user.username}! Account created via Discord.")
     return redirect(url_for("dashboard.index"))
+
+
+@bp.post("/discord/unlink")
+@login_required
+def discord_unlink() -> object:
+    """Detach the user's Discord identity.
+
+    Always clears `UserProfile.discord_user_id` too: that field is
+    overwritten by every OAuth link, so post-unlink the snowflake
+    on the profile is whatever OAuth set last — not whatever the
+    user originally typed (we don't track origin). Better to clear
+    it and let them re-enter manually if they want pings without
+    the identity link.
+
+    `discord_handle` is left alone — it's display-only and may
+    have been their original entry from before OAuth was wired.
+    """
+    from ..services import profiles as profiles_service
+
+    removed = identity_service.unlink_identity(current_user, "discord")
+    if removed:
+        profile = profiles_service.get_or_create_profile(current_user)
+        profile.discord_user_id = None
+        from ..extensions import db
+
+        db.session.commit()
+        flash("Discord account unlinked.")
+    else:
+        # Idempotent — clicking unlink twice shouldn't error.
+        flash("No Discord account was linked.")
+    return redirect(url_for("profiles.me"))

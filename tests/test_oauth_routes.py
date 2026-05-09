@@ -347,3 +347,184 @@ def test_login_page_hides_discord_button_when_unconfigured(
 ) -> None:
     body = client.get("/auth/login").data.decode()
     assert "Continue with Discord" not in body
+
+
+# ─── /auth/discord/unlink (PR-K3) ────────────────────────────────
+
+
+def test_unlink_removes_identity_and_clears_profile_field(
+    configured_app: Flask, client: FlaskClient
+) -> None:
+    """Unlink drops the auth_identity row AND nulls
+    UserProfile.discord_user_id (the snowflake there came from
+    OAuth's overwrite, not from anything the user typed)."""
+    with configured_app.app_context():
+        user = register_user(
+            RegistrationRequest(username="kim", password="password123")
+        )
+        identity_service.link_identity(
+            user,
+            ProviderProfile(
+                provider="discord",
+                external_id="42",
+                external_username="kim_disc",
+            ),
+        )
+    _login_password(client, "kim", "password123")
+
+    resp = client.post("/auth/discord/unlink", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/profiles/me" in resp.headers["Location"]
+
+    with configured_app.app_context():
+        assert identity_service.find_identity("discord", "42") is None
+        # Mirror cleared so a stale snowflake doesn't keep firing
+        # ping-enabled @ mentions for an account that's no longer
+        # actually linked.
+        profile = (
+            db.session.query(UserProfile)
+            .filter_by(user_id=db.session.query(User).filter_by(username="kim").one().id)
+            .one()
+        )
+        assert profile.discord_user_id is None
+
+
+def test_unlink_idempotent_when_no_identity(
+    configured_app: Flask, client: FlaskClient
+) -> None:
+    """Clicking unlink twice (or unlinking when nothing's linked)
+    flashes a benign message, not a 500."""
+    with configured_app.app_context():
+        register_user(
+            RegistrationRequest(username="lou", password="password123")
+        )
+    _login_password(client, "lou", "password123")
+    resp = client.post("/auth/discord/unlink", follow_redirects=False)
+    assert resp.status_code == 302
+
+
+def test_unlink_requires_login(client: FlaskClient) -> None:
+    """Anonymous POST must not be able to unlink anything — Flask-
+    Login redirects to /auth/login. We assert the redirect rather
+    than a 403 because @login_required is the standard guard
+    elsewhere in the app."""
+    resp = client.post("/auth/discord/unlink", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers["Location"]
+
+
+# ─── Verified-via-OAuth badge on public profile (PR-K3) ─────────
+
+
+def test_public_profile_shows_verified_badge_when_oauth_linked(
+    configured_app: Flask, client: FlaskClient
+) -> None:
+    """When the user has a Discord auth_identity, the public
+    profile's Discord chip carries the bright ✓ verified glyph."""
+    with configured_app.app_context():
+        user = register_user(
+            RegistrationRequest(username="mona", password="password123")
+        )
+        # link_identity also sets profile.discord_handle +
+        # discord_user_id, which the badge logic depends on.
+        identity_service.link_identity(
+            user,
+            ProviderProfile(
+                provider="discord",
+                external_id="42",
+                external_username="mona_disc",
+            ),
+        )
+
+    body = client.get("/profiles/mona").data.decode()
+    assert "mona_disc" in body  # handle is rendered
+    assert "Verified" in body  # title attribute on the ✓ glyph
+
+
+def test_public_profile_shows_at_glyph_for_manual_only(
+    configured_app: Flask, client: FlaskClient
+) -> None:
+    """Existing @-pings-enabled glyph is preserved when the user
+    typed their discord_user_id manually but never OAuth-linked.
+    Regression: don't promote unverified entries to the verified
+    visual."""
+    with configured_app.app_context():
+        user = register_user(
+            RegistrationRequest(username="nash", password="password123")
+        )
+        from uma_ladder.services import profiles as profiles_service
+
+        profile = profiles_service.get_or_create_profile(user)
+        profile.discord_handle = "nash_typed"
+        profile.discord_user_id = "999000111222333444"
+        db.session.commit()
+
+    body = client.get("/profiles/nash").data.decode()
+    assert "nash_typed" in body
+    # Manual-only sees the @ glyph + "manually" disclaimer in the
+    # tooltip — never the cyan ✓.
+    assert "manually" in body  # "ID was entered manually..." title
+    assert "Verified" not in body or body.count("Verified") == 0
+
+
+def test_public_profile_no_badge_glyph_when_no_discord_id(
+    configured_app: Flask, client: FlaskClient
+) -> None:
+    """Display-only handle (no snowflake) renders the chip but
+    neither glyph — nothing to ping, nothing to verify."""
+    with configured_app.app_context():
+        user = register_user(
+            RegistrationRequest(username="opal", password="password123")
+        )
+        from uma_ladder.services import profiles as profiles_service
+
+        profile = profiles_service.get_or_create_profile(user)
+        profile.discord_handle = "opal_handle"
+        # discord_user_id stays None
+        db.session.commit()
+
+    body = client.get("/profiles/opal").data.decode()
+    assert "opal_handle" in body
+    # Title-attribute strings tell us no glyph rendered.
+    assert "Verified" not in body
+    assert "Pings enabled" not in body
+
+
+# ─── Linked-accounts card on profile editor (PR-K2 follow-up) ───
+
+
+def test_profile_editor_shows_link_button_when_unlinked(
+    configured_app: Flask, client: FlaskClient
+) -> None:
+    with configured_app.app_context():
+        register_user(
+            RegistrationRequest(username="paula", password="password123")
+        )
+    _login_password(client, "paula", "password123")
+
+    body = client.get("/profiles/me").data.decode()
+    assert "Link Discord" in body
+    assert "Unlink" not in body
+
+
+def test_profile_editor_shows_unlink_button_when_linked(
+    configured_app: Flask, client: FlaskClient
+) -> None:
+    with configured_app.app_context():
+        user = register_user(
+            RegistrationRequest(username="quinn", password="password123")
+        )
+        identity_service.link_identity(
+            user,
+            ProviderProfile(
+                provider="discord",
+                external_id="42",
+                external_username="quinn_disc",
+            ),
+        )
+    _login_password(client, "quinn", "password123")
+
+    body = client.get("/profiles/me").data.decode()
+    assert "✓ Linked" in body
+    assert "Unlink" in body
+    assert "/auth/discord/unlink" in body
