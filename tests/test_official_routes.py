@@ -1181,3 +1181,322 @@ def test_change_visibility_no_op_on_same_value(
             by_user_id=org["id"],
         )
         assert race.visibility == "private"
+
+
+# ─── PR-L1 — Club-only matches ──────────────────────────────────
+
+
+def _set_club_id(app: Flask, user_id: int, club_id: int | None) -> None:
+    """Helper: stamp UserProfile.club_id directly. In production this
+    is set by services.profiles.sync_club_id_from_trainer when the
+    user's profile view fetches a fresh TrainerSummary; tests skip
+    the uma.moe roundtrip and write the mirror straight."""
+    from uma_ladder.services import profiles as profiles_service
+
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        user = db.session.get(_User, user_id)
+        assert user is not None
+        profile = profiles_service.get_or_create_profile(user)
+        profile.club_id = club_id
+        db.session.commit()
+
+
+def _create_club_race(app: Flask, *, organizer_id: int, club_id: int = 9001) -> int:
+    """Make a CLUB-visibility race for tests. Stamps the organizer's
+    UserProfile.club_id first so create_race accepts the visibility."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    _set_club_id(app, organizer_id, club_id)
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Club Cup",
+                organizer_user_id=organizer_id,
+                preset_id=pid,
+                visibility="club",
+            )
+        )
+        return race.id
+
+
+def test_create_club_race_requires_organizer_club_id(
+    app: Flask, make_user
+) -> None:
+    """Without a synced club_id the organizer can't create a Club
+    race — service surfaces a clean error pointing at profile
+    refresh, rather than silently making a race nobody can see."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    # Org has no UserProfile.club_id
+
+    with app.app_context(), pytest.raises(official_service.OfficialError) as exc:
+        official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Club Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="club",
+            )
+        )
+    assert "club" in str(exc.value).lower()
+
+
+def test_create_club_race_succeeds_with_club_id(
+    app: Flask, make_user
+) -> None:
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"])
+
+    from uma_ladder.services import official as official_service
+
+    with app.app_context():
+        race = official_service.get_race(race_id)
+        assert race.visibility == "club"
+
+
+def test_club_race_visible_to_same_club_member(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """The whole point of Club-only: a user in the organizer's
+    club sees + can register, an outsider cannot."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    same = make_user(username="clubmate", password="password123", role=Role.USER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=42)
+    _set_club_id(app, same["id"], 42)
+
+    # Open registration so detail GET is the gate-test target.
+    from uma_ladder.services import official as official_service
+
+    with app.app_context():
+        official_service.open_registration(race_id)
+
+    _login(client, "clubmate", "password123")
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    assert b"Club Cup" in resp.data
+
+
+def test_club_race_invisible_to_different_club_member(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    other = make_user(username="rival", password="password123", role=Role.USER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=42)
+    _set_club_id(app, other["id"], 99)  # different club
+
+    _login(client, "rival", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 404
+
+
+def test_club_race_invisible_to_user_with_no_club(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Users with `club_id = None` (no friend code, never synced,
+    or genuinely not in any club) can't see Club races. Edge of
+    the design — they need to refresh their profile to opt in."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="nobody", password="password123", role=Role.USER)
+    race_id = _create_club_race(app, organizer_id=org["id"])
+    # nobody.club_id intentionally left None
+
+    _login(client, "nobody", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 404
+
+
+def test_club_race_visible_to_organizer_even_if_club_diverges(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Organizer always sees their own race. Even if their
+    UserProfile.club_id later changes (uma.moe reports them in a
+    different club), they don't lose access."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=42)
+    # Simulate organizer leaving the club they founded the race in
+    _set_club_id(app, org["id"], 999)
+
+    _login(client, "org", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+
+def test_club_race_visible_to_invitee_outside_club(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Invitees on Club races act as an *override* — useful for
+    bringing in an out-of-club coach or friend without flipping
+    the race fully open. PR-L1 changed add_invitee to accept Club
+    races (was Private-only)."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    coach = make_user(username="coach", password="password123", role=Role.USER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=42)
+    _set_club_id(app, coach["id"], 99)  # different club
+
+    with app.app_context():
+        official_service.add_invitee(
+            race_id,
+            invitee_username="coach",
+            invited_by_user_id=org["id"],
+        )
+
+    _login(client, "coach", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+
+def test_club_race_invisible_to_anonymous(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"])
+    assert client.get(f"/official/{race_id}").status_code == 404
+
+
+def test_club_race_visible_to_senior_organizer_moderator(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Senior organizer override extends to Club races for
+    consistency with Private."""
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="sr", password="password123", role=Role.SENIOR_ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"])
+    _login(client, "sr", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+
+def test_change_visibility_public_to_club_promotes_outsider_registrants(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Same protection as Public→Private: registrants who'd lose
+    access (because they're not in the organizer's club) get
+    auto-promoted to invitees."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    outsider = make_user(username="outsider", password="password123", role=Role.USER)
+    _set_club_id(app, org["id"], 42)
+    _set_club_id(app, outsider["id"], 99)  # different club
+
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Soon-club Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="public",
+            )
+        )
+        race_id = race.id
+        official_service.open_registration(race_id)
+        official_service.register(race_id, outsider["id"])
+
+        official_service.change_visibility(
+            race_id,
+            new_visibility="club",
+            by_user_id=org["id"],
+        )
+
+        invitees = official_service.list_invitees(race_id)
+        assert outsider["id"] in {inv.user_id for inv in invitees}
+
+    # Outsider can still see the now-Club race via the invitee
+    # override even though they aren't in the organizer's club.
+    _login(client, "outsider", "password123")
+    assert client.get(f"/official/{race_id}").status_code == 200
+
+
+def test_index_filters_club_races_by_viewer_club(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Race index hides Club races from users who aren't in the
+    organizer's club. Public races still show to everyone."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    same = make_user(username="clubmate", password="password123", role=Role.USER)
+    rival = make_user(username="rival", password="password123", role=Role.USER)
+    _set_club_id(app, org["id"], 42)
+    _set_club_id(app, same["id"], 42)
+    _set_club_id(app, rival["id"], 99)
+
+    with app.app_context():
+        # One Public, one Club
+        official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Open Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="public",
+            )
+        )
+        official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Club Cup",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="club",
+            )
+        )
+
+    # Same-club user sees both
+    _login(client, "clubmate", "password123")
+    body = client.get("/official/").data.decode()
+    assert "Open Cup" in body
+    assert "Club Cup" in body
+    client.post("/auth/logout")
+
+    # Rival sees only Public
+    _login(client, "rival", "password123")
+    body = client.get("/official/").data.decode()
+    assert "Open Cup" in body
+    assert "Club Cup" not in body
+
+
+def test_sync_club_id_from_trainer_idempotent(app: Flask, make_user) -> None:
+    """Service-level helper round-trips circle_id and skips the
+    write when the value hasn't changed (avoids commit churn on
+    every profile view)."""
+    from dataclasses import dataclass
+
+    from uma_ladder.services import profiles as profiles_service
+
+    user = make_user(username="alice", password="password123")
+
+    @dataclass
+    class FakeTrainer:
+        circle_id: int | None
+
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        profile = profiles_service.get_or_create_profile(u)
+        assert profile.club_id is None
+
+        profiles_service.sync_club_id_from_trainer(profile, FakeTrainer(42))
+        db.session.refresh(profile)
+        assert profile.club_id == 42
+
+        # No-op when value matches; we don't have a sentinel, so just
+        # assert the value stays as-is.
+        profiles_service.sync_club_id_from_trainer(profile, FakeTrainer(42))
+        assert profile.club_id == 42
+
+        # Trainer reports None (e.g. user left their club) → mirror clears.
+        profiles_service.sync_club_id_from_trainer(profile, FakeTrainer(None))
+        assert profile.club_id is None

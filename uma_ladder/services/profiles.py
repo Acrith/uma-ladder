@@ -88,6 +88,30 @@ def find_user_by_username(username: str) -> User | None:
     ).first()
 
 
+def sync_club_id_from_trainer(profile: UserProfile, trainer) -> None:  # noqa: ANN001
+    """Reconcile ``profile.club_id`` from a freshly-fetched
+    ``TrainerSummary`` (PR-L1).
+
+    The mirror is what Club-only race visibility consults — kept on
+    UserProfile so the visibility check is a single field compare,
+    not a fan-out across ``uma_moe_cache`` JSON blobs. Fed naturally
+    by every profile-view path that already calls
+    ``uma_moe.fetch_trainer_summary``.
+
+    Idempotent: only writes when the value actually changes, so
+    repeated profile views don't generate noisy commits.
+
+    `trainer` is typed loosely (``Any``) to avoid a circular import
+    with ``services.uma_moe`` — duck-typed access of ``circle_id``
+    is enough.
+    """
+    new_value = getattr(trainer, "circle_id", None) if trainer else None
+    if profile.club_id == new_value:
+        return
+    profile.club_id = new_value
+    db.session.commit()
+
+
 @dataclass(frozen=True)
 class PlayersPage:
     rows: list[tuple[User, UserProfile | None]]

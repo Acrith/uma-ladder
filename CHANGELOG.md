@@ -26,6 +26,19 @@ log for the full history.
   for manually-entered handles). Hovering each glyph explains
   what it means.
 
+### Targeted matches
+
+- **Club-only official races.** When creating an official race,
+  organizers can now mark it **Club only** in addition to
+  Public / Private. The race is visible only to members of the
+  organizer's uma.moe club (synced from your friend code). The
+  organizer can still hand-pick non-members via the existing
+  invitee list — useful for inviting an out-of-club coach or
+  friend without opening the race fully. Switching an existing
+  race to Club-only auto-promotes any current registrants who
+  aren't in the club into the invitee list, so nobody loses
+  access to a race they already joined.
+
 ## 2026-05-08
 
 ### Quality of life

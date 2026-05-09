@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from ..extensions import db
@@ -28,6 +28,14 @@ class UserProfile(db.Model):
     # `<@id>` mentions in webhook embeds so the user gets a desktop /
     # mobile push when an actionable event fires for them.
     discord_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # PR-L1 — uma.moe `circle_id` (the player's in-game club). Mirror
+    # of the freshest `TrainerSummary.circle_id` we've fetched for
+    # this user's friend_code; synced on profile views via
+    # `services.profiles.sync_club_id_from_trainer`. Stays None for
+    # users without a friend_code or not in any club. Drives
+    # Club-only official race visibility checks without each check
+    # having to traverse the `uma_moe_cache` JSON blob.
+    club_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     oshi_character_id: Mapped[int | None] = mapped_column(
         ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True, index=True
     )

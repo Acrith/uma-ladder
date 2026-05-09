@@ -202,6 +202,12 @@ def public(username: str) -> object:
     # None for missing code / 404 / network error / malformed JSON —
     # the template just doesn't render the card in that case.
     trainer = uma_moe_service.fetch_trainer_summary(profile.friend_code)
+    # PR-L1 — keep `UserProfile.club_id` in sync with whatever
+    # uma.moe says the user's circle is. Profile views are common
+    # enough that active users stay current naturally; cold users
+    # may not see Club races until they (or someone else) visits
+    # their profile, which is acceptable.
+    profiles_service.sync_club_id_from_trainer(profile, trainer)
     # PR-K3 — surface whether the Discord identity on this profile
     # was verified via OAuth (auth_identities row exists) vs.
     # manually typed by the user. Drives the badge variant on the

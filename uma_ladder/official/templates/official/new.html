@@ -131,9 +131,9 @@
         </div>
       </div>
 
-      {# PR-J13 — visibility selector. Public is the default;
-         Private adds an invitee allowlist (managed from the
-         race detail page after creation). #}
+      {# PR-J13 + PR-L1 — visibility selector. Public is the default;
+         Private adds an invitee allowlist; Club restricts to the
+         organizer's uma.moe club. #}
       <div>
         <label class="text-sm text-slate-300">{{ form.visibility.label.text }}</label>
         {{ form.visibility(class="input-base mt-1") }}
@@ -143,6 +143,14 @@
           <strong class="text-slate-400">Private</strong> — only the organizer +
           invitees see and can register; manage invitees on the race page after
           creation.
+          <strong class="text-slate-400">Club only</strong> —
+          {% if organizer_club_name %}
+            visible to members of <span class="text-cyan-300">{{ organizer_club_name }}</span> (your club).
+          {% elif organizer_club_id %}
+            visible to your club's members.
+          {% else %}
+            requires your club to be synced — visit your <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.public', username=current_user.username) }}">profile</a> with your friend code set so we can pull your club from uma.moe.
+          {% endif %}
         </p>
       </div>
 

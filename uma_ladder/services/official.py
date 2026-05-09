@@ -20,6 +20,7 @@ from ..models import (
     Season,
     UmaSkill,
     User,
+    UserProfile,
 )
 from .scoring import points_for_placement
 
@@ -93,7 +94,23 @@ def _as_utc(dt: datetime) -> datetime:
 _VALID_CREATE_VISIBILITIES = {
     OfficialRaceVisibility.PUBLIC.value,
     OfficialRaceVisibility.PRIVATE.value,
+    OfficialRaceVisibility.CLUB.value,
 }
+
+
+def _user_club_id(user_id: int) -> int | None:
+    """Look up a user's persisted uma.moe `circle_id`.
+
+    Sourced from `UserProfile.club_id`, kept in sync from
+    `services.profiles.sync_club_id_from_trainer` whenever a fresh
+    `TrainerSummary` is fetched (PR-L1). Returns None for users who
+    haven't been synced yet (no friend code, never had their profile
+    viewed) or who aren't in any club.
+    """
+    profile = db.session.scalars(
+        select(UserProfile).where(UserProfile.user_id == user_id)
+    ).first()
+    return profile.club_id if profile is not None else None
 
 
 def create_race(req: CreateRaceRequest) -> OfficialRace:
@@ -111,9 +128,20 @@ def create_race(req: CreateRaceRequest) -> OfficialRace:
         req.visibility or OfficialRaceVisibility.PUBLIC.value
     ).strip().lower()
     if visibility not in _VALID_CREATE_VISIBILITIES:
-        # CLUB is reserved for the deferred follow-up; reject here
-        # so the form can't sneak it through before that work.
         raise OfficialError(f"unsupported visibility: {visibility!r}")
+    # PR-L1 — Club-only race needs the organizer to be in a club
+    # so the visibility check has a club_id to match against. We
+    # don't *prevent* creation when club_id is None (cache may be
+    # stale, friend_code may be missing), but we surface a clean
+    # error rather than silently producing a race nobody can see.
+    if (
+        visibility == OfficialRaceVisibility.CLUB.value
+        and _user_club_id(req.organizer_user_id) is None
+    ):
+        raise OfficialError(
+            "Club-only race requires the organizer to be in a club. "
+            "Visit your profile to refresh club info, or pick another visibility."
+        )
     race = OfficialRace(
         season_id=req.season_id,
         preset_id=req.preset_id,
@@ -152,14 +180,18 @@ def add_invitee(
     invitee_username: str,
     invited_by_user_id: int,
 ) -> OfficialRaceInvitee:
-    """Add a user to a Private race's allowlist. Idempotent —
+    """Add a user to a Private or Club race's allowlist. Idempotent —
     re-adding an already-invited user is a no-op (returns the
     existing row). Refuses on Public races (no allowlist semantics
-    there) and on unknown usernames."""
+    there) and on unknown usernames.
+
+    On Club races (PR-L1) invitees are an *override* on top of
+    club-membership — useful for inviting an out-of-club friend or
+    a coach without flipping the race fully open."""
     race = _get_race(race_id)
-    if race.visibility != OfficialRaceVisibility.PRIVATE.value:
+    if race.visibility == OfficialRaceVisibility.PUBLIC.value:
         raise OfficialError(
-            "invitees only apply to private races"
+            "invitees only apply to private or club races"
         )
     target = db.session.scalars(
         select(User).where(
@@ -251,12 +283,30 @@ def change_visibility(
         )
     if race.visibility == new_visibility:
         return race  # no-op
+    # Club-only requires organizer (or whoever's flipping it, but
+    # the assert above limits this to organizer + senior+) to have
+    # a known club_id — otherwise the race becomes invisible to
+    # everyone outside the explicit invitee list.
+    if (
+        new_visibility == OfficialRaceVisibility.CLUB.value
+        and _user_club_id(race.organizer_user_id) is None
+    ):
+        raise OfficialError(
+            "Club-only requires the organizer to be in a club. "
+            "Refresh the organizer's profile to sync club info."
+        )
 
-    if new_visibility == OfficialRaceVisibility.PRIVATE.value:
-        # Public → Private: protect existing registrants. Pull the
-        # active registrations and ensure each user has a matching
-        # invitee row. Idempotent — if any user is somehow already
-        # invited, we skip them.
+    if new_visibility in (
+        OfficialRaceVisibility.PRIVATE.value,
+        OfficialRaceVisibility.CLUB.value,
+    ):
+        # Going to a more restrictive visibility (Private or Club)
+        # auto-promotes existing registrants into the invitee list
+        # so they don't lose access to a race they already joined.
+        # The invitee list always grants access regardless of
+        # visibility — same as PR-J14's Public → Private behaviour,
+        # extended for Public/Private → Club. Idempotent: any
+        # user already in the allowlist is skipped.
         active_regs = db.session.scalars(
             select(OfficialRaceRegistration).where(
                 OfficialRaceRegistration.official_race_id == race_id,
@@ -294,6 +344,11 @@ def user_can_view_race(race: OfficialRace, *, user_id: int | None) -> bool:
     - Public race: anyone (logged in or not) can view.
     - Private race: organizer + invitees + senior_organizer+
       moderators. Anonymous users see nothing for Private.
+    - Club race (PR-L1): organizer + invitees + senior_organizer+ +
+      anyone whose `UserProfile.club_id` matches the organizer's.
+      The club_id mirror is freshened on profile views; users who
+      haven't been synced yet (or aren't in a club at all) won't
+      see Club races until their profile is touched.
     """
     if race.visibility == OfficialRaceVisibility.PUBLIC.value:
         return True
@@ -310,7 +365,18 @@ def user_can_view_race(race: OfficialRace, *, user_id: int | None) -> bool:
             OfficialRaceInvitee.user_id == user_id,
         )
     ).first()
-    return invitee is not None
+    if invitee is not None:
+        return True
+    # Club fallback — equal club_id between viewer and organizer.
+    # Both must be non-None: a user with no club_id never matches
+    # (even an organizer who somehow lost their club_id sync — the
+    # organizer override above already handles their own race).
+    if race.visibility == OfficialRaceVisibility.CLUB.value:
+        organizer_club = _user_club_id(race.organizer_user_id)
+        if organizer_club is None:
+            return False
+        return _user_club_id(user_id) == organizer_club
+    return False
 
 
 def open_registration(

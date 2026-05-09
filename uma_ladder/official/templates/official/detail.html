@@ -10,10 +10,19 @@
       <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
         {{ chip("Official", "amber") }}
         {{ official_status_chip(race.status) }}
-        {# PR-J13 — surface Private as a visual cue. Public stays
-           quiet so the index isn't full of redundant "Public"
-           chips. #}
+        {# PR-J13 + PR-L1 — surface Private + Club as visual cues.
+           Public stays quiet so the index isn't full of redundant
+           "Public" chips. Club shows the organizer's club name
+           when known so non-members understand why they're seeing
+           it (or won't see it at all from the index). #}
         {% if race.visibility == "private" %}{{ chip("🔒 Private", "fuchsia") }}{% endif %}
+        {% if race.visibility == "club" %}
+          {% if club_name %}
+            {{ chip("🏠 Club: " ~ club_name, "cyan") }}
+          {% else %}
+            {{ chip("🏠 Club only", "cyan") }}
+          {% endif %}
+        {% endif %}
         {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
         {% if race.preset %}{{ chip(race.preset.name, "violet") }}{% endif %}
         {% if race.scheduled_at %}{{ chip("⏰ " + race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC'), "amber") }}{% endif %}
@@ -43,11 +52,23 @@
             <button class="btn-ghost">Close registration</button>
           </form>
         {% endif %}
-        {# PR-J14 — visibility toggle. Hidden on terminal states.
-           Public→Private auto-promotes current registrants into
-           the invitee allowlist so they don't lose access. #}
+        {# PR-J14 + PR-L1 — visibility toggle. Hidden on terminal
+           states. Going to a more restrictive visibility (Private
+           or Club) auto-promotes current registrants into the
+           invitee allowlist so they don't lose access. Three-way
+           toggle: every state can transition to the other two
+           via inline forms. #}
         {% if race.status not in ('cancelled', 'completed') %}
-          {% if race.visibility == 'public' %}
+          {% if race.visibility != 'public' %}
+            <form method="post"
+                  action="{{ url_for('official.change_visibility', race_id=race.id) }}"
+                  onsubmit="return confirm('Open this race to the PUBLIC? Anyone will be able to view + register.');">
+              {{ csrf_form.hidden_tag() }}
+              <input type="hidden" name="visibility" value="public" />
+              <button type="submit" class="text-xs text-cyan-300 hover:text-cyan-200">🌐 Make public</button>
+            </form>
+          {% endif %}
+          {% if race.visibility != 'private' %}
             <form method="post"
                   action="{{ url_for('official.change_visibility', race_id=race.id) }}"
                   onsubmit="return confirm('Make this race PRIVATE? Existing registrations will be auto-added to the invitee list.');">
@@ -55,13 +76,14 @@
               <input type="hidden" name="visibility" value="private" />
               <button type="submit" class="text-xs text-fuchsia-300 hover:text-fuchsia-200">🔒 Make private</button>
             </form>
-          {% else %}
+          {% endif %}
+          {% if race.visibility != 'club' %}
             <form method="post"
                   action="{{ url_for('official.change_visibility', race_id=race.id) }}"
-                  onsubmit="return confirm('Open this race to the PUBLIC? Anyone will be able to view + register.');">
+                  onsubmit="return confirm('Lock this race to your CLUB? Existing registrations will be auto-added to the invitee list so they keep access.');">
               {{ csrf_form.hidden_tag() }}
-              <input type="hidden" name="visibility" value="public" />
-              <button type="submit" class="text-xs text-cyan-300 hover:text-cyan-200">🌐 Make public</button>
+              <input type="hidden" name="visibility" value="club" />
+              <button type="submit" class="text-xs text-cyan-300 hover:text-cyan-200">🏠 Make club-only</button>
             </form>
           {% endif %}
         {% endif %}
@@ -99,16 +121,23 @@
 
   <section class="mt-6 grid gap-4 lg:grid-cols-3">
 
-    {# PR-J13 — invitee management card. Visible only on Private
-       races, and only for organizer / senior_organizer+. #}
-    {% if race.visibility == "private" and current_user.is_authenticated and current_user.has_at_least('organizer') %}
+    {# PR-J13 + PR-L1 — invitee management card. Visible on
+       Private + Club races for organizer / senior_organizer+.
+       On Club races invitees are an *override* on top of
+       club-membership (invite an out-of-club friend or coach
+       without opening the race fully). #}
+    {% if race.visibility in ("private", "club") and current_user.is_authenticated and current_user.has_at_least('organizer') %}
       {% call card(class="p-5 lg:col-span-2") %}
         <div class="flex items-center justify-between">
           <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Invitees</h2>
           <span class="text-xs text-slate-500">{{ invitees|length }} invited</span>
         </div>
         <p class="mt-1 text-xs text-slate-500">
-          Only the organizer and the users below can see this race or register.
+          {% if race.visibility == "club" %}
+            Club members can already see this race; invitees here are extra users you want to grant access to (e.g. an out-of-club friend or coach).
+          {% else %}
+            Only the organizer and the users below can see this race or register.
+          {% endif %}
         </p>
         <form method="post"
               action="{{ url_for('official.add_invitee', race_id=race.id) }}"
