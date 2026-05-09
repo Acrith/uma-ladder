@@ -15,6 +15,7 @@ from flask_login import current_user, login_required
 from ..extensions import db
 from ..models import UploadedImage
 from ..models.enums import UploadPurpose
+from ..services import auth_identities as identity_service
 from ..services import ocr as ocr_service
 from ..services import profiles as profiles_service
 from .forms import ProfileForm
@@ -83,6 +84,9 @@ def me() -> object:
         characters=characters,
         outfits=outfits,
         oshi_image=profiles_service.resolve_oshi_image(profile),
+        linked_identities=identity_service.list_identities_for_user(
+            current_user
+        ),
     )
 
 
