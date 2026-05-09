@@ -21,11 +21,32 @@
         {% endfor %}
 
         <div>
-          <label class="text-sm text-slate-300">{{ form.discord_user_id.label.text }}</label>
-          {{ form.discord_user_id(class="input-base mt-1", placeholder="e.g. 123456789012345678") }}
-          <p class="mt-1 text-[11px] text-slate-500">
-            Optional. Lets us @-mention you in the Discord channel for actions you can take (room codes, results, cancellations). Enable Discord Developer Mode → right-click your name → Copy User ID.
-          </p>
+          <label class="flex items-center gap-2 text-sm text-slate-300">
+            {{ form.discord_user_id.label.text }}
+            {% if discord_identity %}
+              <span class="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
+                ✓ Verified
+              </span>
+            {% endif %}
+          </label>
+          {% if discord_identity %}
+            {# PR-K3.1 — locked when Discord is OAuth-linked. The
+               server-side guard in profiles.routes.me() ignores
+               whatever this field submits while linked, so the
+               disabled attribute is purely UX (defense-in-depth
+               via DevTools is futile because the route preserves
+               the verified mirror regardless). #}
+            {{ form.discord_user_id(class="input-base mt-1 cursor-not-allowed opacity-60", disabled=True, readonly=True) }}
+            <p class="mt-1 text-[11px] text-cyan-300/70">
+              Verified via Discord OAuth — managed automatically. Use <span class="font-medium">Unlink</span> in the Linked accounts card below to change.
+            </p>
+          {% else %}
+            {{ form.discord_user_id(class="input-base mt-1", placeholder="e.g. 123456789012345678") }}
+            <p class="mt-1 text-[11px] text-slate-500">
+              Optional. Lets us @-mention you in the Discord channel for actions you can take (room codes, results, cancellations). Enable Discord Developer Mode → right-click your name → Copy User ID.
+              {% if config.DISCORD_OAUTH_CLIENT_ID %}<br /><span class="text-cyan-300/70">Tip: linking via Discord below fills this in automatically and marks it verified.</span>{% endif %}
+            </p>
+          {% endif %}
           {% for err in form.discord_user_id.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
         </div>
 

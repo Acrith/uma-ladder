@@ -153,3 +153,135 @@ def test_public_profile_hides_edit_button_for_other_users(
     assert resp.status_code == 200
     body = resp.data.decode()
     assert "Edit profile" not in body
+
+
+# ─── PR-K3.1 — discord_user_id locked when OAuth-linked ─────────
+
+
+def _link_discord(app: Flask, username: str, *, external_id: str = "42") -> None:
+    """Helper: attach a Discord identity to an existing user. Mirrors
+    what /auth/discord/callback does on first link, including the
+    `UserProfile.discord_user_id` mirror set by `link_identity`."""
+    from uma_ladder.services import auth_identities as identity_service
+    from uma_ladder.services.oauth import ProviderProfile
+
+    with app.app_context():
+        user = profiles_service.find_user_by_username(username)
+        assert user is not None
+        identity_service.link_identity(
+            user,
+            ProviderProfile(
+                provider="discord",
+                external_id=external_id,
+                external_username=f"{username}_disc",
+            ),
+        )
+
+
+def test_save_with_linked_discord_preserves_verified_mirror(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Disabled inputs aren't submitted by browsers, so a normal
+    save would carry no value for discord_user_id and the route's
+    naive update would clear the mirror. Server-side guard
+    (PR-K3.1) preserves the verified value regardless."""
+    make_user(username="alice", password="password123")
+    _link_discord(app, "alice", external_id="100200300400500600")
+    _login(client, "alice", "password123")
+
+    resp = client.post(
+        "/profiles/me",
+        data={
+            "display_name": "Alice Updated",
+            # Note: NO discord_user_id field — mimics the disabled
+            # input not being submitted.
+            "discord_handle": "alice_handle",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        user = profiles_service.find_user_by_username("alice")
+        profile = profiles_service.get_or_create_profile(user)
+        assert profile.display_name == "Alice Updated"
+        # Mirror still equals the verified value, NOT cleared.
+        assert profile.discord_user_id == "100200300400500600"
+
+
+def test_save_with_linked_discord_ignores_spoofed_user_id(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """An attacker re-enables the disabled discord_user_id input
+    via DevTools and submits a different snowflake (e.g. to
+    redirect @-mentions to someone else's Discord). Server-side
+    guard must reject this — the verified mirror stays."""
+    make_user(username="alice", password="password123")
+    _link_discord(app, "alice", external_id="100200300400500600")
+    _login(client, "alice", "password123")
+
+    resp = client.post(
+        "/profiles/me",
+        data={
+            "display_name": "Alice",
+            "discord_user_id": "999999999999999999",  # spoof attempt
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        user = profiles_service.find_user_by_username("alice")
+        profile = profiles_service.get_or_create_profile(user)
+        # Spoof rejected — mirror still equals the verified id.
+        assert profile.discord_user_id == "100200300400500600"
+
+
+def test_save_without_linked_discord_updates_user_id_normally(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """No identity linked → field is editable, behaves as before."""
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+
+    resp = client.post(
+        "/profiles/me",
+        data={
+            "display_name": "Alice",
+            "discord_user_id": "111222333444555666",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        user = profiles_service.find_user_by_username("alice")
+        profile = profiles_service.get_or_create_profile(user)
+        assert profile.discord_user_id == "111222333444555666"
+
+
+def test_editor_renders_disabled_field_when_linked(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="alice", password="password123")
+    _link_discord(app, "alice")
+    _login(client, "alice", "password123")
+    body = client.get("/profiles/me").data.decode()
+    assert "✓ Verified" in body
+    assert "Verified via Discord OAuth" in body
+    # The discord_user_id input carries `disabled` when linked.
+    # Loose assertion — exact attribute order varies between
+    # WTForms versions, but the substring is stable.
+    assert "disabled" in body
+
+
+def test_editor_renders_editable_field_when_unlinked(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    body = client.get("/profiles/me").data.decode()
+    # Original help text is the marker — it's gone in the linked
+    # variant.
+    assert "Enable Discord Developer Mode" in body
+    assert "Verified via Discord OAuth" not in body

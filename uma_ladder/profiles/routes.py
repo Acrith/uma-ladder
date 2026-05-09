@@ -43,6 +43,10 @@ def me() -> object:
         if profile.oshi_character_id
         else []
     )
+    linked_identities = identity_service.list_identities_for_user(current_user)
+    discord_identity = next(
+        (i for i in linked_identities if i.provider == "discord"), None
+    )
     if form.validate_on_submit():
         outfit_raw = (request.form.get("oshi_outfit_id") or "").strip()
         outfit_id = int(outfit_raw) if outfit_raw.isdigit() else None
@@ -58,13 +62,24 @@ def me() -> object:
             except ocr_service.OcrError as exc:
                 flash(f"Avatar upload failed: {exc}")
                 return redirect(url_for("profiles.me"))
+        # PR-K3.1 — `discord_user_id` is locked when Discord is OAuth-
+        # linked. Disabled inputs don't submit, so a normal save would
+        # otherwise clear the verified mirror; an attacker could
+        # re-enable the field via DevTools and inject any snowflake
+        # (e.g. spoof @-mentions to someone else's Discord). Server-
+        # side: always preserve the existing value when linked,
+        # ignoring whatever the form supplies.
+        if discord_identity is not None:
+            discord_user_id_for_update = profile.discord_user_id
+        else:
+            discord_user_id_for_update = form.discord_user_id.data or None
         update = profiles_service.ProfileUpdate(
             display_name=form.display_name.data or None,
             avatar_url=avatar_url,
             description=form.description.data or None,
             friend_code=form.friend_code.data or None,
             discord_handle=form.discord_handle.data or None,
-            discord_user_id=form.discord_user_id.data or None,
+            discord_user_id=discord_user_id_for_update,
             oshi_character_id=form.oshi_character_id.data or None,
             oshi_outfit_id=outfit_id,
         )
@@ -84,9 +99,8 @@ def me() -> object:
         characters=characters,
         outfits=outfits,
         oshi_image=profiles_service.resolve_oshi_image(profile),
-        linked_identities=identity_service.list_identities_for_user(
-            current_user
-        ),
+        linked_identities=linked_identities,
+        discord_identity=discord_identity,
     )
 
 
