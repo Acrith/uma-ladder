@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from ..extensions import db
 
@@ -41,8 +41,17 @@ class UserProfile(db.Model):
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
     )
 
+    # See AuthIdentity.user comment (PR-K2.2): `passive_deletes` +
+    # `cascade` so deleting the parent User actually cascades via
+    # the DB instead of erroring on the NOT NULL `user_id` FK.
     user: Mapped[User] = relationship(  # type: ignore[name-defined]  # noqa: F821
-        "User", backref="profile", uselist=False
+        "User",
+        backref=backref(
+            "profile",
+            uselist=False,
+            passive_deletes=True,
+            cascade="all, delete",
+        ),
     )
     oshi: Mapped[UmaCharacter | None] = relationship(  # type: ignore[name-defined]  # noqa: F821
         "UmaCharacter", lazy="joined"

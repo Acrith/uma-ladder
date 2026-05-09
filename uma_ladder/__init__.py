@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import BaseConfig, get_config
 from .extensions import csrf, db, login_manager, migrate
@@ -16,6 +17,15 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
     elif isinstance(config_object, str):
         config_object = get_config(config_object)
     app.config.from_object(config_object)
+
+    # PR-K2.2 — Fly's edge proxy terminates TLS and forwards to the
+    # app over plaintext HTTP, setting `X-Forwarded-Proto: https`.
+    # Without ProxyFix, `request.scheme` reads `http` and any
+    # `url_for(_external=True)` emits an `http://` URL — broke the
+    # Discord OAuth `redirect_uri` byte-exact match on first deploy.
+    # Trust exactly one hop (Fly's edge); don't widen unless we add
+    # another proxy in front.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
     os.makedirs(app.instance_path, exist_ok=True)
 

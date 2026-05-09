@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from ..extensions import db
 
@@ -61,8 +61,20 @@ class AuthIdentity(db.Model):
         DateTime(timezone=True), nullable=True
     )
 
+    # `passive_deletes=True` + `cascade="all, delete"` (PR-K2.2):
+    # without these, `db.session.delete(user)` triggers an
+    # `UPDATE auth_identities SET user_id=NULL …` against the
+    # NOT NULL FK before the DB-level CASCADE can fire — fails
+    # the constraint and rolls back. With them, the ORM trusts
+    # the DB to cascade and emits a single DELETE on users.
     user: Mapped[User] = relationship(  # type: ignore[name-defined]  # noqa: F821
-        "User", backref="auth_identities", lazy="joined"
+        "User",
+        backref=backref(
+            "auth_identities",
+            passive_deletes=True,
+            cascade="all, delete",
+        ),
+        lazy="joined",
     )
 
     def __repr__(self) -> str:
