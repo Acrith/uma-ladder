@@ -4,6 +4,19 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-05-09
+
+### Sign-in
+
+- **Continue with Discord.** A new button on the login and register
+  pages signs you in with your Discord account. First-time use
+  creates a fresh Uma Ladder account with your Discord username
+  (with a short suffix if it's already taken); subsequent visits
+  log you straight in. If you already have a Uma Ladder account,
+  log in normally first and clicking "Continue with Discord" links
+  the two — your Discord ID becomes the verified source for
+  notification pings, replacing the manual handle field.
+
 ## 2026-05-08
 
 ### Quality of life

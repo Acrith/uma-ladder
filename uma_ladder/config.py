@@ -26,6 +26,18 @@ class BaseConfig:
     DISCORD_WEBHOOK_DRAFT_RESULTS_URL: str | None = None
     DISCORD_WEBHOOK_ADMIN_AUDIT_URL: str | None = None
     DISCORD_WEBHOOK_FALLBACK_URL: str | None = None
+    # PR-K1/K2 — Discord OAuth login. Soft-required: when any of
+    # these is unset the /auth/discord routes 404 and the login
+    # page hides the "Continue with Discord" button. App boot
+    # never fails on missing OAuth config so dev environments
+    # without a Discord app stay usable.
+    DISCORD_OAUTH_CLIENT_ID: str | None = None
+    DISCORD_OAUTH_CLIENT_SECRET: str | None = None
+    # Optional explicit redirect URI override. When unset the route
+    # builds it from `url_for(..., _external=True)` which honours
+    # APP_BASE_URL. Set this if Fly's reverse proxy ever lies about
+    # scheme/host.
+    DISCORD_OAUTH_REDIRECT_URI: str | None = None
     OCR_PROVIDER: str = "manual"
     GOOGLE_VISION_API_KEY: str | None = None
     # Public base URL for outgoing links (Discord embed titles point
@@ -60,6 +72,9 @@ class DevConfig(BaseConfig):
     DISCORD_WEBHOOK_DRAFT_RESULTS_URL = _env_or_none("DISCORD_WEBHOOK_DRAFT_RESULTS_URL")
     DISCORD_WEBHOOK_ADMIN_AUDIT_URL = _env_or_none("DISCORD_WEBHOOK_ADMIN_AUDIT_URL")
     DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
+    DISCORD_OAUTH_CLIENT_ID = _env_or_none("DISCORD_OAUTH_CLIENT_ID")
+    DISCORD_OAUTH_CLIENT_SECRET = _env_or_none("DISCORD_OAUTH_CLIENT_SECRET")
+    DISCORD_OAUTH_REDIRECT_URI = _env_or_none("DISCORD_OAUTH_REDIRECT_URI")
     OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
     GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
     APP_BASE_URL = _env_or_none("APP_BASE_URL")
@@ -109,6 +124,13 @@ class ProdConfig(BaseConfig):
             "DISCORD_WEBHOOK_ADMIN_AUDIT_URL"
         )
         cls.DISCORD_WEBHOOK_FALLBACK_URL = _env_or_none("DISCORD_WEBHOOK_FALLBACK_URL")
+        cls.DISCORD_OAUTH_CLIENT_ID = _env_or_none("DISCORD_OAUTH_CLIENT_ID")
+        cls.DISCORD_OAUTH_CLIENT_SECRET = _env_or_none(
+            "DISCORD_OAUTH_CLIENT_SECRET"
+        )
+        cls.DISCORD_OAUTH_REDIRECT_URI = _env_or_none(
+            "DISCORD_OAUTH_REDIRECT_URI"
+        )
         cls.OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
         cls.GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
         cls.APP_BASE_URL = _env_or_none("APP_BASE_URL")

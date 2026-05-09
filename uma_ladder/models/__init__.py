@@ -1,4 +1,5 @@
 from .admin_audit import AdminAuditLog
+from .auth_identity import AuthIdentity
 from .champions_meeting import ChampionsMeeting
 from .draft_invite import DraftMatchInvite
 from .draft_matches import (
@@ -51,6 +52,7 @@ from .users import Role, User
 __all__ = [
     "VENUES",
     "AdminAuditLog",
+    "AuthIdentity",
     "ChampionsMeeting",
     "Direction",
     "DistanceCategory",
