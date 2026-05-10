@@ -196,6 +196,130 @@ def list_for_user(user_id: int) -> Sequence[UserAchievement]:
     )
 
 
+# ─── Showcase (PR-P4) ───────────────────────────────────────────
+
+
+# Hard cap on how many achievements a user can pin to their
+# Overview hero showcase. Tunable here; changing it doesn't need
+# a migration. Keep small enough that the row fits on the hero's
+# left column without wrapping awkwardly.
+SHOWCASE_MAX = 6
+
+
+def list_showcased_for_user(user_id: int) -> list[Achievement]:
+    """Return the user's pinned achievements in their chosen
+    order, filtered to ones they actually have unlocked AND that
+    are still enabled in the catalogue.
+
+    Stale ids (achievement deleted, disabled, or no longer
+    granted to the user) are silently dropped — the persisted
+    list never blocks rendering even if it gets out of sync.
+    """
+    from ..models import UserProfile
+
+    profile = db.session.scalars(
+        select(UserProfile).where(UserProfile.user_id == user_id)
+    ).first()
+    if profile is None or not profile.showcased_achievement_ids:
+        return []
+
+    requested_ids: list[int] = list(profile.showcased_achievement_ids)
+    if not requested_ids:
+        return []
+
+    granted_ids = {
+        ua.achievement_id
+        for ua in db.session.scalars(
+            select(UserAchievement).where(
+                UserAchievement.user_id == user_id
+            )
+        )
+    }
+    achievements_by_id = {
+        a.id: a
+        for a in db.session.scalars(
+            select(Achievement).where(
+                Achievement.id.in_(requested_ids),
+                Achievement.enabled.is_(True),
+            )
+        )
+    }
+
+    out: list[Achievement] = []
+    for aid in requested_ids:
+        if aid not in granted_ids:
+            continue
+        a = achievements_by_id.get(aid)
+        if a is None:
+            continue
+        out.append(a)
+    return out[:SHOWCASE_MAX]
+
+
+def set_showcase(user: User, ordered_ids: list[int]) -> list[int]:
+    """Persist the user's showcase as an ordered list of
+    achievement ids. Validates that:
+      - Every id refers to an enabled, granted achievement
+        (silently drops invalid ids — same defensive policy as
+        ``list_showcased_for_user``).
+      - The final list is capped at ``SHOWCASE_MAX``.
+      - Duplicates are removed (first-position wins).
+
+    Returns the list actually persisted (post-validation, post-
+    cap). Empty list clears the showcase.
+    """
+    from ..models import UserProfile
+
+    profile = db.session.scalars(
+        select(UserProfile).where(UserProfile.user_id == user.id)
+    ).first()
+    if profile is None:
+        # Should never happen — get_or_create_profile is called
+        # in the route before update_profile — but defend anyway.
+        from .profiles import get_or_create_profile
+
+        profile = get_or_create_profile(user)
+
+    if not ordered_ids:
+        profile.showcased_achievement_ids = None
+        db.session.commit()
+        return []
+
+    granted_ids = {
+        ua.achievement_id
+        for ua in db.session.scalars(
+            select(UserAchievement).where(
+                UserAchievement.user_id == user.id
+            )
+        )
+    }
+    enabled_ids = {
+        a.id
+        for a in db.session.scalars(
+            select(Achievement).where(
+                Achievement.id.in_(ordered_ids),
+                Achievement.enabled.is_(True),
+            )
+        )
+    }
+
+    seen: set[int] = set()
+    final: list[int] = []
+    for aid in ordered_ids:
+        if aid in seen:
+            continue
+        if aid not in granted_ids or aid not in enabled_ids:
+            continue
+        seen.add(aid)
+        final.append(aid)
+        if len(final) >= SHOWCASE_MAX:
+            break
+
+    profile.showcased_achievement_ids = final or None
+    db.session.commit()
+    return final
+
+
 def has_achievement(user_id: int, key: str) -> bool:
     """Cheap probe used by auto-grant call sites to short-circuit
     before doing eligibility computation. Falls back to False if

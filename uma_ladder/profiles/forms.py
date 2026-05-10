@@ -58,3 +58,11 @@ class ProfileForm(FlaskForm):
         choices=_BORDER_CHOICES,
         validators=[Optional()],
     )
+    # PR-P4 — comma-separated list of achievement ids in
+    # showcase order. Hidden input populated by the drag-drop
+    # picker JS in the editor template; service layer validates
+    # + caps at SHOWCASE_MAX.
+    showcased_achievement_ids = StringField(
+        "Showcased achievements",
+        validators=[Optional(), Length(max=512)],
+    )

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_components.html" import card %}
 {% from "_avatar.html" import avatar %}
+{% from "_icons.html" import achievement_icon %}
 {% block title %}Your profile · Uma Ladder{% endblock %}
 {% block content %}
   <p class="label-eyebrow">Profile</p>
@@ -173,6 +174,108 @@
             </p>
           </div>
         </div>
+
+        {# PR-P4 — achievement showcase picker. Drag-and-drop
+           reorder via Sortable.js (CDN). Hidden input updated on
+           every drop holds the comma-separated id list; service
+           layer caps at SHOWCASE_MAX and silently drops invalid
+           ids. Hides entirely when the user has no unlocked
+           achievements yet (no point picking from an empty
+           gallery). #}
+        {% if user_achievements %}
+          {% set tier_classes = {
+            "gold": "border-amber-500/50 bg-amber-500/10 text-amber-200 shadow-glow-amber",
+            "silver": "border-slate-300/40 bg-slate-200/10 text-slate-100",
+            "bronze": "border-orange-500/50 bg-orange-500/10 text-orange-200",
+            "slate": "border-slate-700 bg-slate-800/40 text-slate-300",
+          } %}
+          <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+            <p class="label-eyebrow">Achievement showcase</p>
+            <p class="mt-1 text-xs text-slate-500">
+              Drag to reorder. Top {{ showcase_max }} render on your Overview hero. Drag any badge into the upper row to pin it; drag from the upper row out to remove. Save to apply.
+            </p>
+            {{ form.showcased_achievement_ids(type="hidden", id="showcase-ids-hidden") }}
+
+            {# Two-zone layout: pinned (above) and pool (below).
+               Sortable.js connects them so users can drag between. #}
+            <div class="mt-3">
+              <p class="text-[10px] uppercase tracking-wider text-slate-500">Pinned (top {{ showcase_max }})</p>
+              <ul id="showcase-pinned"
+                  class="mt-1 flex min-h-[3.5rem] flex-wrap gap-2 rounded-md border border-dashed border-cyan-500/30 bg-slate-950/40 p-2">
+                {% for a_id in showcased_ids %}
+                  {% for ua in user_achievements if ua.achievement.id == a_id %}
+                    {% set tone = tier_classes.get(ua.achievement.tier, tier_classes["slate"]) %}
+                    <li class="cursor-grab" data-id="{{ ua.achievement.id }}"
+                        title="{{ ua.achievement.name }} — {{ ua.achievement.description }}">
+                      <div class="flex h-12 w-12 items-center justify-center rounded-lg border-2 {{ tone }}">
+                        {{ achievement_icon(ua.achievement.icon, class="h-6 w-6") }}
+                      </div>
+                    </li>
+                  {% endfor %}
+                {% endfor %}
+              </ul>
+            </div>
+            <div class="mt-3">
+              <p class="text-[10px] uppercase tracking-wider text-slate-500">Available</p>
+              <ul id="showcase-pool"
+                  class="mt-1 flex min-h-[3.5rem] flex-wrap gap-2 rounded-md border border-slate-800 bg-slate-950/30 p-2">
+                {% for ua in user_achievements if ua.achievement.id not in showcased_ids %}
+                  {% set tone = tier_classes.get(ua.achievement.tier, tier_classes["slate"]) %}
+                  <li class="cursor-grab opacity-70 hover:opacity-100" data-id="{{ ua.achievement.id }}"
+                      title="{{ ua.achievement.name }} — {{ ua.achievement.description }}">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-lg border-2 {{ tone }}">
+                      {{ achievement_icon(ua.achievement.icon, class="h-6 w-6") }}
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+
+            {# Sortable.js — drag-drop reorder for the showcase
+               picker. Loaded on this page only (not in base.html)
+               since the editor is the only place it's needed. #}
+            <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
+            <script>
+              (function () {
+                var pinned = document.getElementById("showcase-pinned");
+                var pool = document.getElementById("showcase-pool");
+                var hidden = document.getElementById("showcase-ids-hidden");
+                var MAX = {{ showcase_max }};
+
+                function syncHidden() {
+                  var ids = [];
+                  pinned.querySelectorAll("li").forEach(function (li) {
+                    ids.push(li.dataset.id);
+                  });
+                  hidden.value = ids.slice(0, MAX).join(",");
+                }
+
+                function enforceCap() {
+                  // If a drop pushed pinned over the cap, send
+                  // the overflow back to the pool.
+                  while (pinned.children.length > MAX) {
+                    pool.insertBefore(pinned.lastElementChild, pool.firstChild);
+                  }
+                }
+
+                if (pinned && pool && window.Sortable) {
+                  Sortable.create(pinned, {
+                    group: "showcase",
+                    animation: 150,
+                    onEnd: function () { enforceCap(); syncHidden(); }
+                  });
+                  Sortable.create(pool, {
+                    group: "showcase",
+                    animation: 150,
+                    sort: false,
+                    onEnd: function () { enforceCap(); syncHidden(); }
+                  });
+                  syncHidden();
+                }
+              })();
+            </script>
+          </div>
+        {% endif %}
 
         <button class="btn-primary">Save</button>
       </form>

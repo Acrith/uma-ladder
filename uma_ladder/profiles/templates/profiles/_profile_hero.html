@@ -11,6 +11,7 @@
 #}
 
 {% from "_avatar.html" import avatar %}
+{% from "_icons.html" import achievement_icon %}
 
 {# Outfit-aware GameTora link: prefer the specific costume page when set. #}
 {% set gametora_link = none %}
@@ -192,6 +193,36 @@
           {% endif %}
         </div>
       </div>
+
+      {# PR-P4 — Showcased achievements row. Renders only when
+         the user has pinned at least one. Each pin is a badge
+         tile (h-10 square) with tier-colored border/glow and
+         the achievement icon centered. Tooltip on hover for
+         the name + description. When custom artwork lands per
+         project_achievements_backlog.md's "artwork pipeline"
+         section, the same tile slot just renders an <img>
+         instead of the SVG. #}
+      {% if showcased_achievements %}
+        {% set _tier_classes = {
+          "gold": "border-amber-500/50 bg-amber-500/10 text-amber-200 shadow-glow-amber",
+          "silver": "border-slate-300/40 bg-slate-200/10 text-slate-100",
+          "bronze": "border-orange-500/50 bg-orange-500/10 text-orange-200",
+          "slate": "border-slate-700 bg-slate-800/40 text-slate-300",
+        } %}
+        <div>
+          <p class="label-eyebrow">Showcase</p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            {% for a in showcased_achievements %}
+              {% set tone = _tier_classes.get(a.tier, _tier_classes["slate"]) %}
+              <a href="{{ url_for('profiles.public_achievements', username=user.username) }}"
+                 class="group flex h-12 w-12 items-center justify-center rounded-lg border-2 {{ tone }} transition hover:scale-105"
+                 title="{{ a.name }} — {{ a.description }}">
+                {{ achievement_icon(a.icon, class="h-6 w-6") }}
+              </a>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
 
     </div>
     <div class="hidden md:block"></div>

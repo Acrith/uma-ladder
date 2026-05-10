@@ -119,6 +119,18 @@ log for the full history.
   reflected back. Hides the text on narrow screens to keep
   mobile nav compact.
 
+- **Achievement showcase on the hero.** Pin up to 6
+  achievements to your Overview hero. They render as tier-
+  colored badge tiles (gold gets a glow) at the bottom of the
+  hero's left column — picture a small trophy display case.
+  Drag-and-drop picker on the profile editor: drag any
+  unlocked achievement into the "Pinned" zone to feature it,
+  drag back into the pool to unpin, drag within the pinned
+  zone to reorder. Click any badge on the hero to jump to
+  the full Achievements tab. When custom badge artwork lands
+  in a future update, the same tiles will render the artwork
+  in place of the icon.
+
 ## 2026-05-09
 
 ### Sign-in

@@ -93,8 +93,38 @@ def me() -> object:
         except profiles_service.UnknownAvatarBorderError:
             form.avatar_border.errors.append("Pick a tone from the list.")
         else:
+            # PR-P4 — persist the showcase ordering. Lives outside
+            # the ProfileUpdate dataclass because it's its own
+            # validation domain (ids must reference real granted
+            # achievements, not arbitrary form data). Service
+            # silently drops invalid ids + caps at SHOWCASE_MAX.
+            from ..services import achievements as achievements_service
+
+            raw = (form.showcased_achievement_ids.data or "").strip()
+            showcase_ids: list[int] = []
+            for token in raw.split(","):
+                token = token.strip()
+                if token.isdigit():
+                    showcase_ids.append(int(token))
+            achievements_service.set_showcase(current_user, showcase_ids)
             flash("Profile updated.")
             return redirect(url_for("profiles.me"))
+    # PR-P4 — populate the picker with the user's unlocked
+    # achievements + their current showcase ordering. Read on GET
+    # AND on form-validation-failed POST so the picker keeps the
+    # in-progress state on errors.
+    from ..services import achievements as achievements_service
+
+    user_achievements = achievements_service.list_for_user(current_user.id)
+    showcased = achievements_service.list_showcased_for_user(current_user.id)
+    showcased_ids = [a.id for a in showcased]
+    if not form.is_submitted():
+        # GET path: prefill the hidden field with the persisted
+        # ordering so a save-without-touching-the-picker doesn't
+        # wipe it.
+        form.showcased_achievement_ids.data = ",".join(
+            str(i) for i in showcased_ids
+        )
     return render_template(
         "profiles/edit.html",
         form=form,
@@ -104,6 +134,9 @@ def me() -> object:
         oshi_image=profiles_service.resolve_oshi_image(profile),
         linked_identities=linked_identities,
         discord_identity=discord_identity,
+        user_achievements=user_achievements,
+        showcased_ids=showcased_ids,
+        showcase_max=achievements_service.SHOWCASE_MAX,
     )
 
 
@@ -208,6 +241,12 @@ def _load_profile_or_404(username: str):
         "oshi_image": profiles_service.resolve_oshi_image(profile),
         "achievement_count": len(
             achievements_service.list_for_user(user.id)
+        ),
+        # PR-P4 — showcased achievements for the hero badge row.
+        # Service silently drops stale ids; the row hides when
+        # the list comes back empty.
+        "showcased_achievements": achievements_service.list_showcased_for_user(
+            user.id
         ),
         "active_season": active_season,
         "standing": standing,

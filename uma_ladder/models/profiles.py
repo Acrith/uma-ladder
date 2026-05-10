@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from ..extensions import db
@@ -43,6 +43,16 @@ class UserProfile(db.Model):
     # border. Oshi ring (when set) keeps priority on the rendered
     # avatar; the chosen border only shows when no oshi is set.
     avatar_border: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # PR-P4 — user-pinnable achievement showcase rendered at the
+    # bottom of the Overview hero. Ordered list of Achievement.id
+    # ints (e.g. [3, 1, 7]). NULL = no showcase set; the row hides
+    # entirely. Cap is enforced at the service layer
+    # (`SHOWCASE_MAX = 6`) so we can tune later without a
+    # migration. Stale ids (achievement deleted/disabled) are
+    # filtered at render time so a degraded list never 500s.
+    showcased_achievement_ids: Mapped[list[int] | None] = mapped_column(
+        JSON, nullable=True
+    )
     oshi_character_id: Mapped[int | None] = mapped_column(
         ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True, index=True
     )

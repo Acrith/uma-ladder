@@ -485,6 +485,255 @@ def test_grant_disabled_achievement_returns_existing_row_if_present(
         assert existing is not None
 
 
+# ─── PR-P4 — Showcase ─────────────────────────────────────────────
+
+
+def test_set_showcase_persists_ordered_list(
+    app: Flask, make_user
+) -> None:
+    """Happy path: granted-and-enabled ids in user order persist."""
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        achievements_service.grant(u, "link_discord")
+        achievements_service.grant(u, "link_google")
+        founding_id = achievements_service.get_by_key("founding_member").id
+        discord_id = achievements_service.get_by_key("link_discord").id
+        google_id = achievements_service.get_by_key("link_google").id
+        # Pin in reverse-grant order to prove the user picks the order.
+        result = achievements_service.set_showcase(
+            u, [google_id, founding_id, discord_id]
+        )
+        assert result == [google_id, founding_id, discord_id]
+        showcased = achievements_service.list_showcased_for_user(user["id"])
+        assert [a.id for a in showcased] == [
+            google_id,
+            founding_id,
+            discord_id,
+        ]
+
+
+def test_set_showcase_silently_drops_ids_user_has_not_unlocked(
+    app: Flask, make_user
+) -> None:
+    """Defense: user POSTs a crafted id list with achievements they
+    don't have. Service should drop those, never raise — caller
+    paths are best-effort."""
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        founding_id = achievements_service.get_by_key("founding_member").id
+        season_champion_id = achievements_service.get_by_key(
+            "season_champion"
+        ).id
+        # User only has founding_member; season_champion id should
+        # be silently dropped.
+        result = achievements_service.set_showcase(
+            u, [founding_id, season_champion_id]
+        )
+        assert result == [founding_id]
+
+
+def test_set_showcase_caps_at_showcase_max(app: Flask, make_user) -> None:
+    """User can persist more than 6 ids via crafted form post; cap
+    applies server-side."""
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        # Grant every starter achievement (10 — more than the cap
+        # of 6).
+        for definition in achievements_service.STARTER_ACHIEVEMENT_DEFINITIONS:
+            achievements_service.grant(u, definition["key"])
+        all_ids = [
+            achievements_service.get_by_key(d["key"]).id
+            for d in achievements_service.STARTER_ACHIEVEMENT_DEFINITIONS
+        ]
+        result = achievements_service.set_showcase(u, all_ids)
+        assert len(result) == achievements_service.SHOWCASE_MAX
+        # Order is preserved within the cap.
+        assert result == all_ids[: achievements_service.SHOWCASE_MAX]
+
+
+def test_set_showcase_removes_duplicates_preserving_first_position(
+    app: Flask, make_user
+) -> None:
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        achievements_service.grant(u, "link_discord")
+        a_id = achievements_service.get_by_key("founding_member").id
+        b_id = achievements_service.get_by_key("link_discord").id
+        # Duplicate `a_id` — should collapse to one entry, in its
+        # first position.
+        result = achievements_service.set_showcase(
+            u, [a_id, b_id, a_id]
+        )
+        assert result == [a_id, b_id]
+
+
+def test_set_showcase_empty_list_clears_persisted(
+    app: Flask, make_user
+) -> None:
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        a_id = achievements_service.get_by_key("founding_member").id
+        achievements_service.set_showcase(u, [a_id])
+        achievements_service.set_showcase(u, [])
+        assert (
+            achievements_service.list_showcased_for_user(user["id"]) == []
+        )
+
+
+def test_list_showcased_filters_revoked_achievements(
+    app: Flask, make_user
+) -> None:
+    """If an admin revokes a granted achievement after the user
+    pinned it, the pin silently disappears from the showcase
+    rather than 500ing."""
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+        from uma_ladder.models import UserAchievement
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        achievements_service.grant(u, "link_discord")
+        a_id = achievements_service.get_by_key("founding_member").id
+        b_id = achievements_service.get_by_key("link_discord").id
+        achievements_service.set_showcase(u, [a_id, b_id])
+        # Now revoke founding_member.
+        revoke_row = db.session.scalars(
+            db.select(UserAchievement).where(
+                UserAchievement.user_id == user["id"],
+                UserAchievement.achievement_id == a_id,
+            )
+        ).first()
+        db.session.delete(revoke_row)
+        db.session.commit()
+        # Showcase should now only contain link_discord, in order.
+        result = achievements_service.list_showcased_for_user(user["id"])
+        assert [a.id for a in result] == [b_id]
+
+
+def test_list_showcased_filters_disabled_achievements(
+    app: Flask, make_user
+) -> None:
+    """Same filter, but the achievement was disabled in the
+    catalogue rather than revoked from the user."""
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        achievements_service.grant(u, "link_discord")
+        a = achievements_service.get_by_key("founding_member")
+        b = achievements_service.get_by_key("link_discord")
+        achievements_service.set_showcase(u, [a.id, b.id])
+        a.enabled = False
+        db.session.commit()
+        result = achievements_service.list_showcased_for_user(user["id"])
+        assert [x.id for x in result] == [b.id]
+
+
+def test_profile_editor_renders_showcase_picker_when_user_has_unlocks(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+    _login(client, "ada", "password123")
+    body = client.get("/profiles/me").data.decode()
+    assert "Achievement showcase" in body
+    assert "showcase-pinned" in body
+    assert "showcase-pool" in body
+    # Sortable.js loaded via CDN.
+    assert "Sortable.min.js" in body
+
+
+def test_profile_editor_hides_showcase_picker_when_no_unlocks(
+    client: FlaskClient, make_user
+) -> None:
+    """Fresh user with no achievements doesn't see the picker —
+    no point dragging from an empty pool."""
+    make_user(username="ada", password="password123")
+    _login(client, "ada", "password123")
+    body = client.get("/profiles/me").data.decode()
+    assert "Achievement showcase" not in body
+
+
+def test_profile_editor_save_persists_showcase(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        achievements_service.grant(u, "link_discord")
+        a_id = achievements_service.get_by_key("founding_member").id
+        b_id = achievements_service.get_by_key("link_discord").id
+    _login(client, "ada", "password123")
+    resp = client.post(
+        "/profiles/me",
+        data={"showcased_achievement_ids": f"{b_id},{a_id}"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        ids = [
+            x.id
+            for x in achievements_service.list_showcased_for_user(user["id"])
+        ]
+        assert ids == [b_id, a_id]
+
+
+def test_public_profile_hero_renders_showcase(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    user = make_user(username="ada", password="password123")
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        a_id = achievements_service.get_by_key("founding_member").id
+        achievements_service.set_showcase(u, [a_id])
+    body = client.get("/profiles/ada").data.decode()
+    assert "Showcase" in body
+    # Tier-colored border class for gold tier (founding_member is gold).
+    assert "border-amber-500/50" in body
+
+
+def test_public_profile_hero_hides_showcase_when_empty(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="ada", password="password123")
+    body = client.get("/profiles/ada").data.decode()
+    # The label-eyebrow text "Showcase" should not appear when
+    # no pins exist. Use a unique-enough marker.
+    assert ">Showcase<" not in body
+
+
 def test_grant_disabled_achievement_for_user_without_it_raises(
     app: Flask, make_user
 ) -> None:
