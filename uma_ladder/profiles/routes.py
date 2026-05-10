@@ -157,24 +157,94 @@ def serve_avatar(image_id: int) -> object:
     return send_from_directory(directory, image.storage_key)
 
 
-@bp.get("/<username>")
-def public(username: str) -> object:
-    from ..services import draft as draft_service
-    from ..services import uma_moe as uma_moe_service
+def _load_profile_or_404(username: str):
+    """PR-P3 — shared loader for the three profile tab routes.
 
+    Resolves the user + profile + the data that EVERY tab needs
+    in the shared header (avatar, oshi pill, friend-code chip,
+    achievement count for the tab badge). Tab-specific data is
+    fetched per-route below to avoid loading every dataset for
+    every tab.
+    """
     user = profiles_service.find_user_by_username(username)
     if user is None:
         abort(404)
     profile = profiles_service.get_or_create_profile(user)
+    from ..services import achievements as achievements_service
+
+    return {
+        "user": user,
+        "profile": profile,
+        "oshi_image": profiles_service.resolve_oshi_image(profile),
+        "achievement_count": len(
+            achievements_service.list_for_user(user.id)
+        ),
+    }
+
+
+@bp.get("/<username>")
+def public(username: str) -> object:
+    """Overview tab — hero card with oshi art, season standing,
+    in-game stats from uma.moe. Match history + achievements
+    catalogue moved out to dedicated tabs (PR-P3)."""
+    from ..services import draft as draft_service
+    from ..services import official as official_service
+    from ..services import seasons as seasons_service
+    from ..services import uma_moe as uma_moe_service
+
+    base = _load_profile_or_404(username)
+    user, profile = base["user"], base["profile"]
+
+    active_season = seasons_service.get_active_season()
+    standing = (
+        official_service.season_standing_for_user(user.id, active_season.id)
+        if active_season is not None
+        else None
+    )
+    # Hero stat tiles consume both — keep loading on Overview.
+    track_strengths = profiles_service.track_strengths_for_user(user.id)
+    elo = draft_service.elo_summary_for_user(user.id)
+    # Best-effort uma.moe enrichment when friend_code is set.
+    trainer = uma_moe_service.fetch_trainer_summary(profile.friend_code)
+    profiles_service.sync_club_id_from_trainer(profile, trainer)
+    discord_verified = (
+        identity_service.find_identity("discord", profile.discord_user_id)
+        is not None
+        if profile.discord_user_id
+        else False
+    )
+    # Show top 5 unlocked achievements as a snippet on Overview;
+    # the full catalogue lives on the /achievements tab.
+    from ..services import achievements as achievements_service
+
+    overview_achievements = achievements_service.list_for_user(user.id)[:5]
+    return render_template(
+        "profiles/public.html",
+        active_season=active_season,
+        standing=standing,
+        track_strengths=track_strengths,
+        elo=elo,
+        trainer=trainer,
+        discord_verified=discord_verified,
+        overview_achievements=overview_achievements,
+        **base,
+    )
+
+
+@bp.get("/<username>/history")
+def public_history(username: str) -> object:
+    """Match history tab — Recent Official + Recent Draft +
+    most-used uma + per-track strengths + Elo summary. Heavy
+    queries; only run when the visitor actually opens this tab."""
+    from ..services import draft as draft_service
+
+    base = _load_profile_or_404(username)
+    user = base["user"]
     page = max(1, request.args.get("page", 1, type=int))
     kind = (request.args.get("kind") or "").strip() or None
-    # Combined paginated view (URL escape hatch via ?page= / ?kind= —
-    # not surfaced in the new layout but still usable directly).
     history = profiles_service.list_recent_history_for_user(
         user.id, page=page, page_size=10, kind=kind
     )
-    # Split top-5 lists for the side-by-side dashboard cards. Cheap —
-    # same merge cost twice with kind filter applied per call.
     recent_official = profiles_service.list_recent_history_for_user(
         user.id, page=1, page_size=5, kind="official"
     )
@@ -189,49 +259,8 @@ def public(username: str) -> object:
     )
     track_strengths = profiles_service.track_strengths_for_user(user.id)
     elo = draft_service.elo_summary_for_user(user.id)
-    # Active-season standing for the hero Official-podiums + Season-rank
-    # tiles. Requires an active season; otherwise both tiles render in
-    # their "no active season" empty states.
-    from ..services import official as official_service
-    from ..services import seasons as seasons_service
-
-    active_season = seasons_service.get_active_season()
-    standing = (
-        official_service.season_standing_for_user(user.id, active_season.id)
-        if active_season is not None
-        else None
-    )
-    # Best-effort uma.moe enrichment when friend_code is set. Returns
-    # None for missing code / 404 / network error / malformed JSON —
-    # the template just doesn't render the card in that case.
-    trainer = uma_moe_service.fetch_trainer_summary(profile.friend_code)
-    # PR-L1 — keep `UserProfile.club_id` in sync with whatever
-    # uma.moe says the user's circle is. Profile views are common
-    # enough that active users stay current naturally; cold users
-    # may not see Club races until they (or someone else) visits
-    # their profile, which is acceptable.
-    profiles_service.sync_club_id_from_trainer(profile, trainer)
-    # PR-K3 — surface whether the Discord identity on this profile
-    # was verified via OAuth (auth_identities row exists) vs.
-    # manually typed by the user. Drives the badge variant on the
-    # Discord chip in the hero.
-    discord_verified = (
-        identity_service.find_identity("discord", profile.discord_user_id)
-        is not None
-        if profile.discord_user_id
-        else False
-    )
-    # PR-P2 — unlocked achievements only. Locked entries don't
-    # render here (per scoping); a future /achievements page can
-    # show the full catalogue for browsing.
-    from ..services import achievements as achievements_service
-
-    user_achievements = achievements_service.list_for_user(user.id)
     return render_template(
-        "profiles/public.html",
-        user=user,
-        profile=profile,
-        oshi_image=profiles_service.resolve_oshi_image(profile),
+        "profiles/public_history.html",
         history=history,
         recent_official=recent_official,
         recent_draft=recent_draft,
@@ -239,9 +268,45 @@ def public(username: str) -> object:
         most_used_draft=most_used_draft,
         track_strengths=track_strengths,
         elo=elo,
-        active_season=active_season,
-        standing=standing,
-        trainer=trainer,
-        discord_verified=discord_verified,
-        user_achievements=user_achievements,
+        **base,
+    )
+
+
+@bp.get("/<username>/achievements")
+def public_achievements(username: str) -> object:
+    """Achievements tab — full catalogue with locked entries
+    grayed-out + how-to-earn tooltips. Revises PR-P2's
+    "show only unlocked" rule for this dedicated surface;
+    Overview tab still shows unlocked-only as a snippet."""
+    from ..services import achievements as achievements_service
+
+    base = _load_profile_or_404(username)
+    user = base["user"]
+    catalogue = achievements_service.list_definitions()
+    user_grants = achievements_service.list_for_user(user.id)
+    granted_by_id = {ua.achievement_id: ua for ua in user_grants}
+    # Group by source_kind so the catalogue reads coherently
+    # rather than as one flat list. Order: manual / oauth_link /
+    # race_result / draft_match / season_close / (None bucket).
+    group_order = [
+        ("manual", "Special"),
+        ("race_result", "Official races"),
+        ("draft_match", "Draft matches"),
+        ("season_close", "Season"),
+        ("oauth_link", "Sign-in"),
+        (None, "Other"),
+    ]
+    grouped: dict[str | None, list] = {k: [] for k, _ in group_order}
+    for a in catalogue:
+        bucket = a.source_kind if a.source_kind in grouped else None
+        grouped[bucket].append(a)
+    return render_template(
+        "profiles/public_achievements.html",
+        grouped_achievements=[
+            (label, grouped[k]) for k, label in group_order if grouped[k]
+        ],
+        granted_by_id=granted_by_id,
+        unlocked_count=len(user_grants),
+        total_count=len(catalogue),
+        **base,
     )

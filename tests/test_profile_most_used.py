@@ -249,7 +249,8 @@ def test_public_profile_renders_most_used_official(
     user = make_user(username="alice", role=Role.USER)
     [char_a] = _make_chars(app, 1)
     _seed_official_results(app, user["id"], char_a, [1, 2, 3, 1])
-    resp = client.get("/profiles/alice")
+    # PR-P3 — Most used cards moved to the /history tab.
+    resp = client.get("/profiles/alice/history")
     assert resp.status_code == 200
     body = resp.data.decode()
     assert "Most used · Official" in body

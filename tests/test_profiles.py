@@ -440,6 +440,108 @@ def test_profile_editor_renders_swatch_grid_picker(
     assert "sr-only" in body
 
 
+def test_history_tab_route_renders(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="alice", password="password123")
+    resp = client.get("/profiles/alice/history")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Tab nav present + active tab is Matches.
+    assert "/profiles/alice" in body
+    assert "/profiles/alice/history" in body
+    assert "/profiles/alice/achievements" in body
+
+
+def test_achievements_tab_route_renders(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="alice", password="password123")
+    resp = client.get("/profiles/alice/achievements")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Catalogue" in body
+    # The full catalogue is shown, including locked entries that
+    # the user hasn't earned. PR-P3 deliberately diverges from
+    # PR-P2's "show only unlocked" rule on this dedicated tab.
+    assert "Locked" in body
+    # All starter achievements appear (representative samples).
+    assert "Founding Member" in body
+    assert "Discord Linked" in body
+
+
+def test_achievements_tab_distinguishes_unlocked_from_locked(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    user = make_user(username="alice", password="password123")
+    from uma_ladder.services import achievements as achievements_service
+
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+    resp = client.get("/profiles/alice/achievements")
+    body = resp.data.decode()
+    # Granted entry's name still appears.
+    assert "Founding Member" in body
+    # Earned timestamp surfaces — locked entries don't have one,
+    # so this is a safe-ish positive marker for the unlocked
+    # render branch.
+    assert "Earned" in body
+
+
+def test_tab_count_badge_shows_unlocked_count(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-P3 — the Achievements tab nav shows a badge with the
+    number of unlocked achievements. Helps visitors see at a
+    glance how active a profile is."""
+    user = make_user(username="alice", password="password123")
+    from uma_ladder.services import achievements as achievements_service
+
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+        achievements_service.grant(u, "link_discord")
+    body = client.get("/profiles/alice").data.decode()
+    # Tab nav badge: "Achievements 2" (HTML formatting may vary,
+    # so check for the bare digit near the tab label).
+    # The number 2 should appear at least once in the body in a
+    # context that maps to the achievement count badge.
+    achievements_link_idx = body.find("/profiles/alice/achievements")
+    assert achievements_link_idx > 0
+    # Look for ">2<" within ~200 chars of the link — the tab
+    # template renders "<span ...>2</span>" right after the
+    # label.
+    nearby = body[achievements_link_idx:achievements_link_idx + 400]
+    assert ">2<" in nearby
+
+
+def test_overview_shows_only_unlocked_achievements(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-P3 reaffirms PR-P2's Overview rule: locked entries
+    don't render on the Overview tab even after we shipped the
+    /achievements full catalogue."""
+    user = make_user(username="alice", password="password123")
+    from uma_ladder.services import achievements as achievements_service
+
+    with app.app_context():
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        achievements_service.grant(u, "founding_member")
+    body = client.get("/profiles/alice").data.decode()
+    # Granted entry shows.
+    assert "Founding Member" in body
+    # Locked-only entries don't.
+    assert "First Official Win" not in body
+    assert "Season Champion" not in body
+
+
 def test_avatar_border_persists_across_unrelated_save(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

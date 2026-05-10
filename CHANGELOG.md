@@ -96,6 +96,18 @@ log for the full history.
   across browsers. Custom designed artwork is queued for the
   longer term.
 
+### Profile
+
+- **Profile tabs.** Player profiles now have three tabs:
+  **Overview** (the existing hero with oshi art, season standing,
+  in-game stats from uma.moe), **Matches** (`/profiles/<u>/history`
+  — Recent Official + Recent Draft + Most-used + Track strengths),
+  and **Achievements** (`/profiles/<u>/achievements` — full
+  catalogue with locked entries grayed-out + how-to-earn
+  tooltips). The shared header strip with avatar + name + tab nav
+  sits above the hero on every tab, so tabs stay reachable.
+  Old single-page URL still works — it's the Overview tab.
+
 ## 2026-05-09
 
 ### Sign-in

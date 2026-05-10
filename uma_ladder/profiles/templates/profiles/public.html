@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, empty_card, stat_tile %}
-{% from "_icons.html" import pencil as icon_pencil, achievement_icon %}
+{% from "_icons.html" import achievement_icon %}
 {% from "_avatar.html" import avatar %}
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
+
+  {# PR-P3 — shared header strip with avatar + tab nav above the
+     hero so tabs stay reachable regardless of hero height. #}
+  {% include "profiles/_profile_header.html" %}
 
   {# Outfit-aware GameTora link: prefer the specific costume page when set. #}
   {% set gametora_link = none %}
@@ -16,19 +20,11 @@
   {% endif %}
 
   {# ─── HERO ──────────────────────────────────────────────────────
-     Oshi artwork stays the emotional centerpiece on the right. The
-     left column carries identity + chips + a 4-up stat tile grid that
-     fills the previously empty lower-left space. #}
-  <article class="surface-card relative overflow-hidden min-h-[34rem]">
-    {# Owner-only edit affordance — sits above the hero gradient in
-       the top-right corner so it doesn't fight the identity row's
-       avatar / name layout. #}
-    {% if current_user.is_authenticated and current_user.id == user.id %}
-      <a href="{{ url_for('profiles.me') }}"
-         class="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-3 py-1.5 text-xs font-medium text-cyan-200 backdrop-blur hover:border-cyan-400/60 hover:text-cyan-100">
-        {{ icon_pencil(class="h-3.5 w-3.5") }} Edit profile
-      </a>
-    {% endif %}
+     Oshi artwork is the emotional centerpiece. The header strip
+     above already carries identity + edit button, so the hero's
+     internal identity row is for richer detail (oshi pill,
+     bio, friend code) — not name duplication. #}
+  <article class="surface-card mt-6 relative overflow-hidden min-h-[34rem]">
     {% if oshi_image %}
       <img src="{{ oshi_image }}"
            alt="{{ profile.oshi.name_en if profile.oshi else '' }}"
@@ -227,264 +223,12 @@
     </div>
   </article>
 
-  {# ─── DASHBOARD GRID — 2 cols, paired cards per row ───────────── #}
+  {# ─── BELOW THE HERO ────────────────────────────────────────────
+     Match-history sections (Recent / Most-used / Track strengths)
+     moved to the /history tab in PR-P3. Overview keeps in-game
+     stats from uma.moe + a short achievements snippet. #}
   <section class="mt-6 grid gap-4 lg:grid-cols-2">
 
-    {# Recent Official Results — real data, top 5 #}
-    {% if recent_official.total > 0 %}
-      {% call card(class="p-5") %}
-        <p class="label-eyebrow">Recent · Official</p>
-        <h2 class="mt-1 text-base font-semibold text-slate-100">Last {{ recent_official.entries|length }} of {{ recent_official.total }}</h2>
-        <ul class="mt-3 divide-y divide-slate-800">
-          {% for h in recent_official.entries %}
-            <li class="py-2">
-              <a class="flex items-center justify-between gap-3 text-sm hover:bg-slate-900/40 -mx-2 px-2 py-1 rounded transition"
-                 href="{{ url_for(h.detail_url_endpoint, **h.detail_url_kwargs) }}">
-                <div class="min-w-0">
-                  <p class="truncate text-slate-200">{{ h.title }}</p>
-                  {% if h.venue %}<p class="truncate text-xs text-slate-500">{{ h.venue }}</p>{% endif %}
-                </div>
-                <div class="flex items-center gap-3 text-xs">
-                  <span class="text-mono-pill">#{{ h.placement }}</span>
-                  <span class="text-slate-500">{{ h.when.strftime('%Y-%m-%d') }}</span>
-                </div>
-              </a>
-            </li>
-          {% endfor %}
-        </ul>
-        {% if recent_official.total > recent_official.entries|length %}
-          <a class="mt-3 inline-block text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.public', username=user.username, kind='official') }}">View all →</a>
-        {% endif %}
-      {% endcall %}
-    {% else %}
-      {{ empty_card("Recent · Official", "No official races yet", "Official podiums and recent placements will appear here after results are submitted.") }}
-    {% endif %}
-
-    {# Recent Draft Results — real data, top 5 #}
-    {% if recent_draft.total > 0 %}
-      {% call card(class="p-5") %}
-        <p class="label-eyebrow">Recent · Draft</p>
-        <h2 class="mt-1 text-base font-semibold text-slate-100">Last {{ recent_draft.entries|length }} of {{ recent_draft.total }}</h2>
-        <ul class="mt-3 divide-y divide-slate-800">
-          {% for h in recent_draft.entries %}
-            <li class="py-2">
-              <a class="flex items-center justify-between gap-3 text-sm hover:bg-slate-900/40 -mx-2 px-2 py-1 rounded transition"
-                 href="{{ url_for(h.detail_url_endpoint, **h.detail_url_kwargs) }}">
-                <div class="min-w-0">
-                  <p class="truncate text-slate-200">{{ h.title }}</p>
-                  {% if h.venue %}<p class="truncate text-xs text-slate-500">{{ h.venue }}</p>{% endif %}
-                </div>
-                <div class="flex items-center gap-3 text-xs">
-                  <span class="text-mono-pill">#{{ h.placement }}</span>
-                  <span class="text-slate-500">{{ h.when.strftime('%Y-%m-%d') }}</span>
-                </div>
-              </a>
-            </li>
-          {% endfor %}
-        </ul>
-        {% if recent_draft.total > recent_draft.entries|length %}
-          <a class="mt-3 inline-block text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.public', username=user.username, kind='draft') }}">View all →</a>
-        {% endif %}
-      {% endcall %}
-    {% else %}
-      {{ empty_card("Recent · Draft", "No draft matches yet", "Draft Elo and recent matches will appear here after your first completed match.") }}
-    {% endif %}
-
-    {# Most Used Umas — Official. Real data via
-       profiles_service.most_used_umas_for_user. Renders only when the
-       user has at least one Uma above the min_races sample-size guard;
-       otherwise the slot is hidden (the empty state would just say
-       "not enough data" which is noise). #}
-    {% if most_used_official %}
-      {% call card(class="p-5") %}
-        <p class="label-eyebrow">Most used · Official</p>
-        <h2 class="mt-1 text-base font-semibold text-slate-100">Top {{ most_used_official|length }} by races</h2>
-        <ul class="mt-3 divide-y divide-slate-800">
-          {% for u in most_used_official %}
-            <li class="flex items-center gap-3 py-2 text-sm">
-              {% if u.image_url %}
-                <img src="{{ u.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-9 w-9 shrink-0 rounded border border-slate-800 object-cover" />
-              {% else %}
-                <div class="h-9 w-9 shrink-0 rounded border border-slate-800 bg-slate-900"></div>
-              {% endif %}
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-slate-100">{{ u.name }}</p>
-                <p class="text-[11px] text-slate-500">{{ u.races }} race{{ '' if u.races == 1 else 's' }} · avg #{{ u.avg_placement }}</p>
-              </div>
-              <div class="shrink-0 text-right text-[11px] text-slate-400">
-                <p><span class="text-emerald-300">{{ '%.0f' % (u.win_rate * 100) }}%</span> WR</p>
-                <p><span class="text-amber-300">{{ '%.0f' % (u.podium_rate * 100) }}%</span> podium</p>
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% endcall %}
-    {% endif %}
-
-    {# Most Used Umas — Draft. Same shape; "win" = placement 1 in
-       the recorded result row. #}
-    {% if most_used_draft %}
-      {% call card(class="p-5") %}
-        <p class="label-eyebrow">Most used · Draft</p>
-        <h2 class="mt-1 text-base font-semibold text-slate-100">Top {{ most_used_draft|length }} by races</h2>
-        <ul class="mt-3 divide-y divide-slate-800">
-          {% for u in most_used_draft %}
-            <li class="flex items-center gap-3 py-2 text-sm">
-              {% if u.image_url %}
-                <img src="{{ u.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-9 w-9 shrink-0 rounded border border-slate-800 object-cover" />
-              {% else %}
-                <div class="h-9 w-9 shrink-0 rounded border border-slate-800 bg-slate-900"></div>
-              {% endif %}
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-slate-100">{{ u.name }}</p>
-                <p class="text-[11px] text-slate-500">{{ u.races }} match{{ '' if u.races == 1 else 'es' }} · avg #{{ u.avg_placement }}</p>
-              </div>
-              <div class="shrink-0 text-right text-[11px] text-slate-400">
-                <p><span class="text-emerald-300">{{ '%.0f' % (u.win_rate * 100) }}%</span> WR</p>
-                <p><span class="text-amber-300">{{ '%.0f' % (u.podium_rate * 100) }}%</span> podium</p>
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% endcall %}
-    {% endif %}
-
-    {# Track Strengths — per-mode breakdown (PR-I5). Draft uses
-       match-win-rate (1v1-team format, ~50% baseline). Official
-       uses podium rate (12-18 player fields, top-3 captures
-       "consistently competitive" without the structural penalty
-       of placement-1-only). Each section renders only when its
-       mode has data; the whole card hides if neither has any. #}
-    {% set ts_draft = track_strengths.draft %}
-    {% set ts_off = track_strengths.official %}
-    {% if ts_draft.total_races > 0 or ts_off.total_races > 0 %}
-      {% call card(class="p-5") %}
-        <p class="label-eyebrow">Track strengths</p>
-
-        {# Draft section — players spend most of their time here,
-           render first. #}
-        {% if ts_draft.total_races > 0 %}
-          <section>
-            <h2 class="mt-1 text-base font-semibold text-fuchsia-300">
-              Draft · {{ ts_draft.total_races }} match{{ '' if ts_draft.total_races == 1 else 'es' }}
-            </h2>
-            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
-                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best distance</p>
-                {% if ts_draft.best_distance %}
-                  <p class="mt-0.5 text-base font-semibold text-cyan-300">{{ ts_draft.best_distance.label }}</p>
-                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_draft.best_distance.win_rate * 100) }}% wins · {{ ts_draft.best_distance.races }} match{{ '' if ts_draft.best_distance.races == 1 else 'es' }}</p>
-                {% else %}
-                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
-                {% endif %}
-              </div>
-              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
-                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best surface</p>
-                {% if ts_draft.best_surface %}
-                  <p class="mt-0.5 text-base font-semibold text-fuchsia-300">{{ ts_draft.best_surface.label }}</p>
-                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_draft.best_surface.win_rate * 100) }}% wins · {{ ts_draft.best_surface.races }} match{{ '' if ts_draft.best_surface.races == 1 else 'es' }}</p>
-                {% else %}
-                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
-                {% endif %}
-              </div>
-            </div>
-            <div class="mt-3 grid gap-4 sm:grid-cols-2">
-              {% if ts_draft.by_distance %}
-                <div>
-                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Distance · win rate</p>
-                  <ul class="mt-2 space-y-1.5">
-                    {% for b in ts_draft.by_distance %}
-                      <li class="flex items-center justify-between text-xs">
-                        <span class="text-slate-300">{{ b.label }}</span>
-                        <span class="text-slate-500">{{ b.races }}m · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %}
-              {% if ts_draft.by_surface %}
-                <div>
-                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Surface · win rate</p>
-                  <ul class="mt-2 space-y-1.5">
-                    {% for b in ts_draft.by_surface %}
-                      <li class="flex items-center justify-between text-xs">
-                        <span class="text-slate-300">{{ b.label }}</span>
-                        <span class="text-slate-500">{{ b.races }}m · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %}
-            </div>
-          </section>
-        {% endif %}
-
-        {# Visual divider between modes only when both render. #}
-        {% if ts_draft.total_races > 0 and ts_off.total_races > 0 %}
-          <div class="my-5 h-px bg-slate-800"></div>
-        {% endif %}
-
-        {# Official section — podium-rate metric (top-3) instead of
-           literal placement-1, since 12-18 player fields make
-           strict win rate a too-noisy signal. #}
-        {% if ts_off.total_races > 0 %}
-          <section>
-            <h2 class="text-base font-semibold text-amber-300">
-              Official · {{ ts_off.total_races }} race{{ '' if ts_off.total_races == 1 else 's' }}
-            </h2>
-            <p class="mt-0.5 text-[11px] text-slate-500">"Wins" here means top-3 finish (podium).</p>
-            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
-                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best distance</p>
-                {% if ts_off.best_distance %}
-                  <p class="mt-0.5 text-base font-semibold text-cyan-300">{{ ts_off.best_distance.label }}</p>
-                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_off.best_distance.win_rate * 100) }}% podium · {{ ts_off.best_distance.races }} race{{ '' if ts_off.best_distance.races == 1 else 's' }}</p>
-                {% else %}
-                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
-                {% endif %}
-              </div>
-              <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
-                <p class="text-[10px] uppercase tracking-wider text-slate-500">Best surface</p>
-                {% if ts_off.best_surface %}
-                  <p class="mt-0.5 text-base font-semibold text-amber-300">{{ ts_off.best_surface.label }}</p>
-                  <p class="text-xs text-slate-400">{{ '%.0f' % (ts_off.best_surface.win_rate * 100) }}% podium · {{ ts_off.best_surface.races }} race{{ '' if ts_off.best_surface.races == 1 else 's' }}</p>
-                {% else %}
-                  <p class="mt-0.5 text-sm text-slate-500">Not enough data</p>
-                {% endif %}
-              </div>
-            </div>
-            <div class="mt-3 grid gap-4 sm:grid-cols-2">
-              {% if ts_off.by_distance %}
-                <div>
-                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Distance · podium rate</p>
-                  <ul class="mt-2 space-y-1.5">
-                    {% for b in ts_off.by_distance %}
-                      <li class="flex items-center justify-between text-xs">
-                        <span class="text-slate-300">{{ b.label }}</span>
-                        <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %}
-              {% if ts_off.by_surface %}
-                <div>
-                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Surface · podium rate</p>
-                  <ul class="mt-2 space-y-1.5">
-                    {% for b in ts_off.by_surface %}
-                      <li class="flex items-center justify-between text-xs">
-                        <span class="text-slate-300">{{ b.label }}</span>
-                        <span class="text-slate-500">{{ b.races }}r · <span class="text-emerald-300">{{ '%.0f' % (b.win_rate * 100) }}%</span></span>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %}
-            </div>
-          </section>
-        {% endif %}
-      {% endcall %}
-    {% endif %}
 
     {# In-game Stats — real (uma.moe), compact metric tiles #}
     {% if trainer %}
@@ -545,12 +289,10 @@
       {{ empty_card("In-game stats", "Not linked", "Set your in-game friend code on the profile editor to pull club, fans, and rank from uma.moe.") }}
     {% endif %}
 
-    {# PR-P2 — Achievements card. Renders only unlocked badges
-       per scoping (locked entries don't appear here; a future
-       /achievements browse page can list the full catalogue).
-       Card hides entirely when the user has no unlocks — keeps
-       fresh accounts clean. #}
-    {% if user_achievements %}
+    {# PR-P2/P3 — Achievements snippet on Overview. Top 5 unlocked
+       only; full catalogue (with locked) lives on the dedicated
+       /achievements tab. Card hides entirely when no unlocks. #}
+    {% if overview_achievements %}
       {% set tier_classes = {
         "gold": "border-amber-500/40 bg-amber-500/5 text-amber-200",
         "silver": "border-slate-300/30 bg-slate-200/5 text-slate-200",
@@ -560,10 +302,15 @@
       {% call card(class="p-5") %}
         <div class="flex items-center justify-between">
           <p class="label-eyebrow">Achievements</p>
-          <span class="text-xs text-slate-500">{{ user_achievements | length }} earned</span>
+          <a class="text-xs text-cyan-300 hover:text-cyan-200"
+             href="{{ url_for('profiles.public_achievements', username=user.username) }}">
+            See all{% if achievement_count > overview_achievements|length %}
+              ({{ achievement_count }})
+            {% endif %} →
+          </a>
         </div>
         <div class="mt-3 flex flex-wrap gap-2">
-          {% for ua in user_achievements %}
+          {% for ua in overview_achievements %}
             {% set tone = tier_classes.get(ua.achievement.tier, tier_classes["slate"]) %}
             <div class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium {{ tone }}"
                  title="{{ ua.achievement.description }} · earned {{ ua.unlocked_at.strftime('%Y-%m-%d') }}">

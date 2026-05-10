@@ -1,0 +1,62 @@
+{# PR-P3 — shared header strip rendered above tab content on all
+   three profile sub-routes (Overview, Matches, Achievements).
+
+   Combines identity (avatar + display name + @username + oshi
+   pill + edit button for owner) with the tab nav in a single
+   row. Sits ABOVE the Overview tab's hero card per UX scoping —
+   keeps the tabs in the viewport regardless of how tall the hero
+   gets.
+
+   Required context vars (set by the route's _load_profile_or_404):
+     user, profile, oshi_image, achievement_count
+#}
+
+{% from "_avatar.html" import avatar %}
+{% from "_icons.html" import pencil as icon_pencil %}
+
+<div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+  <div class="flex flex-wrap items-center gap-3">
+    <a href="{{ url_for('profiles.public', username=user.username) }}"
+       class="flex items-center gap-3 hover:text-cyan-300">
+      {{ avatar(user, profile, size_class="h-10 w-10", rounded_class="rounded-xl", border_class="border border-slate-800") }}
+      <div class="min-w-0">
+        <p class="truncate text-sm font-semibold text-slate-100">
+          {{ profile.display_name or user.username }}
+        </p>
+        <p class="truncate text-xs text-slate-500">@{{ user.username }}</p>
+      </div>
+    </a>
+    {% if profile.oshi %}
+      <span class="hidden rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 px-2.5 py-0.5 text-xs font-medium text-fuchsia-200 sm:inline-flex">
+        ◆ {{ profile.oshi.name_en }}
+      </span>
+    {% endif %}
+    <div class="ml-auto flex items-center gap-1.5">
+      {% if current_user.is_authenticated and current_user.id == user.id %}
+        <a href="{{ url_for('profiles.me') }}"
+           class="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-2.5 py-1 text-xs font-medium text-cyan-200 hover:border-cyan-400/60 hover:text-cyan-100">
+          {{ icon_pencil(class="h-3.5 w-3.5") }} Edit profile
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Tab nav row — separate line so the active tab is always
+     visible even when the identity row wraps on narrow widths. #}
+  {% set _tab_endpoints = {
+    "profiles.public": ("Overview", request.endpoint == "profiles.public"),
+    "profiles.public_history": ("Matches", request.endpoint == "profiles.public_history"),
+    "profiles.public_achievements": ("Achievements", request.endpoint == "profiles.public_achievements"),
+  } %}
+  <nav class="mt-3 flex items-center gap-1 border-t border-slate-800 pt-2 text-sm">
+    {% for endpoint, meta in _tab_endpoints.items() %}
+      {% set label, is_active = meta %}
+      <a href="{{ url_for(endpoint, username=user.username) }}"
+         class="-mb-px rounded-t-lg border-b-2 px-3 py-1.5 transition {% if is_active %}border-cyan-400 text-cyan-300{% else %}border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200{% endif %}">
+        {{ label }}{% if endpoint == "profiles.public_achievements" and achievement_count %}
+          <span class="ml-1 rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">{{ achievement_count }}</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </nav>
+</div>

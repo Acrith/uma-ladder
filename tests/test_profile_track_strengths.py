@@ -244,7 +244,8 @@ def test_card_renders_official_side(
     with app.app_context():
         mile_turf = _make_preset(app, name="MileTurf", surface="Turf", category="Mile")
         _seed_official(app, user["id"], mile_turf, [1, 2, 3])
-    resp = client.get("/profiles/alice")
+    # PR-P3 — Track strengths card moved to the /history tab.
+    resp = client.get("/profiles/alice/history")
     assert resp.status_code == 200
     body = resp.data.decode()
     assert "Track strengths" in body
@@ -269,7 +270,8 @@ def test_card_renders_draft_side_when_only_draft_data(
         _seed_draft_matches(
             app, user["id"], opp["id"], mile_turf, wins=2, losses=1
         )
-    resp = client.get("/profiles/alice")
+    # PR-P3 — Track strengths card on /history tab.
+    resp = client.get("/profiles/alice/history")
     body = resp.data.decode()
     assert "Track strengths" in body
     assert "Draft ·" in body
@@ -289,7 +291,8 @@ def test_card_renders_both_sections_with_divider(
         _seed_draft_matches(
             app, user["id"], opp["id"], mile_turf, wins=2, losses=1
         )
-    resp = client.get("/profiles/alice")
+    # PR-P3 — Track strengths card on /history tab.
+    resp = client.get("/profiles/alice/history")
     body = resp.data.decode()
     assert "Draft ·" in body
     assert "Official ·" in body

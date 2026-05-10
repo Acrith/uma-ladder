@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% from "_icons.html" import achievement_icon %}
+{% block title %}{{ profile.display_name or user.username }} · Achievements · Uma Ladder{% endblock %}
+{% block content %}
+
+  {% include "profiles/_profile_header.html" %}
+
+  {# PR-P3 — Achievements tab. Revises PR-P2's "show only
+     unlocked" rule for THIS dedicated surface (the Overview
+     snippet still shows unlocked-only). Locked entries appear
+     grayed-out with the description in the tooltip — drives
+     the engagement loop without cluttering the Overview. #}
+
+  {% set tier_classes = {
+    "gold": "border-amber-500/40 bg-amber-500/5 text-amber-200",
+    "silver": "border-slate-300/30 bg-slate-200/5 text-slate-200",
+    "bronze": "border-orange-500/40 bg-orange-500/5 text-orange-200",
+    "slate": "border-slate-700 bg-slate-800/40 text-slate-300",
+  } %}
+
+  <section class="mt-6">
+    <div class="flex items-end justify-between">
+      <div>
+        <p class="label-eyebrow">Catalogue</p>
+        <h1 class="mt-1 text-xl font-semibold text-slate-100">
+          Achievements <span class="text-base font-normal text-slate-500">({{ unlocked_count }} of {{ total_count }})</span>
+        </h1>
+      </div>
+    </div>
+
+    <div class="mt-4 space-y-6">
+      {% for group_label, items in grouped_achievements %}
+        <div>
+          <h2 class="text-xs uppercase tracking-wider text-slate-500">{{ group_label }}</h2>
+          <div class="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {% for a in items %}
+              {% set ua = granted_by_id.get(a.id) %}
+              {% set unlocked = ua is not none %}
+              {% set tone = tier_classes.get(a.tier, tier_classes["slate"]) if unlocked else "border-slate-800 bg-slate-950/30 text-slate-500" %}
+              {% set hint = a.description if unlocked else (a.description ~ " · Locked") %}
+              <div class="surface-card flex items-start gap-3 p-3 {{ tone }} {% if not unlocked %}opacity-60{% endif %}"
+                   title="{{ hint }}{% if unlocked and ua %} · earned {{ ua.unlocked_at.strftime('%Y-%m-%d') }}{% endif %}">
+                <div class="shrink-0 mt-0.5">
+                  {{ achievement_icon(a.icon, class="h-6 w-6") }}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-slate-100">
+                    {{ a.name }}
+                    {% if not unlocked %}
+                      <span class="ml-1 rounded-full border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">Locked</span>
+                    {% endif %}
+                  </p>
+                  <p class="mt-0.5 text-xs text-slate-400">{{ a.description }}</p>
+                  {% if unlocked %}
+                    <p class="mt-1 text-[11px] text-slate-500">Earned {{ ua.unlocked_at.strftime('%Y-%m-%d') }}</p>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+{% endblock %}

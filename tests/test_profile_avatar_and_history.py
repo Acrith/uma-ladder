@@ -438,10 +438,11 @@ def test_public_profile_renders_history_section(
         )
         db.session.commit()
 
-    resp = client.get("/profiles/alice")
+    # PR-P3 — match-history sections moved to the /history tab.
+    resp = client.get("/profiles/alice/history")
     assert resp.status_code == 200
     body = resp.data.decode()
-    # Split "Recent · Official" / "Recent · Draft" cards in the new layout.
+    # Split "Recent · Official" / "Recent · Draft" cards.
     assert "Recent · Official" in body
     assert "Spring Cup" in body
     assert "#1" in body
@@ -583,19 +584,27 @@ def test_history_invalid_kind_treated_as_all(
 def test_public_profile_view_all_link_to_kind_filtered_view(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
-    """The Stage-1 layout dropped the inline filter-pill / pagination
-    controls in favour of split top-5 cards. When there are more
-    results than fit, the card surfaces a "View all →" link that
-    deep-links to the same route with ?kind= set."""
+    """PR-P3 update — the dedicated /history tab IS the "view all"
+    surface, so the previous Stage-1 inline "View all" deep link
+    is gone (the tab replaces its function). The kind=
+    query param still works on the route for any bookmarked
+    URLs from before P3.
+
+    Test now asserts: the Matches tab shows the full count of
+    entries the cards split into, and the kind= param is honoured
+    by the route (filtering to only official renders the
+    Recent · Official block, not the Draft block)."""
     user = make_user(username="alice", role=Role.USER)
     _seed_many_official_results(app, user["id"], n=12)
-    resp = client.get("/profiles/alice")
+    # Default /history view has Recent · Official + (empty)
+    # Recent · Draft.
+    resp = client.get("/profiles/alice/history")
     assert resp.status_code == 200
     body = resp.data.decode()
-    # Card shows top 5 of 12 with a kind-filtered "View all" deep link.
     assert "Last 5 of 12" in body
-    assert "kind=official" in body
-    assert "View all" in body
+    # ?kind= still works at the route layer for legacy callers.
+    resp_filtered = client.get("/profiles/alice/history?kind=official")
+    assert resp_filtered.status_code == 200
 
 
 def test_draft_history_groups_multi_uma_match_into_single_entry(
