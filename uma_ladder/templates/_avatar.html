@@ -4,15 +4,16 @@
    border + oshi-ring logic stays in one place. Adding the next
    border tier (Layer 2 trophy borders) means editing this file.
 
-   The decorating priority is:
-     1. Oshi (when set) → fuchsia ring + glow. Wins on every
-        surface because picking an oshi is a stronger statement
-        than picking a border tone.
-     2. avatar_border palette key → ring-{color}-400 +
-        (optionally) shadow-glow-{color}. Allowlist only;
-        unknown values silently fall back to default.
-     3. Default → just the slate-800 outline that's part of the
-        base classes.
+   The decorating priority (PR-P1.1 reversal — explicit user
+   choice wins over the oshi-derived default):
+     1. avatar_border palette key (explicit user choice) →
+        ring-{color}-400 + (optionally) shadow-glow-{color}.
+        Allowlist only; unknown values silently fall back.
+     2. Oshi (when set, and no border picked) → fuchsia ring
+        + glow. Acts as the default tone for oshi users who
+        haven't customized.
+     3. Default → just the slate-800 outline from the base
+        classes.
 
    The size_class arg is the Tailwind h-N w-N pair; defaults to
    the medium size used by the Players index / Clubs roster.
@@ -48,14 +49,14 @@ ring-2 {{ ring_map[tone] }}{% if tone in glow_map %} {{ glow_map[tone] }}{% endi
 {%- endmacro %}
 
 {# Compute the decorator classes (ring + glow) given a profile.
-   Oshi wins; falls back to the user-chosen tone; falls back to
-   nothing. Callers pass `profile` (may be None) and `username`
-   for the initial-letter fallback. #}
+   PR-P1.1 — user-picked border wins over the oshi default;
+   oshi-fuchsia is the fallback for oshi users who haven't
+   customized. No-oshi-no-border = no ring at all. #}
 {% macro _decoration(profile) -%}
-{%- if profile and profile.oshi -%}
-ring-2 ring-fuchsia-400 shadow-glow-fuchsia
-{%- elif profile and profile.avatar_border -%}
+{%- if profile and profile.avatar_border -%}
 {{ _border_classes(profile.avatar_border) }}
+{%- elif profile and profile.oshi -%}
+ring-2 ring-fuchsia-400 shadow-glow-fuchsia
 {%- endif -%}
 {%- endmacro %}
 

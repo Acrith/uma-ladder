@@ -369,12 +369,15 @@ def test_public_profile_renders_picked_border_class(
     assert "ring-violet-400" in body
 
 
-def test_oshi_ring_takes_priority_over_avatar_border(
+def test_avatar_border_overrides_oshi_ring_when_both_set(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
-    """When BOTH are set, the avatar surface should carry the
-    fuchsia oshi ring, NOT the user-picked tone. PR-P1 design
-    invariant."""
+    """PR-P1.1 — explicit user-picked border wins over the
+    oshi-derived default. Without this, near-everyone in an
+    Umamusume community ends up locked to fuchsia (because
+    near-everyone picks an oshi), making the border feature
+    invisible. The picker has to actually surface the chosen
+    tone for the typical user."""
     make_user(username="alice", password="password123")
     oshi_id = _make_character(app, "gold-ship")
     _login(client, "alice", "password123")
@@ -388,10 +391,53 @@ def test_oshi_ring_takes_priority_over_avatar_border(
         follow_redirects=False,
     )
     body = client.get("/profiles/alice").data.decode()
-    # Oshi ring (fuchsia) is rendered — the macro emits it.
+    # Border wins on the avatar — emerald ring renders.
+    assert "ring-emerald-400" in body
+    # Oshi-fuchsia is NOT applied to the avatar (the fuchsia
+    # used elsewhere on the profile — oshi pill background — is
+    # bg-fuchsia-500/10, not ring-fuchsia-400, so this assertion
+    # is specific to the avatar ring.)
+    assert "ring-fuchsia-400" not in body
+
+
+def test_oshi_provides_default_ring_when_no_border_picked(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Symmetric guard: a user with an oshi but no border choice
+    still gets the fuchsia oshi ring as the default tone — the
+    PR-P1.1 priority reversal must NOT break this case."""
+    make_user(username="alice", password="password123")
+    oshi_id = _make_character(app, "gold-ship")
+    _login(client, "alice", "password123")
+    client.post(
+        "/profiles/me",
+        data={"oshi_character_id": str(oshi_id)},
+        follow_redirects=False,
+    )
+    body = client.get("/profiles/alice").data.decode()
     assert "ring-fuchsia-400" in body
-    # Emerald ring is NOT rendered because oshi wins.
-    assert "ring-emerald-400" not in body
+
+
+def test_profile_editor_renders_swatch_grid_picker(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-P1.1 — the picker is a visual swatch grid, not a
+    native <select>. Confirms each tone's swatch class lands in
+    the rendered HTML so users can actually see what they're
+    picking."""
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    body = client.get("/profiles/me").data.decode()
+    # A few representative swatches across the palette
+    assert "bg-cyan-400" in body
+    assert "bg-fuchsia-400" in body
+    assert "bg-amber-400" in body
+    assert "bg-pink-400" in body
+    # Default option's dashed-border style
+    assert "border-dashed" in body
+    # Hidden radio inputs (sr-only is the visibility class)
+    assert 'name="avatar_border"' in body
+    assert "sr-only" in body
 
 
 def test_avatar_border_persists_across_unrelated_save(

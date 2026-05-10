@@ -73,10 +73,12 @@ log for the full history.
   avatar from a 12-color palette (cyan, fuchsia, emerald, amber,
   rose, violet, sky, indigo, lime, orange, pink, slate). The
   ring shows up everywhere your avatar appears: profile hero,
-  Players index, Clubs roster, Rankings table. Picking an
-  oshi character keeps the existing fuchsia oshi ring; the
-  border tone shows when no oshi is set. Foundation for future
-  earnable special borders from seasons / tournaments / trophies.
+  Players index, Clubs roster, Rankings table. Picker is a
+  visual swatch grid — the colors are the colors. Your oshi
+  gives you a default fuchsia ring; pick any other tone to
+  override it (selecting *Default* falls back to the oshi tone).
+  Foundation for future earnable special borders from seasons,
+  tournaments, and trophies.
 
 ## 2026-05-09
 
