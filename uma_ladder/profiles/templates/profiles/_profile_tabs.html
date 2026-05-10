@@ -1,21 +1,31 @@
-{# PR-P3.2 — slim tab strip used at the top of every profile
-   sub-route. No identity here (the global nav's viewing-profile
-   chip covers that, and Overview's hero covers the rich version);
-   just tabs + the achievement count badge + the Edit profile
-   button when viewing your own profile.
+{# PR-P3.2 / PR-P3.3 — slim tab strip used on every profile
+   sub-route.
 
-   Required context: user, achievement_count
+   Right-side affordances:
+   - On Matches/Achievements when viewing SOMEONE ELSE'S profile:
+     "Viewing: [avatar + display name + @username]" chip so the
+     visitor never loses track of whose profile they're browsing
+     while the big hero (Overview-only) isn't in view.
+   - On your OWN profile (any tab): "Edit profile" button. Tabs
+     are the only place this lives now.
+   - On Overview when viewing someone else: nothing. The hero
+     above this strip already carries identity richly.
+
+   Required context: user, profile, achievement_count
 #}
 
 {% from "_icons.html" import pencil as icon_pencil %}
+{% from "_avatar.html" import avatar as _viewing_avatar %}
 
 {% set _tab_endpoints = [
   ("profiles.public", "Overview"),
   ("profiles.public_history", "Matches"),
   ("profiles.public_achievements", "Achievements"),
 ] %}
+{% set _is_own_profile = current_user.is_authenticated and current_user.id == user.id %}
+{% set _is_overview = request.endpoint == "profiles.public" %}
 
-<div class="mt-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 text-sm">
+<div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 text-sm">
   <nav class="flex items-center gap-1">
     {% for endpoint, label in _tab_endpoints %}
       {% set is_active = request.endpoint == endpoint %}
@@ -27,10 +37,26 @@
       </a>
     {% endfor %}
   </nav>
-  {% if current_user.is_authenticated and current_user.id == user.id %}
+
+  {% if _is_own_profile %}
     <a href="{{ url_for('profiles.me') }}"
        class="mb-1 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-3 py-1 text-xs font-medium text-cyan-200 hover:border-cyan-400/60 hover:text-cyan-100">
       {{ icon_pencil(class="h-3.5 w-3.5") }} Edit profile
     </a>
+  {% elif not _is_overview %}
+    {# PR-P3.3 — "Viewing:" indicator on the right of the tab
+       strip, only on Matches/Achievements (Overview's hero
+       already carries identity). Shows avatar + display name +
+       @username, vertically stacked like the old compact header
+       so anyone browsing match history doesn't lose track of
+       whose data they're reading. #}
+    <div class="mb-1 flex items-center gap-2 text-xs">
+      <span class="text-slate-500">Viewing:</span>
+      {{ _viewing_avatar(user, profile, size_class="h-8 w-8", rounded_class="rounded-lg", border_class="border border-slate-800") }}
+      <div class="leading-tight">
+        <p class="font-medium text-slate-200">{{ profile.display_name or user.username }}</p>
+        <p class="text-slate-500">@{{ user.username }}</p>
+      </div>
+    </div>
   {% endif %}
 </div>

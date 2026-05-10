@@ -205,13 +205,6 @@ def _load_profile_or_404(username: str):
     return {
         "user": user,
         "profile": profile,
-        # PR-P3.2 — also expose the viewed user under
-        # `viewing_profile_user` / `viewing_profile` so the
-        # global nav (base.html) can render a "viewing @x" chip.
-        # Same data, different name to make the nav-side
-        # template intent explicit.
-        "viewing_profile_user": user,
-        "viewing_profile": profile,
         "oshi_image": profiles_service.resolve_oshi_image(profile),
         "achievement_count": len(
             achievements_service.list_for_user(user.id)

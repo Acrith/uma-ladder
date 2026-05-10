@@ -106,10 +106,18 @@ log for the full history.
   (`/profiles/<u>/achievements` — full catalogue with locked
   entries grayed-out + how-to-earn tooltips). The big hero
   shows only on Overview; the other tabs get a slim tab strip
-  so they breathe for content. Identity stays anchored via a
-  small "viewing @user" chip in the top nav that appears
-  whenever you're on a profile page. Old single-page URL still
-  works — it's the Overview tab.
+  so they breathe for content. When you're viewing someone
+  else's Matches or Achievements, a "Viewing: [avatar +
+  name + @username]" indicator sits on the right of the tab
+  strip so you don't lose track of whose data you're reading.
+  Old single-page URL still works — it's the Overview tab.
+- **Rich self-identity in the top nav.** The top-right
+  username link is now a chip showing your avatar + display
+  name + @username (the same format the old compact profile
+  header used). Drops you onto your own profile on click,
+  same as before — but at a glance you see your own setup
+  reflected back. Hides the text on narrow screens to keep
+  mobile nav compact.
 
 ## 2026-05-09
 
