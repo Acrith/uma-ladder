@@ -18,6 +18,11 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
         config_object = get_config(config_object)
     app.config.from_object(config_object)
 
+    # PR-Q1 — Initialize Sentry as early as possible so any errors
+    # during the rest of startup get captured. No-op when SENTRY_DSN
+    # is unset (the dev / test default).
+    _init_sentry(app)
+
     # PR-K2.2 — Fly's edge proxy terminates TLS and forwards to the
     # app over plaintext HTTP, setting `X-Forwarded-Proto: https`.
     # Without ProxyFix, `request.scheme` reads `http` and any
@@ -83,6 +88,61 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(ocr_bp, url_prefix="/ocr")
     app.register_blueprint(skills_bp, url_prefix="/skills")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+
+
+def _init_sentry(app: Flask) -> None:
+    """PR-Q1 — initialize Sentry when SENTRY_DSN is configured.
+
+    Hard-deps `sentry-sdk[flask]` (declared in pyproject) so the
+    import is unconditional; the no-op behaviour comes from
+    skipping `init` entirely when the DSN is absent. That keeps
+    dev / test environments cleanly off Sentry without any
+    plumbing on each developer's machine.
+
+    Wiring choices:
+    - `FlaskIntegration` — captures unhandled exceptions, request
+      context, route info.
+    - `LoggingIntegration` — promotes `app.logger.warning` and
+      higher to Sentry events; lower levels become breadcrumbs
+      attached to subsequent events. So a degraded path that
+      logs a warning before throwing surfaces both the warning
+      AND the exception together.
+    - `traces_sample_rate=0.0` — performance monitoring is off
+      for now (errors only). Bump to e.g. 0.1 (sample 10% of
+      requests) once we're sure the cost is bounded.
+    - `send_default_pii=False` — keeps user IPs / emails / etc.
+      out of Sentry payloads. We can opt in selectively via
+      `sentry_sdk.set_user()` if a future error handler wants
+      to attach the logged-in user id.
+
+    Init runs in `create_app` so tests that build multiple apps
+    will repeatedly call `sentry_sdk.init` — that's a global no-op
+    in dev/test (DSN unset) and harmless even if a test leaks a
+    DSN env var in (Sentry treats repeated init as re-config).
+    """
+    dsn = app.config.get("SENTRY_DSN")
+    if not dsn:
+        return
+
+    import logging
+
+    import sentry_sdk
+    from sentry_sdk.integrations.flask import FlaskIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_sdk.init(
+        dsn=dsn,
+        integrations=[
+            FlaskIntegration(),
+            LoggingIntegration(
+                level=logging.INFO,
+                event_level=logging.WARNING,
+            ),
+        ],
+        environment=app.config.get("SENTRY_ENVIRONMENT") or "production",
+        traces_sample_rate=0.0,
+        send_default_pii=False,
+    )
 
 
 def _register_inbox_context(app: Flask) -> None:

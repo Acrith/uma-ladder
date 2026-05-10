@@ -117,3 +117,70 @@ def test_url_for_emits_https_when_x_forwarded_proto_set(app: Flask) -> None:
         f"expected https with X-Forwarded-Proto=https, got {forwarded!r}"
     )
     assert "umaladder.moe" in forwarded
+
+
+# ─── PR-Q1 — Sentry init gating ─────────────────────────────────
+
+
+def test_sentry_init_skipped_when_dsn_unset(monkeypatch) -> None:
+    """Default test config has no SENTRY_DSN; `_init_sentry` must
+    not call `sentry_sdk.init` (we don't want test runs spamming
+    a Sentry project, and dev should stay clean too)."""
+    import sentry_sdk
+
+    from uma_ladder import create_app
+
+    init_calls: list[dict] = []
+
+    def fake_init(**kwargs) -> None:  # noqa: ANN001 — mirroring sdk signature loosely
+        init_calls.append(kwargs)
+
+    monkeypatch.setattr(sentry_sdk, "init", fake_init)
+
+    create_app("testing")
+
+    assert init_calls == [], (
+        "sentry_sdk.init must not run when SENTRY_DSN is unset"
+    )
+
+
+def test_sentry_init_runs_when_dsn_set(monkeypatch) -> None:
+    """When SENTRY_DSN is configured, init runs once with the
+    expected hardening: env tag, traces off, PII off, both
+    integrations wired."""
+    import sentry_sdk
+    from sentry_sdk.integrations.flask import FlaskIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    from uma_ladder import create_app
+
+    init_calls: list[dict] = []
+
+    def fake_init(**kwargs) -> None:  # noqa: ANN001
+        init_calls.append(kwargs)
+
+    monkeypatch.setattr(sentry_sdk, "init", fake_init)
+
+    # `testing` config doesn't read env (TestConfig hardcodes
+    # values), so reach inside and set the DSN on the app config
+    # of a fresh instance, then manually re-invoke the helper to
+    # exercise the gated path. Cleaner than monkeypatching the
+    # config class and re-importing.
+    app = create_app("testing")
+    app.config["SENTRY_DSN"] = "https://test@example.test/1"
+    app.config["SENTRY_ENVIRONMENT"] = "test-env"
+    from uma_ladder import _init_sentry
+
+    _init_sentry(app)
+
+    assert len(init_calls) == 1, (
+        f"expected exactly one sentry_sdk.init call, got {len(init_calls)}"
+    )
+    kw = init_calls[0]
+    assert kw["dsn"] == "https://test@example.test/1"
+    assert kw["environment"] == "test-env"
+    assert kw["traces_sample_rate"] == 0.0
+    assert kw["send_default_pii"] is False
+    integration_types = {type(i) for i in kw["integrations"]}
+    assert FlaskIntegration in integration_types
+    assert LoggingIntegration in integration_types

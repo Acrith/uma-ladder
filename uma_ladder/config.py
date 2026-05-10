@@ -59,6 +59,14 @@ class BaseConfig:
     # uma_ladder/static/css/output.css. Dev defaults to False so the CDN
     # fallback in base.html avoids a build step on every reload.
     TAILWIND_BUILT: bool = False
+    # PR-Q1 — Sentry error tracking. Soft-required: when SENTRY_DSN
+    # is unset Sentry init no-ops, so dev / test stays clean
+    # without environment plumbing. Set on prod via Fly secrets.
+    # SENTRY_ENVIRONMENT tags events ("production" / "staging" /
+    # etc.); used by Sentry's UI to filter issues by env. Defaults
+    # to "production" for ProdConfig and None elsewhere.
+    SENTRY_DSN: str | None = None
+    SENTRY_ENVIRONMENT: str | None = None
 
 
 def _env_or_none(key: str) -> str | None:
@@ -88,6 +96,8 @@ class DevConfig(BaseConfig):
     APP_BASE_URL = _env_or_none("APP_BASE_URL")
     UMA_MOE_API_KEY = _env_or_none("UMA_MOE_API_KEY")
     TAILWIND_BUILT = os.environ.get("TAILWIND_BUILT", "").lower() in ("1", "true", "yes")
+    SENTRY_DSN = _env_or_none("SENTRY_DSN")
+    SENTRY_ENVIRONMENT = _env_or_none("SENTRY_ENVIRONMENT")
 
 
 class TestConfig(BaseConfig):
@@ -154,6 +164,14 @@ class ProdConfig(BaseConfig):
             "1",
             "true",
             "yes",
+        )
+        cls.SENTRY_DSN = _env_or_none("SENTRY_DSN")
+        # Default to "production" for the prod config when DSN is set
+        # but the env var is unspecified — saves having to set both
+        # SENTRY_DSN and SENTRY_ENVIRONMENT for the common case.
+        cls.SENTRY_ENVIRONMENT = (
+            _env_or_none("SENTRY_ENVIRONMENT")
+            or ("production" if cls.SENTRY_DSN else None)
         )
         return cls
 
