@@ -21,6 +21,40 @@ class UnknownOutfitError(ProfileError):
     pass
 
 
+class UnknownAvatarBorderError(ProfileError):
+    pass
+
+
+# PR-P1 — fixed allowlist of avatar border tones. Each key maps
+# to a Tailwind ring + (optional) glow class set in the
+# `avatar_macros.html` partial. Storing keys (not raw hex) keeps
+# us in a sealed XSS surface — no inline style ever reaches the
+# DOM, just class names from this allowlist.
+#
+# Tones come from the existing app palette (cyan / fuchsia /
+# emerald / amber / rose / violet) plus 6 extras (sky / indigo /
+# lime / orange / pink / slate). User picked the wider 12-tone
+# palette during PR-P1 scoping. If that proves visually noisy
+# the allowlist can be trimmed; existing rows with a now-removed
+# tone fall back to the default border on render.
+AVATAR_BORDER_PALETTE: frozenset[str] = frozenset(
+    {
+        "cyan",
+        "fuchsia",
+        "emerald",
+        "amber",
+        "rose",
+        "violet",
+        "sky",
+        "indigo",
+        "lime",
+        "orange",
+        "pink",
+        "slate",
+    }
+)
+
+
 @dataclass
 class ProfileUpdate:
     display_name: str | None = None
@@ -31,6 +65,7 @@ class ProfileUpdate:
     discord_user_id: str | None = None
     oshi_character_id: int | None = None
     oshi_outfit_id: int | None = None
+    avatar_border: str | None = None
 
 
 def get_or_create_profile(user: User) -> UserProfile:
@@ -70,6 +105,17 @@ def update_profile(user: User, update: ProfileUpdate) -> UserProfile:
     if update.oshi_character_id is None:
         final_outfit_id = None
 
+    # PR-P1 — avatar_border is allowlisted; reject anything not in
+    # AVATAR_BORDER_PALETTE so a crafted form post can't inject an
+    # arbitrary string. None / empty clears the choice (renders
+    # the default border).
+    if update.avatar_border is not None and update.avatar_border != "":
+        if update.avatar_border not in AVATAR_BORDER_PALETTE:
+            raise UnknownAvatarBorderError(update.avatar_border)
+        final_avatar_border: str | None = update.avatar_border
+    else:
+        final_avatar_border = None
+
     profile.display_name = update.display_name
     profile.avatar_url = update.avatar_url
     profile.description = update.description
@@ -78,6 +124,7 @@ def update_profile(user: User, update: ProfileUpdate) -> UserProfile:
     profile.discord_user_id = update.discord_user_id
     profile.oshi_character_id = update.oshi_character_id
     profile.oshi_outfit_id = final_outfit_id
+    profile.avatar_border = final_avatar_border
     db.session.commit()
     return profile
 

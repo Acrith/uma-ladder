@@ -1,0 +1,75 @@
+{# PR-P1 — single source of truth for the avatar render. Every
+   surface that shows a user's avatar (profile hero, Players
+   index, Clubs roster, Rankings table) calls this macro so the
+   border + oshi-ring logic stays in one place. Adding the next
+   border tier (Layer 2 trophy borders) means editing this file.
+
+   The decorating priority is:
+     1. Oshi (when set) → fuchsia ring + glow. Wins on every
+        surface because picking an oshi is a stronger statement
+        than picking a border tone.
+     2. avatar_border palette key → ring-{color}-400 +
+        (optionally) shadow-glow-{color}. Allowlist only;
+        unknown values silently fall back to default.
+     3. Default → just the slate-800 outline that's part of the
+        base classes.
+
+   The size_class arg is the Tailwind h-N w-N pair; defaults to
+   the medium size used by the Players index / Clubs roster.
+#}
+
+{# Map palette keys → Tailwind class fragments. Glow is set only
+   for tones that already have a shadow-glow utility defined in
+   base.html (cyan / fuchsia / amber / emerald). #}
+{% macro _border_classes(tone) -%}
+{%- set ring_map = {
+    "cyan": "ring-cyan-400",
+    "fuchsia": "ring-fuchsia-400",
+    "emerald": "ring-emerald-400",
+    "amber": "ring-amber-400",
+    "rose": "ring-rose-400",
+    "violet": "ring-violet-400",
+    "sky": "ring-sky-400",
+    "indigo": "ring-indigo-400",
+    "lime": "ring-lime-400",
+    "orange": "ring-orange-400",
+    "pink": "ring-pink-400",
+    "slate": "ring-slate-400",
+} -%}
+{%- set glow_map = {
+    "cyan": "shadow-glow-cyan",
+    "fuchsia": "shadow-glow-fuchsia",
+    "amber": "shadow-glow-amber",
+    "emerald": "shadow-glow-cyan",
+} -%}
+{%- if tone in ring_map -%}
+ring-2 {{ ring_map[tone] }}{% if tone in glow_map %} {{ glow_map[tone] }}{% endif %}
+{%- endif -%}
+{%- endmacro %}
+
+{# Compute the decorator classes (ring + glow) given a profile.
+   Oshi wins; falls back to the user-chosen tone; falls back to
+   nothing. Callers pass `profile` (may be None) and `username`
+   for the initial-letter fallback. #}
+{% macro _decoration(profile) -%}
+{%- if profile and profile.oshi -%}
+ring-2 ring-fuchsia-400 shadow-glow-fuchsia
+{%- elif profile and profile.avatar_border -%}
+{{ _border_classes(profile.avatar_border) }}
+{%- endif -%}
+{%- endmacro %}
+
+{# Image variant — used when profile.avatar_url is set. #}
+{% macro avatar(user, profile, size_class="h-10 w-10", rounded_class="rounded-xl", border_class="border border-slate-800") -%}
+{%- set deco = _decoration(profile) -%}
+{%- if profile and profile.avatar_url -%}
+<img src="{{ profile.avatar_url }}"
+     alt=""
+     loading="lazy"
+     class="{{ size_class }} shrink-0 {{ rounded_class }} {{ border_class }} object-cover {{ deco }}" />
+{%- else -%}
+<div class="flex {{ size_class }} shrink-0 items-center justify-center {{ rounded_class }} {{ border_class }} bg-slate-800 text-base font-semibold text-slate-300 {{ deco }}">
+  {{ user.username[:1] | upper }}
+</div>
+{%- endif -%}
+{%- endmacro %}

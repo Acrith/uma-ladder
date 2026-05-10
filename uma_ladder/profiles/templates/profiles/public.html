@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, empty_card, stat_tile %}
 {% from "_icons.html" import pencil as icon_pencil %}
+{% from "_avatar.html" import avatar %}
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
 
@@ -47,15 +48,7 @@
         {# Identity row — avatar + name + handle + Oshi pill inline. #}
         <div class="flex items-start gap-4">
           <div class="shrink-0">
-            {% if profile.avatar_url %}
-              <img src="{{ profile.avatar_url }}"
-                   alt=""
-                   class="h-16 w-16 rounded-2xl border-2 border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
-            {% else %}
-              <div class="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-slate-800 bg-slate-800 text-xl font-semibold text-slate-300 {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
-                {{ user.username[:1] | upper }}
-              </div>
-            {% endif %}
+            {{ avatar(user, profile, size_class="h-16 w-16", rounded_class="rounded-2xl", border_class="border-2 border-slate-800") }}
           </div>
           <div class="min-w-0 flex-1">
             <p class="label-eyebrow">Trainer</p>

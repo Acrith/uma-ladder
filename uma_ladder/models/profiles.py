@@ -36,6 +36,13 @@ class UserProfile(db.Model):
     # Club-only official race visibility checks without each check
     # having to traverse the `uma_moe_cache` JSON blob.
     club_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # PR-P1 — user-selectable avatar border tone. Stored as a
+    # palette key (e.g. "cyan", "fuchsia") rather than raw colour
+    # so the template maps to a fixed Tailwind class allowlist
+    # (no free-form CSS, no XSS via inline style). NULL = default
+    # border. Oshi ring (when set) keeps priority on the rendered
+    # avatar; the chosen border only shows when no oshi is set.
+    avatar_border: Mapped[str | None] = mapped_column(String(16), nullable=True)
     oshi_character_id: Mapped[int | None] = mapped_column(
         ForeignKey("uma_characters.id", ondelete="SET NULL"), nullable=True, index=True
     )

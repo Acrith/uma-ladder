@@ -285,3 +285,142 @@ def test_editor_renders_editable_field_when_unlinked(
     # variant.
     assert "Enable Discord Developer Mode" in body
     assert "Verified via Discord OAuth" not in body
+
+
+# ─── PR-P1 — Avatar border picker ───────────────────────────────
+
+
+def test_avatar_border_accepts_palette_tone(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """A valid palette key persists and shows up on subsequent
+    page loads."""
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    resp = client.post(
+        "/profiles/me",
+        data={"avatar_border": "cyan"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        user = profiles_service.find_user_by_username("alice")
+        profile = profiles_service.get_or_create_profile(user)
+        assert profile.avatar_border == "cyan"
+
+
+def test_avatar_border_empty_clears_choice(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Picking 'Default' (empty value) wipes the border back to
+    NULL — no leftover style on the avatar."""
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    # First set a tone
+    client.post(
+        "/profiles/me",
+        data={"avatar_border": "fuchsia"},
+        follow_redirects=False,
+    )
+    # Then clear it
+    client.post(
+        "/profiles/me",
+        data={"avatar_border": ""},
+        follow_redirects=False,
+    )
+    with app.app_context():
+        user = profiles_service.find_user_by_username("alice")
+        profile = profiles_service.get_or_create_profile(user)
+        assert profile.avatar_border is None
+
+
+def test_avatar_border_rejects_unknown_tone_at_service(
+    app: Flask, make_user
+) -> None:
+    """Service-layer guard against arbitrary strings — defends in
+    depth even if the form layer is bypassed (DevTools, direct
+    POST, etc)."""
+    user = make_user(username="alice", password="password123")
+    with app.app_context(), pytest.raises(
+        profiles_service.UnknownAvatarBorderError
+    ):
+        from uma_ladder.models import User as _User
+
+        u = db.session.get(_User, user["id"])
+        profiles_service.update_profile(
+            u,
+            profiles_service.ProfileUpdate(avatar_border="injected-xss"),
+        )
+
+
+def test_public_profile_renders_picked_border_class(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """When a tone is set, the matching ring-{color}-400 class
+    shows up in the rendered HTML."""
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    client.post(
+        "/profiles/me",
+        data={"avatar_border": "violet"},
+        follow_redirects=False,
+    )
+    body = client.get("/profiles/alice").data.decode()
+    assert "ring-violet-400" in body
+
+
+def test_oshi_ring_takes_priority_over_avatar_border(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """When BOTH are set, the avatar surface should carry the
+    fuchsia oshi ring, NOT the user-picked tone. PR-P1 design
+    invariant."""
+    make_user(username="alice", password="password123")
+    oshi_id = _make_character(app, "gold-ship")
+    _login(client, "alice", "password123")
+    # Pick a NON-fuchsia tone alongside an oshi.
+    client.post(
+        "/profiles/me",
+        data={
+            "oshi_character_id": str(oshi_id),
+            "avatar_border": "emerald",
+        },
+        follow_redirects=False,
+    )
+    body = client.get("/profiles/alice").data.decode()
+    # Oshi ring (fuchsia) is rendered — the macro emits it.
+    assert "ring-fuchsia-400" in body
+    # Emerald ring is NOT rendered because oshi wins.
+    assert "ring-emerald-400" not in body
+
+
+def test_avatar_border_persists_across_unrelated_save(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """If the user previously picked a tone, then saves the form
+    with no avatar_border field changed, the tone should remain.
+    (This catches a regression where the form default-value
+    handling clears the choice on subsequent saves.)"""
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    client.post(
+        "/profiles/me",
+        data={"avatar_border": "amber"},
+        follow_redirects=False,
+    )
+    # Save a different field; explicitly include the existing
+    # avatar_border so the form re-submits its current state
+    # (the rendered <select>'s current value).
+    client.post(
+        "/profiles/me",
+        data={
+            "display_name": "Renamed Alice",
+            "avatar_border": "amber",
+        },
+        follow_redirects=False,
+    )
+    with app.app_context():
+        user = profiles_service.find_user_by_username("alice")
+        profile = profiles_service.get_or_create_profile(user)
+        assert profile.avatar_border == "amber"
+        assert profile.display_name == "Renamed Alice"

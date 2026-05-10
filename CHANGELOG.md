@@ -67,6 +67,17 @@ log for the full history.
   we fetch for in-game stats, so this required no additional
   uma.moe API calls; it just wasn't being captured before.
 
+### Profile
+
+- **Avatar border tone picker.** Pick a border tone for your
+  avatar from a 12-color palette (cyan, fuchsia, emerald, amber,
+  rose, violet, sky, indigo, lime, orange, pink, slate). The
+  ring shows up everywhere your avatar appears: profile hero,
+  Players index, Clubs roster, Rankings table. Picking an
+  oshi character keeps the existing fuchsia oshi ring; the
+  border tone shows when no oshi is set. Foundation for future
+  earnable special borders from seasons / tournaments / trophies.
+
 ## 2026-05-09
 
 ### Sign-in

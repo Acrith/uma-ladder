@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_components.html" import card %}
+{% from "_avatar.html" import avatar %}
 {% block title %}Rankings · Uma Ladder{% endblock %}
 {% block content %}
 
@@ -122,16 +123,10 @@
               <td class="px-4 py-3">
                 <a href="{{ url_for('profiles.public', username=row.username) }}"
                    class="flex items-center gap-3 group">
-                  {% if profile and profile.avatar_url %}
-                    <img src="{{ profile.avatar_url }}"
-                         alt=""
-                         loading="lazy"
-                         class="h-10 w-10 shrink-0 rounded-xl border border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
-                  {% else %}
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-800 bg-slate-800 text-base font-semibold text-slate-300 {% if profile and profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
-                      {{ row.username[:1] | upper }}
-                    </div>
-                  {% endif %}
+                  {# `row` carries username only; the macro just
+                     needs a `.username` attribute, so it works as
+                     a stand-in for User. #}
+                  {{ avatar(row, profile) }}
                   <div class="min-w-0">
                     <p class="truncate text-sm font-medium text-slate-100 group-hover:text-cyan-300">
                       {% if profile and profile.display_name %}{{ profile.display_name }}{% else %}{{ row.username }}{% endif %}

@@ -82,6 +82,7 @@ def me() -> object:
             discord_user_id=discord_user_id_for_update,
             oshi_character_id=form.oshi_character_id.data or None,
             oshi_outfit_id=outfit_id,
+            avatar_border=form.avatar_border.data or None,
         )
         try:
             profiles_service.update_profile(current_user, update)
@@ -89,6 +90,8 @@ def me() -> object:
             form.oshi_character_id.errors.append("Unknown character.")
         except profiles_service.UnknownOutfitError as exc:
             form.oshi_character_id.errors.append(f"Outfit: {exc}")
+        except profiles_service.UnknownAvatarBorderError:
+            form.avatar_border.errors.append("Pick a tone from the list.")
         else:
             flash("Profile updated.")
             return redirect(url_for("profiles.me"))

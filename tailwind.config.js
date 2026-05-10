@@ -1,6 +1,26 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./uma_ladder/**/*.html", "./uma_ladder/**/*.py"],
+  // PR-P1 — these classes are constructed at render time inside
+  // Jinja macros (templates/_avatar.html), so the static scanner
+  // can't see them as literals. Without this safelist they'd be
+  // purged from the prod build and avatar borders would silently
+  // render unstyled. Keep this list in sync with the
+  // AVATAR_BORDER_PALETTE in uma_ladder/services/profiles.py.
+  safelist: [
+    "ring-cyan-400",
+    "ring-fuchsia-400",
+    "ring-emerald-400",
+    "ring-amber-400",
+    "ring-rose-400",
+    "ring-violet-400",
+    "ring-sky-400",
+    "ring-indigo-400",
+    "ring-lime-400",
+    "ring-orange-400",
+    "ring-pink-400",
+    "ring-slate-400",
+  ],
   theme: {
     extend: {
       fontFamily: {

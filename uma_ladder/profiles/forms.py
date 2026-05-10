@@ -2,8 +2,27 @@ from __future__ import annotations
 
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField
-from wtforms import IntegerField, StringField, TextAreaField
+from wtforms import IntegerField, SelectField, StringField, TextAreaField
 from wtforms.validators import Length, Optional, Regexp
+
+# PR-P1 — keep in sync with services.profiles.AVATAR_BORDER_PALETTE.
+# Tuples are (form-value, display-label). Empty value = default
+# border (no override). Order is the rendered-on-page order.
+_BORDER_CHOICES: list[tuple[str, str]] = [
+    ("", "Default"),
+    ("cyan", "Cyan"),
+    ("fuchsia", "Fuchsia"),
+    ("emerald", "Emerald"),
+    ("amber", "Amber"),
+    ("rose", "Rose"),
+    ("violet", "Violet"),
+    ("sky", "Sky"),
+    ("indigo", "Indigo"),
+    ("lime", "Lime"),
+    ("orange", "Orange"),
+    ("pink", "Pink"),
+    ("slate", "Slate"),
+]
 
 
 class ProfileForm(FlaskForm):
@@ -34,3 +53,8 @@ class ProfileForm(FlaskForm):
         ],
     )
     oshi_character_id = IntegerField("Oshi", validators=[Optional()])
+    avatar_border = SelectField(
+        "Avatar border",
+        choices=_BORDER_CHOICES,
+        validators=[Optional()],
+    )

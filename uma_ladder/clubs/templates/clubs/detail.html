@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, empty_card %}
 {% from "_icons.html" import users as icon_users %}
+{% from "_avatar.html" import avatar %}
 {% block title %}{{ (club.name if club and club.name else 'Club #' ~ circle_id) }} · Uma Ladder{% endblock %}
 {% block content %}
 
@@ -44,16 +45,7 @@
             <li>
               <a href="{{ url_for('profiles.public', username=u.username) }}"
                  class="surface-card flex items-center gap-3 p-3 transition hover:border-cyan-500/40">
-                {% if profile and profile.avatar_url %}
-                  <img src="{{ profile.avatar_url }}"
-                       alt=""
-                       loading="lazy"
-                       class="h-10 w-10 shrink-0 rounded-xl border border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
-                {% else %}
-                  <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-800 bg-slate-800 text-base font-semibold text-slate-300 {% if profile and profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
-                    {{ u.username[:1] | upper }}
-                  </div>
-                {% endif %}
+                {{ avatar(u, profile) }}
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-slate-100">
                     {% if profile and profile.display_name %}{{ profile.display_name }}{% else %}{{ u.username }}{% endif %}
