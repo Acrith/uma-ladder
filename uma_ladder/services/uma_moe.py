@@ -149,7 +149,7 @@ def set_transport(transport: UmaMoeTransport | None) -> None:
 
 @dataclass(frozen=True)
 class TrainerSummary:
-    """The five fields we display on the public profile card. All
+    """The fields we surface from a uma.moe trainer profile. All
     optional individually — the upstream may omit any field, in which
     case we render '—'."""
 
@@ -160,6 +160,12 @@ class TrainerSummary:
     # uma.moe/circles/<circle_id>. None when the trainer isn't in
     # a club. Upstream key is `circle.circle_id`, not `circle.id`.
     circle_id: int | None
+    # PR-O3 — total member count of the trainer's club, read from
+    # `circle.member_count`. Free piggyback on the existing trainer
+    # fetch (no separate /circles endpoint call). The Club page
+    # uses this to show "X of Y members on Uma Ladder" so visitors
+    # understand they're seeing a partial roster.
+    circle_member_count: int | None
     total_fans: int | None
     gain_7d: int | None
     gain_30d: int | None
@@ -273,6 +279,7 @@ def _summary_from_cache(row: UmaMoeCache) -> TrainerSummary | None:
         trainer_name=_str_or_none(trainer.get("name")),
         circle_name=_str_or_none(circle.get("name")),
         circle_id=_int_or_none(circle.get("circle_id")),
+        circle_member_count=_int_or_none(circle.get("member_count")),
         total_fans=_int_or_none(alltime.get("total_fans")),
         gain_7d=_int_or_none(rolling.get("gain_7d")),
         gain_30d=_int_or_none(rolling.get("gain_30d")),

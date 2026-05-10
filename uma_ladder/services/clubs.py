@@ -29,12 +29,17 @@ def upsert_club_from_trainer(trainer) -> Club | None:  # noqa: ANN001
 
     Returns the ``Club`` (created or refreshed) when the trainer
     summary carries a usable ``circle_id``, else ``None``. Idempotent:
-    the row is written only when the cached name actually changes,
+    the row is written only when the cached fields actually changed,
     so repeated profile views don't generate noisy commits.
+
+    PR-O3 — also captures ``circle.member_count`` from the same
+    JSON we already fetch (no separate /circles endpoint call).
+    Drives the "X of Y members on Uma Ladder" display on
+    ``/clubs/<id>``.
 
     ``trainer`` is typed loosely (``Any``) to avoid a circular import
     with ``services.uma_moe`` — duck-typed access of ``circle_id`` /
-    ``circle_name`` is enough.
+    ``circle_name`` / ``circle_member_count`` is enough.
     """
     if trainer is None:
         return None
@@ -42,19 +47,21 @@ def upsert_club_from_trainer(trainer) -> Club | None:  # noqa: ANN001
     if not circle_id:
         return None
     name = getattr(trainer, "circle_name", None)
+    member_count = getattr(trainer, "circle_member_count", None)
 
     club = db.session.get(Club, circle_id)
     if club is None:
         club = Club(
             circle_id=circle_id,
             name=name,
+            member_count=member_count,
             cached_at=datetime.now(UTC),
         )
         db.session.add(club)
         db.session.commit()
         return club
 
-    # Refresh only if the upstream name changed; otherwise touch
+    # Refresh only if any cached field changed; otherwise touch
     # cached_at lazily once a day to avoid a write on every profile
     # view. The "freshness" signal here is for the user's eye, not
     # for staleness-driven re-fetch logic — uma_moe_cache already
@@ -64,9 +71,17 @@ def upsert_club_from_trainer(trainer) -> Club | None:  # noqa: ANN001
     if cached_at is not None and cached_at.tzinfo is None:
         cached_at = cached_at.replace(tzinfo=UTC)
     name_changed = club.name != name
+    member_count_changed = (
+        member_count is not None and club.member_count != member_count
+    )
     stale = cached_at is None or (now - cached_at).total_seconds() > 86400
-    if name_changed or stale:
+    if name_changed or member_count_changed or stale:
         club.name = name
+        # Only overwrite member_count when the upstream actually
+        # carried one — preserves the previous cached value across
+        # rare upstream omissions rather than wiping it to None.
+        if member_count is not None:
+            club.member_count = member_count
         club.cached_at = now
         db.session.commit()
     return club

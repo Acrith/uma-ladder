@@ -31,11 +31,13 @@ from uma_ladder.services.auth import RegistrationRequest, register_user
 @dataclass(frozen=True)
 class FakeTrainer:
     """Duck-typed stand-in for ``services.uma_moe.TrainerSummary``.
-    The Club upsert only reads ``circle_id`` and ``circle_name`` — no
-    need to construct a full TrainerSummary in tests."""
+    The Club upsert only reads ``circle_id``, ``circle_name``, and
+    (PR-O3) ``circle_member_count`` — no need to construct a full
+    TrainerSummary in tests."""
 
     circle_id: int | None
     circle_name: str | None = None
+    circle_member_count: int | None = None
 
 
 # ─── upsert_club_from_trainer ────────────────────────────────────
@@ -335,3 +337,124 @@ def test_sync_club_id_idempotent_does_not_recommit_when_unchanged(
             .count()
             == 1
         )
+
+
+# ─── PR-O3 — member_count capture from trainer summary ──────────
+
+
+def test_upsert_captures_member_count_from_trainer(app: Flask) -> None:
+    """The whole point of PR-O3: when the trainer JSON carries
+    `circle.member_count`, the Club row stores it. No new API
+    call — we already had this number in the trainer fetch."""
+    with app.app_context():
+        clubs_service.upsert_club_from_trainer(
+            FakeTrainer(
+                circle_id=12345,
+                circle_name="Member Counters",
+                circle_member_count=27,
+            )
+        )
+        club = db.session.get(Club, 12345)
+        assert club is not None
+        assert club.member_count == 27
+
+
+def test_upsert_refreshes_member_count_when_changed(app: Flask) -> None:
+    """uma.moe's count is the source of truth — when it ticks up
+    (someone joined the club), the Club row should follow on the
+    next profile-view sync. Same staleness path as name refresh."""
+    with app.app_context():
+        clubs_service.upsert_club_from_trainer(
+            FakeTrainer(
+                circle_id=42,
+                circle_name="Stable",
+                circle_member_count=10,
+            )
+        )
+        clubs_service.upsert_club_from_trainer(
+            FakeTrainer(
+                circle_id=42,
+                circle_name="Stable",
+                circle_member_count=15,  # someone joined
+            )
+        )
+        club = db.session.get(Club, 42)
+        assert club is not None
+        assert club.member_count == 15
+
+
+def test_upsert_preserves_member_count_when_upstream_omits_it(
+    app: Flask,
+) -> None:
+    """A trainer summary that has the club info but doesn't include
+    member_count (older cache row, or upstream momentarily omitting
+    the field) must NOT wipe a previously-cached count to None.
+    Otherwise a stale visit could blank out a working number."""
+    with app.app_context():
+        clubs_service.upsert_club_from_trainer(
+            FakeTrainer(
+                circle_id=42,
+                circle_name="Stable",
+                circle_member_count=20,
+            )
+        )
+        # Re-sync without member_count — should leave the existing
+        # 20 in place rather than overwriting to NULL.
+        clubs_service.upsert_club_from_trainer(
+            FakeTrainer(circle_id=42, circle_name="Stable")
+        )
+        club = db.session.get(Club, 42)
+        assert club is not None
+        assert club.member_count == 20
+
+
+def test_club_page_shows_member_count_when_known(
+    app: Flask, client: FlaskClient
+) -> None:
+    with app.app_context():
+        clubs_service.upsert_club_from_trainer(
+            FakeTrainer(
+                circle_id=777,
+                circle_name="Test Squad",
+                circle_member_count=30,
+            )
+        )
+        # Seed two Uma Ladder members for this club.
+        for name in ("a_member", "b_member"):
+            user = register_user(
+                RegistrationRequest(username=name, password="password123")
+            )
+            profile = profiles_service.get_or_create_profile(user)
+            profile.club_id = 777
+            db.session.commit()
+
+    body = client.get("/clubs/777").data.decode()
+    # "2 of 30" appears in both the page header and the roster
+    # card label — assert both.
+    assert "2 of 30" in body
+    # Header copy mentions members on Uma Ladder.
+    assert "members on Uma Ladder" in body or "member on Uma Ladder" in body
+
+
+def test_club_page_omits_count_when_member_count_unknown(
+    app: Flask, client: FlaskClient
+) -> None:
+    """For a club we've ingested without a member_count (lazy-create
+    via PR-O2 allowlist add), the header should not crash or print
+    'X of None'."""
+    with app.app_context():
+        # Lazy-create style: name + member_count both NULL.
+        db.session.add(Club(circle_id=888))
+        db.session.commit()
+        user = register_user(
+            RegistrationRequest(username="solo", password="password123")
+        )
+        profile = profiles_service.get_or_create_profile(user)
+        profile.club_id = 888
+        db.session.commit()
+
+    body = client.get("/clubs/888").data.decode()
+    # Page renders OK — falls back to plain count.
+    assert "Club #888" in body or "888" in body
+    assert "of None" not in body  # no leaked NULL
+    assert "1 of 0" not in body  # no zero-fallback either

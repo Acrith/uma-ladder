@@ -15,6 +15,10 @@
       </h1>
       <p class="mt-1 text-xs text-slate-500">
         uma.moe ID <span class="font-mono text-slate-400">{{ circle_id }}</span>
+        {%- if club and club.member_count %}
+          · <span class="text-slate-300">{{ members | length }} of {{ club.member_count }}</span>
+          member{% if club.member_count != 1 %}s{% endif %} on Uma Ladder
+        {%- endif %}
         {%- if club and club.cached_at %} · cached {{ club.cached_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}
       </p>
     </div>
@@ -31,7 +35,9 @@
       {% call card(class="p-5") %}
         <div class="flex items-center justify-between">
           <p class="label-eyebrow">Members on Uma Ladder</p>
-          <span class="text-xs text-slate-500">{{ members | length }} player{% if members | length != 1 %}s{% endif %}</span>
+          <span class="text-xs text-slate-500">
+            {{ members | length }}{% if club and club.member_count %} of {{ club.member_count }}{% endif %}
+          </span>
         </div>
         <ul class="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {% for u, profile in members %}
@@ -75,7 +81,12 @@
   </section>
 
   <p class="mt-6 text-xs text-slate-500">
-    Roster is built from Uma Ladder members whose linked friend code points at this club on uma.moe. We don't enumerate every uma.moe member of the club here.
+    Roster is built from Uma Ladder members whose linked friend code points at this club on uma.moe.
+    {%- if club and club.member_count %}
+      The total ({{ club.member_count }}) is what uma.moe reports for the club; only members who have registered an Uma Ladder account appear above.
+    {%- else %}
+      We don't enumerate every uma.moe member of the club here.
+    {%- endif %}
   </p>
 
 {% endblock %}

@@ -59,6 +59,9 @@ def test_happy_path_returns_summary(app: Flask) -> None:
         assert summary.trainer_name == "TestTrainer"
         assert summary.circle_name == "TestClub"
         assert summary.circle_id == 9999  # PR-J7 — drives uma.moe/circles/<id> link
+        # PR-O3 — captured into Club.member_count to drive the
+        # "X of Y members on Uma Ladder" display.
+        assert summary.circle_member_count == 30
         assert summary.total_fans == 150000000
         assert summary.gain_7d == 2000000
         assert summary.gain_30d == 8500000

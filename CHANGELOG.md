@@ -57,6 +57,16 @@ log for the full history.
   invitee list stays as the override for one-off out-of-club
   guests.
 
+### Clubs
+
+- **Total member count on club pages.** The `/clubs/<id>` header
+  now shows "X of Y members on Uma Ladder" so visitors understand
+  the roster is partial — Y is what uma.moe reports for the
+  whole club, X is how many of those have linked their friend
+  code on Uma Ladder. The number was already in the trainer JSON
+  we fetch for in-game stats, so this required no additional
+  uma.moe API calls; it just wasn't being captured before.
+
 ## 2026-05-09
 
 ### Sign-in
