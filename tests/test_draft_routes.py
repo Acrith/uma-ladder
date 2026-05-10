@@ -227,9 +227,9 @@ def test_full_match_flow_via_routes(client: FlaskClient, app: Flask, make_user) 
     )
     assert resp.status_code == 302
 
-    # ladder shows alice (host) on top
+    # ladder shows alice (host) on top — PR-N1 unified at /rankings
     season_id = _season_for(match_id, app)
-    resp = client.get(f"/draft/ladder/{season_id}")
+    resp = client.get(f"/rankings/?season={season_id}&mode=draft")
     assert resp.status_code == 200
     body = resp.data
     assert body.index(b"alice") < body.index(b"bob")

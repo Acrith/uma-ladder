@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Rankings · Uma Ladder{% endblock %}
+{% block content %}
+
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">Community</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Rankings</h1>
+      <p class="mt-1 text-xs text-slate-500">
+        {% if season %}
+          Season <span class="text-slate-300">{{ season.name }}</span>
+          {%- if total %} · {{ total }} player{% if total != 1 %}s{% endif %}{% endif %}
+        {% else %}
+          No season selected.
+        {% endif %}
+      </p>
+    </div>
+
+    {# Season picker — native <select> auto-submits on change. Posts
+       the same query string back so mode + page are preserved. #}
+    {% if all_seasons %}
+      <form method="get" class="flex items-center gap-2 text-sm">
+        <input type="hidden" name="mode" value="{{ mode }}" />
+        <select name="season"
+                onchange="this.form.submit()"
+                class="input-base">
+          {% for s in all_seasons %}
+            <option value="{{ s.id }}" {% if season and s.id == season.id %}selected{% endif %}>
+              {{ s.name }}{% if s.status == "active" %} · active{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <noscript><button class="btn-ghost text-xs">Go</button></noscript>
+      </form>
+    {% endif %}
+  </div>
+
+  {# Mode tabs. Each tab preserves the current ?season= so users
+     don't lose context when switching ladders. #}
+  <div class="mt-5 flex items-center gap-1 border-b border-slate-800 text-sm">
+    {% set tabs = [("official", "Official"), ("draft", "Draft")] %}
+    {% for tab_mode, label in tabs %}
+      {% set is_active = mode == tab_mode %}
+      <a href="{{ url_for('rankings.index', season=(season.id if season else None), mode=tab_mode) }}"
+         class="-mb-px rounded-t-lg border-b-2 px-4 py-2 transition {% if is_active %}border-cyan-400 text-cyan-300{% else %}border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200{% endif %}">
+        {{ label }}
+      </a>
+    {% endfor %}
+  </div>
+
+  {% if not season %}
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">
+      Pick a season from the dropdown to see its ladder.
+    </div>
+  {% elif not rows %}
+    <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">
+      No {{ mode }} results yet for this season.
+    </div>
+  {% else %}
+    {% call card(class="mt-6 overflow-hidden") %}
+      <table class="w-full text-sm">
+        <thead class="text-xs uppercase tracking-wider text-slate-500">
+          <tr class="text-left">
+            <th class="px-4 py-3 w-12">#</th>
+            <th class="px-4 py-3">Player</th>
+            {% if mode == "official" %}
+              <th class="px-4 py-3 w-24">Points</th>
+              <th class="px-4 py-3 w-20">Races</th>
+              <th class="px-4 py-3 w-14">🥇</th>
+              <th class="px-4 py-3 w-14">🥈</th>
+              <th class="px-4 py-3 w-14">🥉</th>
+            {% else %}
+              <th class="px-4 py-3 w-24">Rating</th>
+              <th class="px-4 py-3 w-20">Wins</th>
+              <th class="px-4 py-3 w-20">Matches</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% set rank = rank_offset + loop.index %}
+            {% set profile = profiles.get(row.user_id) %}
+            {% set tint = "" %}
+            {% set rank_color = "text-slate-400" %}
+            {% if rank == 1 %}
+              {% set tint = "bg-amber-500/5" %}
+              {% set rank_color = "text-amber-300" %}
+            {% elif rank == 2 %}
+              {% set tint = "bg-slate-300/5" %}
+              {% set rank_color = "text-slate-200" %}
+            {% elif rank == 3 %}
+              {% set tint = "bg-orange-500/5" %}
+              {% set rank_color = "text-orange-300" %}
+            {% endif %}
+            <tr class="border-t border-slate-800/70 {{ tint }}">
+              <td class="px-4 py-3 align-middle font-mono text-base {{ rank_color }}">{{ rank }}</td>
+              <td class="px-4 py-3">
+                <a href="{{ url_for('profiles.public', username=row.username) }}"
+                   class="flex items-center gap-3 group">
+                  {% if profile and profile.avatar_url %}
+                    <img src="{{ profile.avatar_url }}"
+                         alt=""
+                         loading="lazy"
+                         class="h-10 w-10 shrink-0 rounded-xl border border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
+                  {% else %}
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-800 bg-slate-800 text-base font-semibold text-slate-300 {% if profile and profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
+                      {{ row.username[:1] | upper }}
+                    </div>
+                  {% endif %}
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-medium text-slate-100 group-hover:text-cyan-300">
+                      {% if profile and profile.display_name %}{{ profile.display_name }}{% else %}{{ row.username }}{% endif %}
+                    </p>
+                    {% if profile and profile.oshi %}
+                      <p class="mt-0.5 truncate text-[11px] text-fuchsia-200/80">
+                        ◆ {{ profile.oshi.name_en }}
+                        {%- if profile.oshi_outfit %} · {{ profile.oshi_outfit.display_title }}{% endif %}
+                      </p>
+                    {% endif %}
+                  </div>
+                </a>
+              </td>
+              {% if mode == "official" %}
+                <td class="px-4 py-3 align-middle font-semibold text-cyan-300">{{ row.total_points }}</td>
+                <td class="px-4 py-3 align-middle text-slate-400">{{ row.races_entered }}</td>
+                <td class="px-4 py-3 align-middle text-slate-400">{{ row.top1 }}</td>
+                <td class="px-4 py-3 align-middle text-slate-400">{{ row.top2 }}</td>
+                <td class="px-4 py-3 align-middle text-slate-400">{{ row.top3 }}</td>
+              {% else %}
+                <td class="px-4 py-3 align-middle font-semibold text-cyan-300">{{ row.rating }}</td>
+                <td class="px-4 py-3 align-middle text-slate-400">{{ row.wins }}</td>
+                <td class="px-4 py-3 align-middle text-slate-400">{{ row.matches }}</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endcall %}
+
+    {% if pages > 1 %}
+      <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+        <span>Page {{ page }} / {{ pages }}</span>
+        <div class="flex gap-2">
+          {% if page > 1 %}
+            <a class="btn-ghost"
+               href="{{ url_for('rankings.index', season=season.id, mode=mode, page=page - 1) }}">← Prev</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn-ghost"
+               href="{{ url_for('rankings.index', season=season.id, mode=mode, page=page + 1) }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+{% endblock %}

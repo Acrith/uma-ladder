@@ -67,12 +67,14 @@ def _register_blueprints(app: Flask) -> None:
     from .official.routes import bp as official_bp
     from .presets.routes import bp as presets_bp
     from .profiles.routes import bp as profiles_bp
+    from .rankings.routes import bp as rankings_bp
     from .skills.routes import bp as skills_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(profiles_bp, url_prefix="/profiles")
     app.register_blueprint(clubs_bp, url_prefix="/clubs")
+    app.register_blueprint(rankings_bp, url_prefix="/rankings")
     app.register_blueprint(official_bp, url_prefix="/official")
     app.register_blueprint(draft_bp, url_prefix="/draft")
     app.register_blueprint(presets_bp, url_prefix="/presets")

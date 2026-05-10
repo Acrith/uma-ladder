@@ -26,6 +26,19 @@ log for the full history.
   card style as the Players index — avatar, display name,
   username, oshi.
 
+### Rankings
+
+- **Unified Rankings page.** A new top-nav surface at `/rankings`
+  aggregates Official + Draft season ladders behind a tabbed UI
+  with a season picker. The dashboard "Full →" links and the
+  `/official/ladder/<id>` + `/draft/ladder/<id>` URLs all redirect
+  here, so old Discord screenshots and bookmarks still work.
+  Player rows now show an avatar + display name + oshi (same row
+  style as Players + Clubs), making it easier to recognize
+  someone you've raced against without having to read the
+  username carefully. Per-club ladder is queued as a follow-up
+  (will arrive as a third tab).
+
 ## 2026-05-09
 
 ### Sign-in

@@ -201,7 +201,7 @@
         <div class="flex items-center gap-2">
           {{ live_dot("30s") }}
           {% if active_season %}
-            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('official.ladder', season_id=active_season.id) }}">Full →</a>
+            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('rankings.index', season=active_season.id, mode='official') }}">Full →</a>
           {% endif %}
         </div>
       </div>
@@ -220,7 +220,7 @@
         <div class="flex items-center gap-2">
           {{ live_dot("30s") }}
           {% if active_season %}
-            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.ladder', season_id=active_season.id) }}">Full →</a>
+            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('rankings.index', season=active_season.id, mode='draft') }}">Full →</a>
           {% endif %}
         </div>
       </div>

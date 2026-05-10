@@ -727,5 +727,10 @@ def remove_registration(race_id: int, registration_id: int) -> object:
 
 @bp.get("/ladder/<int:season_id>")
 def ladder(season_id: int) -> object:
-    rows = official_service.season_ladder(season_id)
-    return render_template("official/ladder.html", season_id=season_id, rows=rows)
+    """Legacy redirect — the canonical surface is now /rankings
+    (PR-N1). Kept so old bookmarks + Discord screenshots still
+    land in the right spot."""
+    return redirect(
+        url_for("rankings.index", season=season_id, mode="official"),
+        code=302,
+    )

@@ -207,8 +207,8 @@ def test_organizer_create_open_register_room_code_results_flow(
     )
     assert resp.status_code == 302
 
-    # ladder shows alice on top
-    resp = client.get(f"/official/ladder/{sid}")
+    # ladder shows alice on top — PR-N1 unified at /rankings
+    resp = client.get(f"/rankings/?season={sid}&mode=official")
     assert resp.status_code == 200
     body = resp.data
     assert body.index(b"alice") < body.index(b"bob")
