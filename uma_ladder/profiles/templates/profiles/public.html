@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, empty_card, stat_tile %}
-{% from "_icons.html" import pencil as icon_pencil %}
+{% from "_icons.html" import pencil as icon_pencil, achievement_icon %}
 {% from "_avatar.html" import avatar %}
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
@@ -567,7 +567,7 @@
             {% set tone = tier_classes.get(ua.achievement.tier, tier_classes["slate"]) %}
             <div class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium {{ tone }}"
                  title="{{ ua.achievement.description }} · earned {{ ua.unlocked_at.strftime('%Y-%m-%d') }}">
-              <span>{{ ua.achievement.icon }}</span>
+              {{ achievement_icon(ua.achievement.icon, class="h-3.5 w-3.5") }}
               <span>{{ ua.achievement.name }}</span>
             </div>
           {% endfor %}

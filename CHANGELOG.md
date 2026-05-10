@@ -89,6 +89,12 @@ log for the full history.
   unearned badges don't render here so profiles stay clean;
   visit any active player's profile to see what others have
   earned.
+- **Achievement icons.** Switched the seed catalogue from emoji
+  glyphs to stroke SVG icons (matching the rest of the site's
+  icon system). Same visual storytelling — trophy, crown, flag,
+  swords, etc. — without the emoji-rendering inconsistency
+  across browsers. Custom designed artwork is queued for the
+  longer term.
 
 ## 2026-05-09
 

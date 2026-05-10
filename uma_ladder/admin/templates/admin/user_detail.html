@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, chip %}
+{% from "_icons.html" import achievement_icon %}
 {% block title %}@{{ user.username }} · Admin · Uma Ladder{% endblock %}
 {% block content %}
   <p class="label-eyebrow"><a href="{{ url_for('admin.users_list') }}" class="hover:text-cyan-300">Admin · Users</a></p>
@@ -71,7 +72,7 @@
       <ul class="mt-3 space-y-1.5">
         {% for ua in user_achievements %}
           <li class="flex items-center gap-2 rounded border border-slate-800 bg-slate-950/30 px-3 py-1.5 text-sm">
-            <span class="text-base">{{ ua.achievement.icon }}</span>
+            {{ achievement_icon(ua.achievement.icon, class="h-4 w-4 text-slate-300") }}
             <span class="flex-1 text-slate-200">
               {{ ua.achievement.name }}
               <span class="text-xs text-slate-500">· {{ ua.unlocked_at.strftime('%Y-%m-%d') }}{% if ua.source %} · {{ ua.source }}{% endif %}</span>
@@ -93,11 +94,15 @@
 
     <form method="post" action="{{ url_for('admin.grant_achievement', user_id=user.id) }}" class="mt-4 flex gap-2">
       {{ csrf_form.hidden_tag() }}
+      {# Native <option> can't render inline SVG, so the dropdown
+         shows the achievement name only. The grid above already
+         displays the icon for already-earned entries; for the
+         picker, the name is enough. #}
       <select name="key" class="input-base flex-1">
         <option value="">— pick an achievement to grant —</option>
         {% for a in achievements_catalogue %}
           <option value="{{ a.key }}" {% if a.key in granted_achievement_keys %}disabled{% endif %}>
-            {{ a.icon }} {{ a.name }}{% if a.key in granted_achievement_keys %} (already earned){% endif %}
+            {{ a.name }}{% if a.key in granted_achievement_keys %} (already earned){% endif %}
           </option>
         {% endfor %}
       </select>
