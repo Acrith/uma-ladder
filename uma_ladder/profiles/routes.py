@@ -158,19 +158,49 @@ def serve_avatar(image_id: int) -> object:
 
 
 def _load_profile_or_404(username: str):
-    """PR-P3 — shared loader for the three profile tab routes.
+    """PR-P3 / PR-P3.1 — shared loader for the three profile tab
+    routes.
 
-    Resolves the user + profile + the data that EVERY tab needs
-    in the shared header (avatar, oshi pill, friend-code chip,
-    achievement count for the tab badge). Tab-specific data is
-    fetched per-route below to avoid loading every dataset for
-    every tab.
+    Resolves the user + profile + EVERYTHING the shared hero
+    needs (identity, oshi, stat tiles, achievement count for the
+    tab badge, discord-verified flag, season standing, Elo, track
+    strengths). The hero renders on every tab so all this data
+    must be loaded for every route. Tab-specific data is fetched
+    per-route below.
     """
+    from ..services import achievements as achievements_service
+    from ..services import draft as draft_service
+    from ..services import official as official_service
+    from ..services import seasons as seasons_service
+    from ..services import uma_moe as uma_moe_service
+
     user = profiles_service.find_user_by_username(username)
     if user is None:
         abort(404)
     profile = profiles_service.get_or_create_profile(user)
-    from ..services import achievements as achievements_service
+
+    # Hero data — every tab needs these for the persistent banner.
+    active_season = seasons_service.get_active_season()
+    standing = (
+        official_service.season_standing_for_user(user.id, active_season.id)
+        if active_season is not None
+        else None
+    )
+    # Discord-verified status drives the chip glyph in the hero
+    # contact line. Cheap query, OK on every tab.
+    discord_verified = (
+        identity_service.find_identity("discord", profile.discord_user_id)
+        is not None
+        if profile.discord_user_id
+        else False
+    )
+    # Trainer summary is needed for sync_club_id_from_trainer
+    # (keeps club_id mirror fresh) AND for the In-game stats
+    # card on Overview. Trainer is loaded here even though
+    # only Overview uses it — the side-effect (club_id sync)
+    # benefits any tab visit.
+    trainer = uma_moe_service.fetch_trainer_summary(profile.friend_code)
+    profiles_service.sync_club_id_from_trainer(profile, trainer)
 
     return {
         "user": user,
@@ -179,53 +209,28 @@ def _load_profile_or_404(username: str):
         "achievement_count": len(
             achievements_service.list_for_user(user.id)
         ),
+        "active_season": active_season,
+        "standing": standing,
+        "track_strengths": profiles_service.track_strengths_for_user(user.id),
+        "elo": draft_service.elo_summary_for_user(user.id),
+        "trainer": trainer,
+        "discord_verified": discord_verified,
     }
 
 
 @bp.get("/<username>")
 def public(username: str) -> object:
-    """Overview tab — hero card with oshi art, season standing,
-    in-game stats from uma.moe. Match history + achievements
-    catalogue moved out to dedicated tabs (PR-P3)."""
-    from ..services import draft as draft_service
-    from ..services import official as official_service
-    from ..services import seasons as seasons_service
-    from ..services import uma_moe as uma_moe_service
-
+    """Overview tab — shared hero (loaded by _load_profile_or_404)
+    + the in-game stats card from uma.moe + a top-5 achievements
+    snippet. Match history + full achievements catalogue live on
+    their own tabs (PR-P3)."""
     base = _load_profile_or_404(username)
-    user, profile = base["user"], base["profile"]
-
-    active_season = seasons_service.get_active_season()
-    standing = (
-        official_service.season_standing_for_user(user.id, active_season.id)
-        if active_season is not None
-        else None
-    )
-    # Hero stat tiles consume both — keep loading on Overview.
-    track_strengths = profiles_service.track_strengths_for_user(user.id)
-    elo = draft_service.elo_summary_for_user(user.id)
-    # Best-effort uma.moe enrichment when friend_code is set.
-    trainer = uma_moe_service.fetch_trainer_summary(profile.friend_code)
-    profiles_service.sync_club_id_from_trainer(profile, trainer)
-    discord_verified = (
-        identity_service.find_identity("discord", profile.discord_user_id)
-        is not None
-        if profile.discord_user_id
-        else False
-    )
-    # Show top 5 unlocked achievements as a snippet on Overview;
-    # the full catalogue lives on the /achievements tab.
+    user = base["user"]
     from ..services import achievements as achievements_service
 
     overview_achievements = achievements_service.list_for_user(user.id)[:5]
     return render_template(
         "profiles/public.html",
-        active_season=active_season,
-        standing=standing,
-        track_strengths=track_strengths,
-        elo=elo,
-        trainer=trainer,
-        discord_verified=discord_verified,
         overview_achievements=overview_achievements,
         **base,
     )
@@ -234,10 +239,9 @@ def public(username: str) -> object:
 @bp.get("/<username>/history")
 def public_history(username: str) -> object:
     """Match history tab — Recent Official + Recent Draft +
-    most-used uma + per-track strengths + Elo summary. Heavy
-    queries; only run when the visitor actually opens this tab."""
-    from ..services import draft as draft_service
-
+    most-used uma + per-track strengths. The shared loader
+    already provides track_strengths + elo (the hero needs them);
+    only the match-history-specific data is fetched here."""
     base = _load_profile_or_404(username)
     user = base["user"]
     page = max(1, request.args.get("page", 1, type=int))
@@ -257,8 +261,6 @@ def public_history(username: str) -> object:
     most_used_draft = profiles_service.most_used_umas_for_user(
         user.id, kind="draft", limit=5
     )
-    track_strengths = profiles_service.track_strengths_for_user(user.id)
-    elo = draft_service.elo_summary_for_user(user.id)
     return render_template(
         "profiles/public_history.html",
         history=history,
@@ -266,8 +268,6 @@ def public_history(username: str) -> object:
         recent_draft=recent_draft,
         most_used_official=most_used_official,
         most_used_draft=most_used_draft,
-        track_strengths=track_strengths,
-        elo=elo,
         **base,
     )
 
