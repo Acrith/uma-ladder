@@ -45,6 +45,18 @@ log for the full history.
   code links you to a club; works on both the Official and
   Draft tabs and preserves the season + page across switches.
 
+### Targeted matches
+
+- **Multi-club allowlist on Club-only races.** Organizers running
+  an allied-club tournament can now add additional clubs to a
+  Club-visibility race. The race detail page surfaces an
+  **Allowed clubs** card with your own club locked at the top and
+  a quick-add picker showing every club Uma Ladder has seen, plus
+  an input to paste any uma.moe club ID by hand. Members of any
+  listed club can see and register; the existing per-user
+  invitee list stays as the override for one-off out-of-club
+  guests.
+
 ## 2026-05-09
 
 ### Sign-in

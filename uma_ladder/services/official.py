@@ -238,6 +238,125 @@ def remove_invitee(race_id: int, *, user_id: int) -> int:
     return 1
 
 
+# ─── Multi-club allowlist (PR-O2) ────────────────────────────────
+
+
+def list_allowed_clubs(race_id: int):
+    """Return the additional clubs allowed to view this race.
+
+    Does NOT include the organizer's own club — that's implicit
+    in the visibility check (see ``user_can_view_race``). Ordered
+    by created_at so the management UI lists them in the order
+    they were added.
+    """
+    from ..models import OfficialRaceClubAllowlist
+
+    return list(
+        db.session.scalars(
+            select(OfficialRaceClubAllowlist)
+            .where(OfficialRaceClubAllowlist.official_race_id == race_id)
+            .order_by(OfficialRaceClubAllowlist.created_at.asc())
+        )
+    )
+
+
+def add_allowed_club(
+    race_id: int,
+    *,
+    circle_id: int,
+    added_by_user_id: int,
+):
+    """Add a club to the race's multi-club allowlist (PR-O2).
+
+    Idempotent — re-adding an already-allowed club returns the
+    existing row. Refuses on non-Club races (no allowlist
+    semantics there). Refuses to add the organizer's own club
+    (it's implicit; adding it would just confuse the UI).
+
+    If the club isn't yet in our `clubs` table, the row is
+    lazy-created with no name (cached_at=now). The name fills in
+    naturally next time any of the new club's members visits
+    Uma Ladder and triggers ``sync_club_id_from_trainer``.
+    """
+    from ..models import Club, OfficialRaceClubAllowlist
+
+    race = _get_race(race_id)
+    if race.visibility != OfficialRaceVisibility.CLUB.value:
+        raise OfficialError(
+            "club allowlist only applies to club-visibility races"
+        )
+    if circle_id <= 0:
+        raise OfficialError("invalid club id")
+
+    organizer_club = _user_club_id(race.organizer_user_id)
+    if organizer_club is not None and organizer_club == circle_id:
+        raise OfficialError(
+            "organizer's own club is already implicitly allowed"
+        )
+
+    # Lazy-create the Club row if we've never seen this circle
+    # before — keeps the FK satisfied without forcing the
+    # organizer to first visit a profile that triggers the sync.
+    club = db.session.get(Club, circle_id)
+    if club is None:
+        club = Club(circle_id=circle_id)  # name + member_count stay None
+        db.session.add(club)
+        db.session.flush()
+
+    existing = db.session.scalars(
+        select(OfficialRaceClubAllowlist).where(
+            OfficialRaceClubAllowlist.official_race_id == race_id,
+            OfficialRaceClubAllowlist.club_circle_id == circle_id,
+        )
+    ).first()
+    if existing is not None:
+        return existing
+
+    row = OfficialRaceClubAllowlist(
+        official_race_id=race_id,
+        club_circle_id=circle_id,
+        added_by_user_id=added_by_user_id,
+    )
+    db.session.add(row)
+    db.session.commit()
+    return row
+
+
+def remove_allowed_club(race_id: int, *, circle_id: int) -> int:
+    """Remove a club from the race's allowlist. Returns count
+    removed (0 or 1). Does NOT cascade-remove registrants whose
+    club_id matched — same reasoning as remove_invitee: pulling
+    a club off the allowlist may be a correction, registration
+    cleanup should be deliberate."""
+    from ..models import OfficialRaceClubAllowlist
+
+    row = db.session.scalars(
+        select(OfficialRaceClubAllowlist).where(
+            OfficialRaceClubAllowlist.official_race_id == race_id,
+            OfficialRaceClubAllowlist.club_circle_id == circle_id,
+        )
+    ).first()
+    if row is None:
+        return 0
+    db.session.delete(row)
+    db.session.commit()
+    return 1
+
+
+def _allowed_club_ids(race_id: int) -> set[int]:
+    """Cheap visibility-check helper: just the IDs, no joined
+    Club rows."""
+    from ..models import OfficialRaceClubAllowlist
+
+    return set(
+        db.session.scalars(
+            select(OfficialRaceClubAllowlist.club_circle_id).where(
+                OfficialRaceClubAllowlist.official_race_id == race_id
+            )
+        )
+    )
+
+
 # PR-J14 — terminal states where flipping visibility serves no
 # purpose; refuse so the page can't get into weird states (e.g.
 # "make completed race private" hiding historical results).
@@ -367,15 +486,17 @@ def user_can_view_race(race: OfficialRace, *, user_id: int | None) -> bool:
     ).first()
     if invitee is not None:
         return True
-    # Club fallback — equal club_id between viewer and organizer.
-    # Both must be non-None: a user with no club_id never matches
-    # (even an organizer who somehow lost their club_id sync — the
-    # organizer override above already handles their own race).
+    # Club fallback — viewer's club_id must match either the
+    # organizer's club_id (PR-L1) or any club in the multi-club
+    # allowlist (PR-O2). Viewer with no club_id never matches.
     if race.visibility == OfficialRaceVisibility.CLUB.value:
-        organizer_club = _user_club_id(race.organizer_user_id)
-        if organizer_club is None:
+        viewer_club = _user_club_id(user_id)
+        if viewer_club is None:
             return False
-        return _user_club_id(user_id) == organizer_club
+        organizer_club = _user_club_id(race.organizer_user_id)
+        if organizer_club is not None and viewer_club == organizer_club:
+            return True
+        return viewer_club in _allowed_club_ids(race.id)
     return False
 
 

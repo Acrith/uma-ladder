@@ -35,6 +35,7 @@ from .inbox import UserNotification
 from .notifications import DiscordNotificationAttempt
 from .official_races import (
     OfficialRace,
+    OfficialRaceClubAllowlist,
     OfficialRaceInvitee,
     OfficialRaceRegistration,
     OfficialRaceResult,
@@ -74,6 +75,7 @@ __all__ = [
     "OcrParseAttempt",
     "OcrParseStatus",
     "OfficialRace",
+    "OfficialRaceClubAllowlist",
     "OfficialRaceInvitee",
     "OfficialRaceRegistration",
     "OfficialRaceResult",

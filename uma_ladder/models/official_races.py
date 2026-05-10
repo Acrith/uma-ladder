@@ -239,3 +239,52 @@ class OfficialRaceInvitee(db.Model):
     invited_by = relationship(
         "User", lazy="joined", foreign_keys=[invited_by_user_id]
     )
+
+
+class OfficialRaceClubAllowlist(db.Model):
+    """PR-O2 — additional clubs allowed to view a Club-visibility race.
+
+    The organizer's own club is implicitly always allowed (handled in
+    the visibility check, NOT a row here). This table only tracks
+    *additional* clubs the organizer has added — allied-club
+    tournaments, cross-club friendlies, etc.
+
+    Visibility check for a CLUB race becomes:
+      - organizer + senior_organizer+ override (existing)
+      - viewer's UserProfile.club_id == organizer's UserProfile.club_id (PR-L1)
+      - viewer's UserProfile.club_id IN allowlist (PR-O2)
+      - viewer in invitee list (PR-J13 override)
+
+    `club_circle_id` FKs the first-class `clubs` table from PR-M1
+    so deleting a Club row would cascade rows here away — but the
+    Club table is a metadata cache, never user-deleted, so the
+    cascade is defense-in-depth. `added_by_user_id` is nullable +
+    SET NULL so deleting the user (who shouldn't exist; this is
+    a hobbyist project, but safety first) doesn't cascade-delete
+    the allowlist row and leave the race silently visible to the
+    wrong audience.
+    """
+
+    __tablename__ = "official_race_club_allowlist"
+
+    official_race_id: Mapped[int] = mapped_column(
+        ForeignKey("official_races.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    club_circle_id: Mapped[int] = mapped_column(
+        ForeignKey("clubs.circle_id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    added_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    club = relationship("Club", lazy="joined")
+    added_by = relationship(
+        "User", lazy="joined", foreign_keys=[added_by_user_id]
+    )

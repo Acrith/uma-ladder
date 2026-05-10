@@ -200,7 +200,10 @@ def detail(race_id: int) -> object:
     # organizer's friend_code on every detail render.
     club_id: int | None = None
     club_name: str | None = None
+    allowed_clubs: list = []
+    known_clubs: list = []
     if race.visibility == "club":
+        from ..models import Club
         from ..services import clubs as clubs_service
         from ..services import profiles as profiles_service
 
@@ -210,6 +213,21 @@ def detail(race_id: int) -> object:
             club = clubs_service.get_club(club_id)
             if club is not None:
                 club_name = club.name
+        # PR-O2 — additional clubs explicitly added by the organizer.
+        allowed_clubs = official_service.list_allowed_clubs(race_id)
+        # Quick-add picker: render every Club we already know about
+        # as a chip the organizer can click to add. Filter out the
+        # organizer's own club + already-allowed ones to avoid
+        # offering no-op clicks. Limit to a sane chip count.
+        from sqlalchemy import select as _sel
+
+        already = {row.club_circle_id for row in allowed_clubs}
+        if club_id is not None:
+            already.add(club_id)
+        stmt = _sel(Club).order_by(Club.name.asc().nulls_last()).limit(20)
+        if already:
+            stmt = stmt.where(~Club.circle_id.in_(already))
+        known_clubs = list(db.session.scalars(stmt))
     return render_template(
         "official/detail.html",
         race=race,
@@ -222,6 +240,8 @@ def detail(race_id: int) -> object:
         room_code_expired=expired,
         club_id=club_id,
         club_name=club_name,
+        allowed_clubs=allowed_clubs,
+        known_clubs=known_clubs,
     )
 
 
@@ -308,6 +328,64 @@ def remove_invitee(race_id: int, user_id: int) -> object:
         abort(403)
     n = official_service.remove_invitee(race_id, user_id=user_id)
     flash(f"Removed {n} invitee(s).")
+    return redirect(url_for("official.detail", race_id=race_id))
+
+
+# ─── Multi-club allowlist (PR-O2) ────────────────────────────────
+
+
+@bp.post("/<int:race_id>/clubs")
+@min_role_required(Role.ORGANIZER)
+def add_allowed_club(race_id: int) -> object:
+    """Add a club to a Club-visibility race's allowlist. Same auth
+    model as invitee management (organizer + senior_organizer+)."""
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    try:
+        race = official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    from ..services.permissions import assert_can_act_on_race
+
+    try:
+        assert_can_act_on_race(race, by_user_id=current_user.id)
+    except PermissionDeniedError:
+        abort(403)
+    raw = (request.form.get("circle_id") or "").strip()
+    if not raw or not raw.isdigit():
+        flash("Enter a valid uma.moe club ID.")
+        return redirect(url_for("official.detail", race_id=race_id))
+    try:
+        official_service.add_allowed_club(
+            race_id,
+            circle_id=int(raw),
+            added_by_user_id=current_user.id,
+        )
+        flash(f"Allowed club #{raw}.")
+    except official_service.OfficialError as exc:
+        flash(str(exc))
+    return redirect(url_for("official.detail", race_id=race_id))
+
+
+@bp.post("/<int:race_id>/clubs/<int:circle_id>/remove")
+@min_role_required(Role.ORGANIZER)
+def remove_allowed_club(race_id: int, circle_id: int) -> object:
+    csrf_form = CsrfOnlyForm()
+    if not csrf_form.validate_on_submit():
+        abort(400)
+    try:
+        race = official_service.get_race(race_id)
+    except official_service.RaceNotFoundError:
+        abort(404)
+    from ..services.permissions import assert_can_act_on_race
+
+    try:
+        assert_can_act_on_race(race, by_user_id=current_user.id)
+    except PermissionDeniedError:
+        abort(403)
+    n = official_service.remove_allowed_club(race_id, circle_id=circle_id)
+    flash(f"Removed {n} allowed club(s).")
     return redirect(url_for("official.detail", race_id=race_id))
 
 

@@ -151,6 +151,96 @@
     {% endcall %}
   {% endif %}
 
+  {# PR-O2 — Allowed clubs management card (Club-visibility races
+     only). Sits above the invitee/registration grid because it's
+     a higher-level allowlist than per-user invitees. The
+     organizer's own club is implicit (no row, no UI affordance);
+     additional clubs the organizer wants to allow render below.
+     Visible only when the race is Club-visibility AND the viewer
+     is organizer / senior_organizer+. #}
+  {% if race.visibility == "club" and current_user.is_authenticated and current_user.has_at_least('organizer') %}
+    <section class="mt-6">
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Allowed clubs</h2>
+          <span class="text-xs text-slate-500">
+            {{ (allowed_clubs|length) + (1 if club_id else 0) }} club{% if (allowed_clubs|length) + (1 if club_id else 0) != 1 %}s{% endif %}
+          </span>
+        </div>
+        <p class="mt-1 text-xs text-slate-500">
+          Members of any club below can see this race. Your own club is always allowed; add more for an allied-club tournament. Existing registrants from non-allowed clubs aren't auto-removed — invite them individually if needed.
+        </p>
+
+        <ul class="mt-3 space-y-1.5">
+          {# Organizer's own club — locked, always shown when known. #}
+          {% if club_id %}
+            <li class="flex items-center gap-2 text-sm">
+              <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <a class="flex-1 text-slate-200 hover:text-cyan-300"
+                 href="{{ url_for('clubs.detail', circle_id=club_id) }}">
+                {{ club_name or "Club #" ~ club_id }}
+              </a>
+              <span class="rounded-full border border-cyan-500/30 bg-cyan-500/5 px-2 py-0.5 text-[10px] font-medium text-cyan-300">your club</span>
+            </li>
+          {% endif %}
+          {% for ac in allowed_clubs %}
+            <li class="flex items-center gap-2 text-sm">
+              <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <a class="flex-1 text-slate-200 hover:text-cyan-300"
+                 href="{{ url_for('clubs.detail', circle_id=ac.club_circle_id) }}">
+                {{ (ac.club.name if ac.club and ac.club.name else "Club #" ~ ac.club_circle_id) }}
+              </a>
+              <form method="post"
+                    action="{{ url_for('official.remove_allowed_club', race_id=race.id, circle_id=ac.club_circle_id) }}"
+                    onsubmit="return confirm('Remove this club from the allowlist? Members lose visibility unless they are individually invited.');">
+                {{ csrf_form.hidden_tag() }}
+                <button type="submit" class="text-xs text-rose-400 hover:text-rose-300" title="Remove club">×</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+
+        <form method="post"
+              action="{{ url_for('official.add_allowed_club', race_id=race.id) }}"
+              class="mt-4 flex gap-2">
+          {{ csrf_form.hidden_tag() }}
+          <input type="number"
+                 name="circle_id"
+                 inputmode="numeric"
+                 placeholder="uma.moe club ID"
+                 min="1"
+                 autocomplete="off"
+                 class="input-base flex-1" />
+          <button class="btn-primary">Add club</button>
+        </form>
+        <p class="mt-1 text-[11px] text-slate-500">
+          Members can find their club ID on their <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('profiles.index') }}">profile</a> Club tile, or it's the number in the uma.moe URL <code class="text-slate-400">uma.moe/circles/<span class="text-cyan-300">123456</span></code>.
+        </p>
+
+        {% if known_clubs %}
+          <div class="mt-3 border-t border-slate-800 pt-3">
+            <p class="text-[11px] uppercase tracking-wider text-slate-500">Quick add — clubs Uma Ladder knows</p>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              {% for kc in known_clubs %}
+                <form method="post"
+                      action="{{ url_for('official.add_allowed_club', race_id=race.id) }}"
+                      class="inline">
+                  {{ csrf_form.hidden_tag() }}
+                  <input type="hidden" name="circle_id" value="{{ kc.circle_id }}" />
+                  <button type="submit"
+                          class="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/40 px-2.5 py-0.5 text-xs text-slate-300 hover:border-cyan-500/50 hover:text-cyan-200"
+                          title="Add {{ kc.name or 'Club #' ~ kc.circle_id }} to allowlist">
+                    + {{ kc.name or "Club #" ~ kc.circle_id }}
+                  </button>
+                </form>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      {% endcall %}
+    </section>
+  {% endif %}
+
   <section class="mt-6 grid gap-4 lg:grid-cols-3">
 
     {# PR-J13 + PR-L1 — invitee management card. Visible on

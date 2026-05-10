@@ -1580,3 +1580,295 @@ def test_sync_club_id_from_trainer_idempotent(app: Flask, make_user) -> None:
         # Trainer reports None (e.g. user left their club) → mirror clears.
         profiles_service.sync_club_id_from_trainer(profile, FakeTrainer(None))
         assert profile.club_id is None
+
+
+# ─── PR-O2 — Multi-club race allowlist ──────────────────────────
+
+
+def _ensure_club(app: Flask, circle_id: int, name: str | None = None) -> None:
+    """Insert a Club row directly so the FK target exists for the
+    allowlist. In production the service's lazy-create handles this,
+    but tests sometimes need the row pre-seeded."""
+    from uma_ladder.models import Club
+
+    with app.app_context():
+        if db.session.get(Club, circle_id) is None:
+            db.session.add(Club(circle_id=circle_id, name=name))
+            db.session.commit()
+
+
+def test_add_allowed_club_lazy_creates_unknown_club(
+    app: Flask, make_user
+) -> None:
+    """Adding a circle_id we've never seen before should create a
+    Club row inline — keeps the FK satisfied without forcing the
+    organizer to first visit a profile that triggers the sync."""
+    from uma_ladder.models import Club
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+
+    with app.app_context():
+        # Brand-new circle id — not seeded.
+        assert db.session.get(Club, 7777) is None
+        official_service.add_allowed_club(
+            race_id, circle_id=7777, added_by_user_id=org["id"]
+        )
+        # Lazy-created with NULL name; users can refresh later.
+        club = db.session.get(Club, 7777)
+        assert club is not None
+        assert club.name is None
+        # Allowlist row landed.
+        rows = official_service.list_allowed_clubs(race_id)
+        assert [r.club_circle_id for r in rows] == [7777]
+
+
+def test_add_allowed_club_is_idempotent(app: Flask, make_user) -> None:
+    """Re-adding the same club is a no-op — important because the
+    UI's quick-add chip sends a POST every click."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+
+    with app.app_context():
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+        assert len(official_service.list_allowed_clubs(race_id)) == 1
+
+
+def test_add_allowed_club_rejects_organizer_own_club(
+    app: Flask, make_user
+) -> None:
+    """Organizer's own club is implicit; adding it as an extra
+    row would just clutter the UI and confuse the visibility
+    semantics."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+
+    with app.app_context(), pytest.raises(official_service.OfficialError):
+        official_service.add_allowed_club(
+            race_id, circle_id=100, added_by_user_id=org["id"]
+        )
+
+
+def test_add_allowed_club_rejects_non_club_race(
+    app: Flask, make_user
+) -> None:
+    """Allowlist is only meaningful on Club-visibility races; a
+    Public or Private race can't have one."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Public Race",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="public",
+            )
+        )
+        race_id = race.id
+    _ensure_club(app, 200)
+    with app.app_context(), pytest.raises(official_service.OfficialError):
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+
+
+def test_remove_allowed_club_removes_visibility(
+    app: Flask, make_user
+) -> None:
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+
+    with app.app_context():
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+        n = official_service.remove_allowed_club(race_id, circle_id=200)
+        assert n == 1
+        assert official_service.list_allowed_clubs(race_id) == []
+        # Idempotent — second remove returns 0.
+        n2 = official_service.remove_allowed_club(race_id, circle_id=200)
+        assert n2 == 0
+
+
+def test_user_in_allowed_club_can_view_race(app: Flask, make_user) -> None:
+    """The whole point: a viewer in any allowlisted club should
+    pass user_can_view_race, even if they're not in the organizer's
+    club."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    ally = make_user(username="ally", password="password123")
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+    _set_club_id(app, ally["id"], club_id=200)
+    with app.app_context():
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+        race = official_service.get_race(race_id)
+        assert official_service.user_can_view_race(
+            race, user_id=ally["id"]
+        ) is True
+
+
+def test_user_in_organizer_club_still_passes_after_allowlist_extension(
+    app: Flask, make_user
+) -> None:
+    """Back-compat: PR-L1's "organizer's own club is allowed"
+    must still hold after PR-O2's allowlist code runs."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    own_club_member = make_user(username="own_member", password="password123")
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+    _set_club_id(app, own_club_member["id"], club_id=100)
+    # Add an unrelated allied club — must not affect own-club visibility.
+    with app.app_context():
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+        race = official_service.get_race(race_id)
+        assert official_service.user_can_view_race(
+            race, user_id=own_club_member["id"]
+        ) is True
+
+
+def test_user_in_non_allowed_club_cannot_view_race(
+    app: Flask, make_user
+) -> None:
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    outsider = make_user(username="outsider", password="password123")
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+    _set_club_id(app, outsider["id"], club_id=200)
+    # Allowlist has 300, NOT 200.
+    with app.app_context():
+        official_service.add_allowed_club(
+            race_id, circle_id=300, added_by_user_id=org["id"]
+        )
+        race = official_service.get_race(race_id)
+        assert official_service.user_can_view_race(
+            race, user_id=outsider["id"]
+        ) is False
+
+
+def test_user_with_no_club_cannot_view_club_race(
+    app: Flask, make_user
+) -> None:
+    """A viewer who hasn't synced a club_id (no friend code or no
+    club at all) shouldn't see Club races regardless of allowlist
+    contents."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    no_club = make_user(username="no_club", password="password123")
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+    with app.app_context():
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+        race = official_service.get_race(race_id)
+        assert official_service.user_can_view_race(
+            race, user_id=no_club["id"]
+        ) is False
+
+
+def test_index_filter_includes_allowlisted_club_member(
+    app: Flask, client: FlaskClient, make_user
+) -> None:
+    """The race index must surface a Club race to users in any
+    allowlisted club, not just the organizer's own."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    ally = make_user(username="ally", password="password123")
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+    _set_club_id(app, ally["id"], club_id=200)
+    with app.app_context():
+        official_service.add_allowed_club(
+            race_id, circle_id=200, added_by_user_id=org["id"]
+        )
+        race = official_service.get_race(race_id)
+        race.status = OfficialRaceStatus.REGISTRATION_OPEN
+        db.session.commit()
+    _login(client, "ally", "password123")
+    body = client.get("/official/").data.decode()
+    assert "Club Cup" in body
+
+
+def test_add_allowed_club_route_requires_organizer(
+    app: Flask, client: FlaskClient, make_user
+) -> None:
+    """Random user posting to the allowlist endpoint should be
+    blocked. Not the race's organizer + not senior_organizer+ →
+    forbidden."""
+    from uma_ladder.services import official as official_service
+
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    make_user(username="rando", password="password123")
+    race_id = _create_club_race(app, organizer_id=org["id"], club_id=100)
+    _login(client, "rando", "password123")
+    resp = client.post(
+        f"/official/{race_id}/clubs",
+        data={"circle_id": "200", "csrf_token": "x"},
+        follow_redirects=False,
+    )
+    # Either 403 (acted-on guard) or 302 (perm decorator blocking).
+    assert resp.status_code in (302, 403)
+    with app.app_context():
+        assert official_service.list_allowed_clubs(race_id) == []
+
+
+def test_change_visibility_public_to_club_works_with_allowlist_empty(
+    app: Flask, make_user
+) -> None:
+    """Going Public→Club on an existing race should still
+    auto-promote registrants from non-allowed clubs to invitees
+    (PR-L1 behaviour). The allowlist starts empty when the race
+    transitions, so the existing logic doesn't need updating —
+    this test guards against accidental regression."""
+    from uma_ladder.services import official as official_service
+
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    org = make_user(username="org", password="password123", role=Role.ORGANIZER)
+    racer = make_user(username="racer", password="password123")
+    _set_club_id(app, org["id"], club_id=100)
+    _set_club_id(app, racer["id"], club_id=999)  # different club
+    with app.app_context():
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=sid,
+                name="Going Club",
+                organizer_user_id=org["id"],
+                preset_id=pid,
+                visibility="public",
+            )
+        )
+        race.status = OfficialRaceStatus.REGISTRATION_OPEN
+        db.session.commit()
+        race_id = race.id
+        official_service.register(race_id, user_id=racer["id"])
+        official_service.change_visibility(
+            race_id, new_visibility="club", by_user_id=org["id"]
+        )
+        # racer's club != 100 → should be on invitee list now.
+        invitees = official_service.list_invitees(race_id)
+        assert any(inv.user_id == racer["id"] for inv in invitees)
