@@ -38,6 +38,11 @@ class BaseConfig:
     # APP_BASE_URL. Set this if Fly's reverse proxy ever lies about
     # scheme/host.
     DISCORD_OAUTH_REDIRECT_URI: str | None = None
+    # PR-K4 — Google OAuth login. Same soft-required shape as
+    # Discord above.
+    GOOGLE_OAUTH_CLIENT_ID: str | None = None
+    GOOGLE_OAUTH_CLIENT_SECRET: str | None = None
+    GOOGLE_OAUTH_REDIRECT_URI: str | None = None
     OCR_PROVIDER: str = "manual"
     GOOGLE_VISION_API_KEY: str | None = None
     # Public base URL for outgoing links (Discord embed titles point
@@ -75,6 +80,9 @@ class DevConfig(BaseConfig):
     DISCORD_OAUTH_CLIENT_ID = _env_or_none("DISCORD_OAUTH_CLIENT_ID")
     DISCORD_OAUTH_CLIENT_SECRET = _env_or_none("DISCORD_OAUTH_CLIENT_SECRET")
     DISCORD_OAUTH_REDIRECT_URI = _env_or_none("DISCORD_OAUTH_REDIRECT_URI")
+    GOOGLE_OAUTH_CLIENT_ID = _env_or_none("GOOGLE_OAUTH_CLIENT_ID")
+    GOOGLE_OAUTH_CLIENT_SECRET = _env_or_none("GOOGLE_OAUTH_CLIENT_SECRET")
+    GOOGLE_OAUTH_REDIRECT_URI = _env_or_none("GOOGLE_OAUTH_REDIRECT_URI")
     OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
     GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")
     APP_BASE_URL = _env_or_none("APP_BASE_URL")
@@ -130,6 +138,13 @@ class ProdConfig(BaseConfig):
         )
         cls.DISCORD_OAUTH_REDIRECT_URI = _env_or_none(
             "DISCORD_OAUTH_REDIRECT_URI"
+        )
+        cls.GOOGLE_OAUTH_CLIENT_ID = _env_or_none("GOOGLE_OAUTH_CLIENT_ID")
+        cls.GOOGLE_OAUTH_CLIENT_SECRET = _env_or_none(
+            "GOOGLE_OAUTH_CLIENT_SECRET"
+        )
+        cls.GOOGLE_OAUTH_REDIRECT_URI = _env_or_none(
+            "GOOGLE_OAUTH_REDIRECT_URI"
         )
         cls.OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "manual")
         cls.GOOGLE_VISION_API_KEY = _env_or_none("GOOGLE_VISION_API_KEY")

@@ -399,6 +399,112 @@ class DiscordOAuthProvider(OAuthProvider):
         )
 
 
+# ─── Google ──────────────────────────────────────────────────────
+
+
+@dataclass
+class GoogleOAuthProvider(OAuthProvider):
+    """Google OAuth2 / OpenID Connect.
+
+    Scopes ``openid profile`` only — gives us the stable ``sub``
+    (Google account id), display name, and picture. We deliberately
+    skip ``email``: matches Discord's "least scope wins" stance,
+    keeps the consent screen friction low, and we don't act on
+    email anywhere (admin-issued reset is the only password
+    recovery path).
+
+    We hit ``/userinfo`` after the token exchange rather than
+    parsing the ``id_token`` JWT. Same one-extra-call shape as the
+    Discord flow; avoids pulling ``pyjwt[crypto]`` and JWKS-cache
+    plumbing for a one-time identity verification we discard
+    immediately after.
+    """
+
+    name: str = field(default="google", init=False)
+    AUTHORIZATION_URL: str = field(
+        default="https://accounts.google.com/o/oauth2/v2/auth", init=False
+    )
+    TOKEN_URL: str = field(
+        default="https://oauth2.googleapis.com/token", init=False
+    )
+    PROFILE_URL: str = field(
+        default="https://openidconnect.googleapis.com/v1/userinfo",
+        init=False,
+    )
+    SCOPE: str = field(default="openid profile", init=False)
+
+    client_id: str = ""
+    client_secret: str = ""
+    transport: HttpTransport = field(default_factory=UrllibHttpTransport)
+
+    def authorization_url(
+        self, *, state: str, code_challenge: str, redirect_uri: str
+    ) -> str:
+        params = {
+            "client_id": self.client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": self.SCOPE,
+            "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            # Force the account-chooser even when only one Google
+            # account is signed in, so users on shared machines
+            # don't accidentally link the wrong account.
+            "prompt": "select_account",
+        }
+        return f"{self.AUTHORIZATION_URL}?{urllib.parse.urlencode(params)}"
+
+    def exchange_code(
+        self, *, code: str, code_verifier: str, redirect_uri: str
+    ) -> ProviderProfile:
+        token_resp = self.transport.post_form(
+            self.TOKEN_URL,
+            data={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
+            },
+        )
+        if not 200 <= token_resp.status_code < 300:
+            raise OAuthExchangeError(
+                f"google token endpoint returned {token_resp.status_code}: "
+                f"{_excerpt(token_resp.body)}"
+            )
+        token_data = _parse_json(token_resp.body, where="google token")
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise OAuthExchangeError(
+                "google token response missing access_token"
+            )
+
+        profile_resp = self.transport.get(
+            self.PROFILE_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if not 200 <= profile_resp.status_code < 300:
+            raise OAuthExchangeError(
+                f"google userinfo endpoint returned {profile_resp.status_code}"
+            )
+        profile_data = _parse_json(profile_resp.body, where="google userinfo")
+        external_id = profile_data.get("sub")
+        if not external_id:
+            raise OAuthExchangeError(
+                "google userinfo response missing sub"
+            )
+
+        return ProviderProfile(
+            provider=self.name,
+            external_id=str(external_id),
+            external_username=profile_data.get("name") or None,
+            email=None,  # not requested
+            avatar_url=profile_data.get("picture") or None,
+        )
+
+
 def _parse_json(body: bytes, *, where: str) -> dict[str, Any]:
     try:
         data = json.loads(body or b"{}")

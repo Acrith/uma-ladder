@@ -4,6 +4,18 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-05-10
+
+### Sign-in
+
+- **Continue with Google.** A second OAuth provider, sitting next
+  to the Discord button on the login and register pages and as a
+  new row in the **Linked accounts** card on your profile. First-
+  time use creates a fresh Uma Ladder account from your Google
+  display name (with a short suffix if it's already taken);
+  subsequent visits log you straight in. We request only your
+  Google ID and display name — no email, no contacts, no Drive.
+
 ## 2026-05-09
 
 ### Sign-in
