@@ -118,6 +118,24 @@
             </div>
           </details>
 
+          {# PR-P3.2 — viewing-profile chip. Renders only when
+             we're on a profile page and the route passed in a
+             `viewing_profile_user` context var. Plays the role
+             the floating profile header used to play, but
+             living in the global nav so it doesn't stack on top
+             of the hero / tab strips on profile pages. #}
+          {% if viewing_profile_user is defined and viewing_profile_user %}
+            {% from "_avatar.html" import avatar as _vp_avatar %}
+            <a href="{{ url_for('profiles.public', username=viewing_profile_user.username) }}"
+               class="ml-2 inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/40 px-2 py-1 text-xs text-slate-300 hover:border-cyan-500/50 hover:text-cyan-200"
+               title="Viewing {{ viewing_profile_user.username }}'s profile">
+              {{ _vp_avatar(viewing_profile_user, viewing_profile, size_class="h-5 w-5", rounded_class="rounded-md", border_class="border border-slate-800") }}
+              <span class="hidden sm:inline">
+                {{ viewing_profile.display_name or viewing_profile_user.username if viewing_profile else viewing_profile_user.username }}
+              </span>
+            </a>
+          {% endif %}
+
           <span class="mx-1 h-6 w-px bg-slate-800"></span>
           {% if current_user.is_authenticated %}
             <a href="{{ url_for('profiles.public', username=current_user.username) }}" class="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-cyan-300">

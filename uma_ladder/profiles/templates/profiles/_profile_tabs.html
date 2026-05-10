@@ -1,0 +1,36 @@
+{# PR-P3.2 — slim tab strip used at the top of every profile
+   sub-route. No identity here (the global nav's viewing-profile
+   chip covers that, and Overview's hero covers the rich version);
+   just tabs + the achievement count badge + the Edit profile
+   button when viewing your own profile.
+
+   Required context: user, achievement_count
+#}
+
+{% from "_icons.html" import pencil as icon_pencil %}
+
+{% set _tab_endpoints = [
+  ("profiles.public", "Overview"),
+  ("profiles.public_history", "Matches"),
+  ("profiles.public_achievements", "Achievements"),
+] %}
+
+<div class="mt-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 text-sm">
+  <nav class="flex items-center gap-1">
+    {% for endpoint, label in _tab_endpoints %}
+      {% set is_active = request.endpoint == endpoint %}
+      <a href="{{ url_for(endpoint, username=user.username) }}"
+         class="-mb-px rounded-t-lg border-b-2 px-4 py-2 transition {% if is_active %}border-cyan-400 text-cyan-300{% else %}border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200{% endif %}">
+        {{ label }}{% if endpoint == "profiles.public_achievements" and achievement_count %}
+          <span class="ml-1 rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">{{ achievement_count }}</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </nav>
+  {% if current_user.is_authenticated and current_user.id == user.id %}
+    <a href="{{ url_for('profiles.me') }}"
+       class="mb-1 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-3 py-1 text-xs font-medium text-cyan-200 hover:border-cyan-400/60 hover:text-cyan-100">
+      {{ icon_pencil(class="h-3.5 w-3.5") }} Edit profile
+    </a>
+  {% endif %}
+</div>

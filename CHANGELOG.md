@@ -99,15 +99,17 @@ log for the full history.
 ### Profile
 
 - **Profile tabs.** Player profiles now have three tabs:
-  **Overview** (hero with oshi art, season standing, in-game
-  stats from uma.moe), **Matches** (`/profiles/<u>/history` —
-  Recent Official + Recent Draft + Most-used + Track strengths),
-  and **Achievements** (`/profiles/<u>/achievements` — full
-  catalogue with locked entries grayed-out + how-to-earn
-  tooltips). The tab bar lives inside the hero card itself, so
-  switching tabs feels like swapping panels in a game-client
-  profile hub: same banner across all three, content swaps
-  below. Old single-page URL still works — it's the Overview tab.
+  **Overview** (the rich oshi hero with stat tiles + in-game
+  stats from uma.moe + an achievements snippet), **Matches**
+  (`/profiles/<u>/history` — Recent Official + Recent Draft +
+  Most-used + Track strengths), and **Achievements**
+  (`/profiles/<u>/achievements` — full catalogue with locked
+  entries grayed-out + how-to-earn tooltips). The big hero
+  shows only on Overview; the other tabs get a slim tab strip
+  so they breathe for content. Identity stays anchored via a
+  small "viewing @user" chip in the top nav that appears
+  whenever you're on a profile page. Old single-page URL still
+  works — it's the Overview tab.
 
 ## 2026-05-09
 

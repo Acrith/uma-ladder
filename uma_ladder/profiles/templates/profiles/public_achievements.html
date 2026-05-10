@@ -4,7 +4,9 @@
 {% block title %}{{ profile.display_name or user.username }} · Achievements · Uma Ladder{% endblock %}
 {% block content %}
 
-  {% include "profiles/_profile_hero.html" %}
+  {# PR-P3.2 — tabs only on this sub-route. Identity context is
+     in the global nav chip; the big hero stays on Overview. #}
+  {% include "profiles/_profile_tabs.html" %}
 
   {# PR-P3 — Achievements tab. Revises PR-P2's "show only
      unlocked" rule for THIS dedicated surface (the Overview

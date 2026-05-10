@@ -1,24 +1,19 @@
-{# PR-P3.1 — single profile hero, used on all three tab routes.
+{# PR-P3.2 — Overview-only identity hero. Renders the big oshi
+   art + stat tiles + bio + friend code for the viewed player.
 
-   Replaces the redundant `_profile_header.html` strip. Tabs are
-   now embedded inside the hero card's top edge so the page has
-   one identity surface, not two. Edit button (owner-only) lives
-   in the same row as the tabs.
+   Pulled OFF Matches/Achievements per UX scoping: those tabs are
+   for browsing data, not staring at the player's hero card. The
+   global nav's viewing-profile chip + the tab strip give them
+   enough context. Hero stays the "intro to this player" surface
+   on Overview only.
 
-   Required context vars (set by the route's _load_profile_or_404
-   + per-route hero data):
-     user, profile, oshi_image, achievement_count
+   Required context vars (set by the route's _load_profile_or_404):
+     user, profile, oshi_image
      standing, active_season, track_strengths, elo
      discord_verified
-
-   This is the consistent banner across Overview / Matches /
-   Achievements — same identity, same stat tiles, same oshi art.
-   The thing that changes between tabs is the content BELOW the
-   hero. Game-client style: persistent character panel, swappable
-   subtab content. #}
+#}
 
 {% from "_avatar.html" import avatar %}
-{% from "_icons.html" import pencil as icon_pencil %}
 
 {# Outfit-aware GameTora link: prefer the specific costume page when set. #}
 {% set gametora_link = none %}
@@ -45,34 +40,6 @@
     <div class="pointer-events-none absolute inset-y-0 right-0 w-2/3 bg-gradient-to-l from-fuchsia-500/20 via-fuchsia-500/5 to-transparent"></div>
     <div class="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-cyan-500/15 via-transparent to-transparent"></div>
   {% endif %}
-
-  {# Tabs row — sits at the top inside the hero. Subtle bottom
-     border separates it visually from the identity content
-     below. Edit button (owner only) is the trailing item. #}
-  {% set _tab_endpoints = [
-    ("profiles.public", "Overview"),
-    ("profiles.public_history", "Matches"),
-    ("profiles.public_achievements", "Achievements"),
-  ] %}
-  <div class="relative z-10 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 bg-slate-950/40 px-4 py-2 backdrop-blur-sm sm:px-6">
-    <nav class="flex items-center gap-1 text-sm">
-      {% for endpoint, label in _tab_endpoints %}
-        {% set is_active = request.endpoint == endpoint %}
-        <a href="{{ url_for(endpoint, username=user.username) }}"
-           class="rounded-lg px-3 py-1.5 transition {% if is_active %}bg-slate-800/80 text-cyan-300 shadow-glow-cyan{% else %}text-slate-400 hover:bg-slate-800/40 hover:text-slate-100{% endif %}">
-          {{ label }}{% if endpoint == "profiles.public_achievements" and achievement_count %}
-            <span class="ml-1 rounded-full bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-200">{{ achievement_count }}</span>
-          {% endif %}
-        </a>
-      {% endfor %}
-    </nav>
-    {% if current_user.is_authenticated and current_user.id == user.id %}
-      <a href="{{ url_for('profiles.me') }}"
-         class="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-3 py-1 text-xs font-medium text-cyan-200 hover:border-cyan-400/60 hover:text-cyan-100">
-        {{ icon_pencil(class="h-3.5 w-3.5") }} Edit profile
-      </a>
-    {% endif %}
-  </div>
 
   <div class="relative grid gap-6 p-6 md:grid-cols-[3fr_2fr] md:p-10">
     <div class="space-y-5">
