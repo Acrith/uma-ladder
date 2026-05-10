@@ -36,8 +36,14 @@ log for the full history.
   Player rows now show an avatar + display name + oshi (same row
   style as Players + Clubs), making it easier to recognize
   someone you've raced against without having to read the
-  username carefully. Per-club ladder is queued as a follow-up
-  (will arrive as a third tab).
+  username carefully.
+- **My-club scope filter on Rankings.** A small toggle next to
+  the Official / Draft tabs lets you flip the ladder between
+  *All players* and *My club* — see exactly where you stand
+  among your clubmates without scrolling through the full
+  community. Visible only when you're signed in and your friend
+  code links you to a club; works on both the Official and
+  Draft tabs and preserves the season + page across switches.
 
 ## 2026-05-09
 

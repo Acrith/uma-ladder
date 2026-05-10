@@ -10,7 +10,9 @@
       <p class="mt-1 text-xs text-slate-500">
         {% if season %}
           Season <span class="text-slate-300">{{ season.name }}</span>
-          {%- if total %} · {{ total }} player{% if total != 1 %}s{% endif %}{% endif %}
+          {%- if total %}
+            · {{ total }} {% if scope == "club" %}club member{% else %}player{% endif %}{% if total != 1 %}s{% endif %}
+          {%- endif %}
         {% else %}
           No season selected.
         {% endif %}
@@ -18,10 +20,11 @@
     </div>
 
     {# Season picker — native <select> auto-submits on change. Posts
-       the same query string back so mode + page are preserved. #}
+       the current mode + scope back so they're preserved. #}
     {% if all_seasons %}
       <form method="get" class="flex items-center gap-2 text-sm">
         <input type="hidden" name="mode" value="{{ mode }}" />
+        {% if scope == "club" %}<input type="hidden" name="scope" value="club" />{% endif %}
         <select name="season"
                 onchange="this.form.submit()"
                 class="input-base">
@@ -36,17 +39,34 @@
     {% endif %}
   </div>
 
-  {# Mode tabs. Each tab preserves the current ?season= so users
-     don't lose context when switching ladders. #}
-  <div class="mt-5 flex items-center gap-1 border-b border-slate-800 text-sm">
-    {% set tabs = [("official", "Official"), ("draft", "Draft")] %}
-    {% for tab_mode, label in tabs %}
-      {% set is_active = mode == tab_mode %}
-      <a href="{{ url_for('rankings.index', season=(season.id if season else None), mode=tab_mode) }}"
-         class="-mb-px rounded-t-lg border-b-2 px-4 py-2 transition {% if is_active %}border-cyan-400 text-cyan-300{% else %}border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200{% endif %}">
-        {{ label }}
-      </a>
-    {% endfor %}
+  {# Mode tabs + (when viewer is in a club) scope toggle. Mode is
+     the primary axis (Official vs Draft); scope is a secondary
+     filter that crosses both modes — toggle preserves the active
+     mode + season so the user keeps context. PR-O1. #}
+  <div class="mt-5 flex flex-wrap items-end justify-between gap-3 border-b border-slate-800 text-sm">
+    <div class="flex items-center gap-1">
+      {% set tabs = [("official", "Official"), ("draft", "Draft")] %}
+      {% for tab_mode, label in tabs %}
+        {% set is_active = mode == tab_mode %}
+        <a href="{{ url_for('rankings.index', season=(season.id if season else None), mode=tab_mode, scope=(scope if scope == 'club' else None)) }}"
+           class="-mb-px rounded-t-lg border-b-2 px-4 py-2 transition {% if is_active %}border-cyan-400 text-cyan-300{% else %}border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200{% endif %}">
+          {{ label }}
+        </a>
+      {% endfor %}
+    </div>
+    {% if viewer_club_id %}
+      <div class="mb-2 inline-flex rounded-lg border border-slate-700 bg-slate-900/40 p-0.5 text-xs">
+        <a href="{{ url_for('rankings.index', season=(season.id if season else None), mode=mode) }}"
+           class="rounded px-2.5 py-1 transition {% if scope == 'all' %}bg-slate-800 text-slate-100{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+          All players
+        </a>
+        <a href="{{ url_for('rankings.index', season=(season.id if season else None), mode=mode, scope='club') }}"
+           class="rounded px-2.5 py-1 transition {% if scope == 'club' %}bg-cyan-500/15 text-cyan-200{% else %}text-slate-400 hover:text-slate-200{% endif %}"
+           title="{% if viewer_club and viewer_club.name %}Show only members of {{ viewer_club.name }}{% else %}Show only members of your club{% endif %}">
+          My club{% if viewer_club and viewer_club.name %} <span class="text-cyan-300/70">· {{ viewer_club.name }}</span>{% endif %}
+        </a>
+      </div>
+    {% endif %}
   </div>
 
   {% if not season %}
@@ -55,7 +75,11 @@
     </div>
   {% elif not rows %}
     <div class="surface-card mt-6 px-6 py-10 text-center text-slate-400">
-      No {{ mode }} results yet for this season.
+      {% if scope == "club" %}
+        No {{ mode }} results yet for members of {% if viewer_club and viewer_club.name %}<span class="text-slate-300">{{ viewer_club.name }}</span>{% else %}your club{% endif %} this season.
+      {% else %}
+        No {{ mode }} results yet for this season.
+      {% endif %}
     </div>
   {% else %}
     {% call card(class="mt-6 overflow-hidden") %}
@@ -144,11 +168,11 @@
         <div class="flex gap-2">
           {% if page > 1 %}
             <a class="btn-ghost"
-               href="{{ url_for('rankings.index', season=season.id, mode=mode, page=page - 1) }}">← Prev</a>
+               href="{{ url_for('rankings.index', season=season.id, mode=mode, scope=(scope if scope == 'club' else None), page=page - 1) }}">← Prev</a>
           {% endif %}
           {% if page < pages %}
             <a class="btn-ghost"
-               href="{{ url_for('rankings.index', season=season.id, mode=mode, page=page + 1) }}">Next →</a>
+               href="{{ url_for('rankings.index', season=season.id, mode=mode, scope=(scope if scope == 'club' else None), page=page + 1) }}">Next →</a>
           {% endif %}
         </div>
       </div>

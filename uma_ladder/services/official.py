@@ -619,7 +619,21 @@ class LadderRow:
     top3: int
 
 
-def season_ladder(season_id: int, *, limit: int | None = None) -> list[LadderRow]:
+def season_ladder(
+    season_id: int,
+    *,
+    limit: int | None = None,
+    club_id: int | None = None,
+) -> list[LadderRow]:
+    """Returns the ordered Official ladder for the given season.
+
+    PR-O1 — when ``club_id`` is supplied, the ladder is restricted
+    to users whose ``UserProfile.club_id`` matches. Drives the
+    "show me my club's standings" toggle on /rankings. Ranks
+    returned are dense within the filtered set (the route renders
+    1..N) — that's intentional: a 3rd-place-in-club player should
+    see "rank 3 in club" rather than "rank 47 globally."
+    """
     top1_expr = func.sum(case((OfficialRaceResult.placement == 1, 1), else_=0))
     top2_expr = func.sum(case((OfficialRaceResult.placement == 2, 1), else_=0))
     top3_expr = func.sum(case((OfficialRaceResult.placement == 3, 1), else_=0))
@@ -644,6 +658,10 @@ def season_ladder(season_id: int, *, limit: int | None = None) -> list[LadderRow
             User.username.asc(),
         )
     )
+    if club_id is not None:
+        stmt = stmt.join(
+            UserProfile, UserProfile.user_id == User.id
+        ).where(UserProfile.club_id == club_id)
     if limit is not None:
         stmt = stmt.limit(limit)
     rows = db.session.execute(stmt).all()

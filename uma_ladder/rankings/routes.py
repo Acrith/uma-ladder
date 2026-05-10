@@ -15,10 +15,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from flask import Blueprint, render_template, request
+from flask_login import current_user
 from sqlalchemy import select
 
 from ..extensions import db
 from ..models import Season, UserProfile
+from ..services import clubs as clubs_service
 from ..services import draft as draft_service
 from ..services import official as official_service
 from ..services import seasons as seasons_service
@@ -27,6 +29,7 @@ bp = Blueprint("rankings", __name__, template_folder="templates")
 
 
 _VALID_MODES = ("official", "draft")
+_VALID_SCOPES = ("all", "club")
 _PAGE_SIZE = 25
 
 
@@ -58,6 +61,18 @@ def _profiles_by_user_id(user_ids: Sequence[int]) -> dict[int, UserProfile]:
     return {p.user_id: p for p in rows}
 
 
+def _viewer_club_id() -> int | None:
+    """The signed-in viewer's own club_id, or None when anonymous /
+    no club / no profile yet. Drives whether the 'My club' scope
+    toggle is offered + which club_id we filter by."""
+    if not current_user.is_authenticated:
+        return None
+    profile = db.session.scalars(
+        select(UserProfile).where(UserProfile.user_id == current_user.id)
+    ).first()
+    return profile.club_id if profile else None
+
+
 @bp.get("/")
 def index() -> object:
     """Unified rankings.
@@ -65,15 +80,39 @@ def index() -> object:
     Query params:
     - ``season`` — Season.id; defaults to the active season.
     - ``mode`` — ``official`` (default) or ``draft``.
+    - ``scope`` — ``all`` (default) or ``club`` (PR-O1). Filters
+      the ladder to just members of the viewer's own club. Honoured
+      only when the viewer is signed in AND has a synced
+      ``UserProfile.club_id``; otherwise silently falls back to
+      ``all`` so a stale ``?scope=club`` URL doesn't render an
+      empty page.
     - ``page`` — 1-based; 25 rows per page.
     """
     mode = (request.args.get("mode") or "official").lower()
     if mode not in _VALID_MODES:
         mode = "official"
+    requested_scope = (request.args.get("scope") or "all").lower()
+    if requested_scope not in _VALID_SCOPES:
+        requested_scope = "all"
     page = max(1, request.args.get("page", 1, type=int))
 
     season = _resolve_season(request.args.get("season"))
     all_seasons = seasons_service.list_seasons()
+
+    viewer_club_id = _viewer_club_id()
+    # Resolve the scope actually in effect: a signed-out viewer or a
+    # viewer without a club gets the regular ladder regardless of
+    # what they typed in the URL. The toggle is hidden in that case;
+    # this is the server-side guard.
+    scope = "club" if (
+        requested_scope == "club" and viewer_club_id is not None
+    ) else "all"
+    effective_club_id = viewer_club_id if scope == "club" else None
+    viewer_club = (
+        clubs_service.get_club(viewer_club_id)
+        if viewer_club_id is not None
+        else None
+    )
 
     # Pull the full ladder, then slice for pagination. The ladder
     # services already return ordered rows; doing the slice in Python
@@ -82,9 +121,13 @@ def index() -> object:
     total = 0
     if season is not None:
         if mode == "official":
-            rows = official_service.season_ladder(season.id)
+            rows = official_service.season_ladder(
+                season.id, club_id=effective_club_id
+            )
         else:
-            rows = draft_service.season_elo_ladder(season.id)
+            rows = draft_service.season_elo_ladder(
+                season.id, club_id=effective_club_id
+            )
         total = len(rows)
 
     pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
@@ -99,6 +142,9 @@ def index() -> object:
         season=season,
         all_seasons=all_seasons,
         mode=mode,
+        scope=scope,
+        viewer_club_id=viewer_club_id,
+        viewer_club=viewer_club,
         rows=visible,
         profiles=profiles,
         rank_offset=start,

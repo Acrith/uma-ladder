@@ -1061,10 +1061,20 @@ class EloLadderRow:
     wins: int
 
 
-def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLadderRow]:
+def season_elo_ladder(
+    season_id: int,
+    *,
+    limit: int | None = None,
+    club_id: int | None = None,
+) -> list[EloLadderRow]:
+    """Returns the ordered Draft Elo ladder for the given season.
+
+    PR-O1 — when ``club_id`` is supplied, restricts to users whose
+    ``UserProfile.club_id`` matches. Symmetric to
+    ``official.season_ladder``'s club_id parameter."""
     from sqlalchemy import case as sql_case
 
-    from ..models import User
+    from ..models import User, UserProfile
 
     latest_subq = (
         select(
@@ -1087,6 +1097,10 @@ def season_elo_ladder(season_id: int, *, limit: int | None = None) -> list[EloLa
         .group_by(User.id, User.username, DraftEloChange.rating_after)
         .order_by(DraftEloChange.rating_after.desc(), User.username.asc())
     )
+    if club_id is not None:
+        stmt = stmt.join(
+            UserProfile, UserProfile.user_id == User.id
+        ).where(UserProfile.club_id == club_id)
     rows = db.session.execute(stmt).all()
 
     wins_stmt = (
