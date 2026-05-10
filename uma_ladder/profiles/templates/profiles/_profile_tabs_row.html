@@ -1,0 +1,58 @@
+{# PR-P3.4 — shared tabs row markup. Used by both the Overview
+   hero (embedded at the top inside the surface-card) and by the
+   minimal "tabs-only" card on Matches/Achievements. Same chip-
+   style tabs (PR-P3.1) and same chrome (border-b +
+   bg-slate-950/40 + backdrop-blur) regardless of which card
+   wraps it — so the nav feels like one consistent surface
+   across tabs even though Matches/Achievements drop the oshi
+   body below.
+
+   Right-side affordances:
+   - Own profile: Edit profile button (any tab).
+   - Other profile, Matches/Achievements: "Viewing: [chip]".
+   - Other profile, Overview: nothing (hero body carries
+     identity richly).
+
+   Required context: user, profile, achievement_count
+#}
+
+{% from "_icons.html" import pencil as icon_pencil %}
+{% from "_avatar.html" import avatar as _viewing_avatar %}
+
+{% set _tab_endpoints = [
+  ("profiles.public", "Overview"),
+  ("profiles.public_history", "Matches"),
+  ("profiles.public_achievements", "Achievements"),
+] %}
+{% set _is_own_profile = current_user.is_authenticated and current_user.id == user.id %}
+{% set _is_overview = request.endpoint == "profiles.public" %}
+
+<div class="relative z-10 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 bg-slate-950/40 px-4 py-2 backdrop-blur-sm sm:px-6">
+  <nav class="flex items-center gap-1 text-sm">
+    {% for endpoint, label in _tab_endpoints %}
+      {% set is_active = request.endpoint == endpoint %}
+      <a href="{{ url_for(endpoint, username=user.username) }}"
+         class="rounded-lg px-3 py-1.5 transition {% if is_active %}bg-slate-800/80 text-cyan-300 shadow-glow-cyan{% else %}text-slate-400 hover:bg-slate-800/40 hover:text-slate-100{% endif %}">
+        {{ label }}{% if endpoint == "profiles.public_achievements" and achievement_count %}
+          <span class="ml-1 rounded-full bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-200">{{ achievement_count }}</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </nav>
+
+  {% if _is_own_profile %}
+    <a href="{{ url_for('profiles.me') }}"
+       class="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-slate-950/60 px-3 py-1 text-xs font-medium text-cyan-200 hover:border-cyan-400/60 hover:text-cyan-100">
+      {{ icon_pencil(class="h-3.5 w-3.5") }} Edit profile
+    </a>
+  {% elif not _is_overview %}
+    <div class="flex items-center gap-2 text-xs">
+      <span class="text-slate-500">Viewing:</span>
+      {{ _viewing_avatar(user, profile, size_class="h-8 w-8", rounded_class="rounded-lg", border_class="border border-slate-800") }}
+      <div class="leading-tight">
+        <p class="font-medium text-slate-200">{{ profile.display_name or user.username }}</p>
+        <p class="text-slate-500">@{{ user.username }}</p>
+      </div>
+    </div>
+  {% endif %}
+</div>

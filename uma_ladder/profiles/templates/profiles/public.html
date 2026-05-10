@@ -5,12 +5,11 @@
 {% block title %}{{ profile.display_name or user.username }} · Uma Ladder{% endblock %}
 {% block content %}
 
-  {# PR-P3.2 — Overview-only hero (the rich oshi card). The
-     viewing-profile chip in the global nav handles identity
-     context on the other tabs; the tab strip below the hero is
-     the only profile UI Matches/Achievements get. #}
+  {# PR-P3.4 — Overview hero with tabs embedded at the top
+     (PR-P3.1 shape). Matches/Achievements get the same tabs row
+     in a minimal tabs-only card so the nav feels consistent
+     without the big oshi card recurring. #}
   {% include "profiles/_profile_hero.html" %}
-  {% include "profiles/_profile_tabs.html" %}
 
 
   {# ─── BELOW THE HERO ────────────────────────────────────────────

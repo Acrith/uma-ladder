@@ -1,14 +1,11 @@
-{# PR-P3.2 — Overview-only identity hero. Renders the big oshi
-   art + stat tiles + bio + friend code for the viewed player.
-
-   Pulled OFF Matches/Achievements per UX scoping: those tabs are
-   for browsing data, not staring at the player's hero card. The
-   global nav's viewing-profile chip + the tab strip give them
-   enough context. Hero stays the "intro to this player" surface
-   on Overview only.
+{# PR-P3.4 — Overview hero. Restores PR-P3.1's "tabs embedded at
+   the top of the hero card" shape so the nav feels like part of
+   a bigger card. The same tabs-row markup is rendered standalone
+   in `_profile_tabs.html` for Matches/Achievements — same chip
+   styling, just smaller card around it (no oshi body).
 
    Required context vars (set by the route's _load_profile_or_404):
-     user, profile, oshi_image
+     user, profile, oshi_image, achievement_count
      standing, active_season, track_strengths, elo
      discord_verified
 #}
@@ -40,6 +37,10 @@
     <div class="pointer-events-none absolute inset-y-0 right-0 w-2/3 bg-gradient-to-l from-fuchsia-500/20 via-fuchsia-500/5 to-transparent"></div>
     <div class="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-cyan-500/15 via-transparent to-transparent"></div>
   {% endif %}
+
+  {# Tabs row at the top of the hero card (PR-P3.1 game-client
+     look). Same partial used standalone on Matches/Achievements. #}
+  {% include "profiles/_profile_tabs_row.html" %}
 
   <div class="relative grid gap-6 p-6 md:grid-cols-[3fr_2fr] md:p-10">
     <div class="space-y-5">

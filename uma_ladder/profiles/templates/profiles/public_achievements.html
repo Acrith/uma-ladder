@@ -4,8 +4,9 @@
 {% block title %}{{ profile.display_name or user.username }} · Achievements · Uma Ladder{% endblock %}
 {% block content %}
 
-  {# PR-P3.2 — tabs only on this sub-route. Identity context is
-     in the global nav chip; the big hero stays on Overview. #}
+  {# PR-P3.4 — minimal tabs-only card. Same chip-style tabs as
+     the Overview hero's embedded tab row, just without the oshi
+     body. Keeps the nav looking like part of a bigger surface. #}
   {% include "profiles/_profile_tabs.html" %}
 
   {# PR-P3 — Achievements tab. Revises PR-P2's "show only

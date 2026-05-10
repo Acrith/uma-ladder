@@ -3,8 +3,9 @@
 {% block title %}{{ profile.display_name or user.username }} · Matches · Uma Ladder{% endblock %}
 {% block content %}
 
-  {# PR-P3.2 — tabs only on this sub-route. Identity context is
-     in the global nav chip; the big hero stays on Overview. #}
+  {# PR-P3.4 — minimal tabs-only card. Same chip-style tabs as
+     the Overview hero's embedded tab row, just without the oshi
+     body. Keeps the nav looking like part of a bigger surface. #}
   {% include "profiles/_profile_tabs.html" %}
 
   {# ─── MATCH HISTORY (PR-P3) ──────────────────────────────────────
