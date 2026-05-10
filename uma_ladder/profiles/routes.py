@@ -221,6 +221,12 @@ def public(username: str) -> object:
         if profile.discord_user_id
         else False
     )
+    # PR-P2 — unlocked achievements only. Locked entries don't
+    # render here (per scoping); a future /achievements page can
+    # show the full catalogue for browsing.
+    from ..services import achievements as achievements_service
+
+    user_achievements = achievements_service.list_for_user(user.id)
     return render_template(
         "profiles/public.html",
         user=user,
@@ -237,4 +243,5 @@ def public(username: str) -> object:
         standing=standing,
         trainer=trainer,
         discord_verified=discord_verified,
+        user_achievements=user_achievements,
     )

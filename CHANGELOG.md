@@ -80,6 +80,16 @@ log for the full history.
   Foundation for future earnable special borders from seasons,
   tournaments, and trophies.
 
+- **Achievements.** Earned badges now appear on your public
+  profile. Linking your Discord and Google accounts grants the
+  matching badge instantly. Other badges (Founding Member,
+  First Race, First Win, Season Champion, etc.) are grantable
+  by admins for now — auto-grant logic for race results and
+  season closeouts will arrive in follow-up updates. Locked /
+  unearned badges don't render here so profiles stay clean;
+  visit any active player's profile to see what others have
+  earned.
+
 ## 2026-05-09
 
 ### Sign-in

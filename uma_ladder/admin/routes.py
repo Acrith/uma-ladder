@@ -90,11 +90,19 @@ def user_detail(user_id: int) -> object:
     user = db.session.get(User, user_id)
     if user is None:
         abort(404)
+    from ..services import achievements as achievements_service
+
+    catalogue = achievements_service.list_definitions()
+    user_grants = achievements_service.list_for_user(user_id)
+    granted_keys = {ua.achievement.key for ua in user_grants}
     return render_template(
         "admin/user_detail.html",
         user=user,
         roles=[r.value for r in Role],
         csrf_form=CsrfOnlyForm(),
+        achievements_catalogue=catalogue,
+        user_achievements=user_grants,
+        granted_achievement_keys=granted_keys,
     )
 
 
@@ -151,6 +159,96 @@ def update_user_role(user_id: int) -> object:
         flash("Cannot demote the last superadmin.")
     except admin_service.UnknownRoleError:
         flash("Unknown role.")
+    return redirect(url_for("admin.user_detail", user_id=user_id))
+
+
+# ─── Achievement grants (PR-P2) ──────────────────────────────────
+
+
+@bp.post("/users/<int:user_id>/achievements/grant")
+@min_role_required(Role.ADMIN)
+def grant_achievement(user_id: int) -> object:
+    """Manually grant an achievement to a user. Audit-logged so
+    we can trace who awarded what — important for community
+    badges where the source is judgment-based rather than
+    auto-derived."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    key = (request.form.get("key") or "").strip()
+    if not key:
+        flash("Pick an achievement to grant.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    from ..services import achievements as achievements_service
+
+    try:
+        existed_before = achievements_service.has_achievement(
+            user_id, key
+        )
+        achievements_service.grant(
+            target,
+            key,
+            source=f"admin:{current_user.username}",
+        )
+    except achievements_service.UnknownAchievementError:
+        flash(f"Unknown achievement key: {key!r}")
+    except achievements_service.AchievementError as exc:
+        flash(str(exc))
+    else:
+        if existed_before:
+            flash(f"@{target.username} already had {key!r}.")
+        else:
+            flash(f"Granted {key!r} to @{target.username}.")
+            admin_audit_service.log_action(
+                actor_user_id=current_user.id,
+                action="achievement_grant",
+                target_user_id=user_id,
+                details=key,
+            )
+    return redirect(url_for("admin.user_detail", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/achievements/revoke")
+@min_role_required(Role.ADMIN)
+def revoke_achievement(user_id: int) -> object:
+    """Remove an erroneously-granted achievement. Audit-logged.
+    The catalogue row stays; just the user's unlock disappears."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    key = (request.form.get("key") or "").strip()
+    from ..models import Achievement, UserAchievement
+
+    achievement = db.session.scalars(
+        select(Achievement).where(Achievement.key == key)
+    ).first() if key else None
+    if achievement is None:
+        flash(f"Unknown achievement key: {key!r}")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    row = db.session.scalars(
+        select(UserAchievement).where(
+            UserAchievement.user_id == user_id,
+            UserAchievement.achievement_id == achievement.id,
+        )
+    ).first()
+    if row is None:
+        flash(f"@{target.username} doesn't have {key!r}.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    db.session.delete(row)
+    db.session.commit()
+    flash(f"Revoked {key!r} from @{target.username}.")
+    admin_audit_service.log_action(
+        actor_user_id=current_user.id,
+        action="achievement_revoke",
+        target_user_id=user_id,
+        details=key,
+    )
     return redirect(url_for("admin.user_detail", user_id=user_id))
 
 

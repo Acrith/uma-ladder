@@ -21,6 +21,13 @@ def app() -> Iterator[Flask]:
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{path}"
     with app.app_context():
         db.create_all()
+        # PR-P2 — seed the achievements catalogue. db.create_all()
+        # only mirrors the model schema; data migrations don't run,
+        # so without this every achievements-related test would
+        # see an empty catalogue.
+        from uma_ladder.services.achievements import ensure_starter_seed
+
+        ensure_starter_seed()
     try:
         yield app
     finally:

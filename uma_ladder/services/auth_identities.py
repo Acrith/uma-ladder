@@ -75,12 +75,17 @@ def link_identity(user: User, profile: ProviderProfile) -> AuthIdentity:
     `<@id>` pings keep working without the user having to set the
     field manually. The OAuth flow is more authoritative than the
     manual entry — we just always overwrite.
+
+    PR-P2 — also grants the corresponding ``link_<provider>``
+    achievement (idempotently, so re-linking after an unlink
+    doesn't double-grant).
     """
     existing = find_identity(profile.provider, profile.external_id)
     if existing is not None:
         if existing.user_id == user.id:
             _refresh_identity_fields(existing, profile)
             db.session.commit()
+            _grant_oauth_link_achievement(user, profile.provider)
             return existing
         raise IdentityAlreadyLinkedError(
             f"{profile.provider} identity {profile.external_id!r} "
@@ -104,7 +109,37 @@ def link_identity(user: User, profile: ProviderProfile) -> AuthIdentity:
             prof.discord_handle = profile.external_username
 
     db.session.commit()
+    _grant_oauth_link_achievement(user, profile.provider)
     return identity
+
+
+def _grant_oauth_link_achievement(user: User, provider: str) -> None:
+    """Best-effort hook into the achievements service. Wrapped in a
+    try/except so an achievements-side bug can't prevent the OAuth
+    link itself — we'd rather lose a badge grant than a login.
+    Idempotent on the achievements side (existing grant returns
+    the existing row), so safe to call from both link and re-link
+    branches above."""
+    from . import achievements as achievements_service
+
+    key = f"link_{provider}"
+    try:
+        achievements_service.grant(user, key, source="oauth_callback")
+    except achievements_service.UnknownAchievementError:
+        # Catalogue out of sync with code (e.g. seed not run yet
+        # in a fresh dev DB). Log-and-continue rather than 500.
+        from flask import current_app
+
+        current_app.logger.warning(
+            "achievement %r not in catalogue; skipping grant", key
+        )
+    except Exception:  # noqa: BLE001
+        # Defense in depth — never break login over a badge.
+        from flask import current_app
+
+        current_app.logger.exception(
+            "failed to grant achievement %r for user %s", key, user.id
+        )
 
 
 def unlink_identity(user: User, provider: str) -> bool:
@@ -192,6 +227,7 @@ def create_user_for_oauth(profile: ProviderProfile) -> User:
         )
 
     db.session.commit()
+    _grant_oauth_link_achievement(user, profile.provider)
     return user
 
 

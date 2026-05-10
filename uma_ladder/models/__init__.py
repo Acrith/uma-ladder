@@ -1,3 +1,4 @@
+from .achievements import Achievement, UserAchievement
 from .admin_audit import AdminAuditLog
 from .auth_identity import AuthIdentity
 from .champions_meeting import ChampionsMeeting
@@ -53,6 +54,7 @@ from .users import Role, User
 
 __all__ = [
     "VENUES",
+    "Achievement",
     "AdminAuditLog",
     "AuthIdentity",
     "ChampionsMeeting",
@@ -97,6 +99,7 @@ __all__ = [
     "UploadPurpose",
     "UploadedImage",
     "User",
+    "UserAchievement",
     "UserNotification",
     "UserProfile",
     "Weather",

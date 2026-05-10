@@ -545,6 +545,36 @@
       {{ empty_card("In-game stats", "Not linked", "Set your in-game friend code on the profile editor to pull club, fans, and rank from uma.moe.") }}
     {% endif %}
 
+    {# PR-P2 — Achievements card. Renders only unlocked badges
+       per scoping (locked entries don't appear here; a future
+       /achievements browse page can list the full catalogue).
+       Card hides entirely when the user has no unlocks — keeps
+       fresh accounts clean. #}
+    {% if user_achievements %}
+      {% set tier_classes = {
+        "gold": "border-amber-500/40 bg-amber-500/5 text-amber-200",
+        "silver": "border-slate-300/30 bg-slate-200/5 text-slate-200",
+        "bronze": "border-orange-500/40 bg-orange-500/5 text-orange-200",
+        "slate": "border-slate-700 bg-slate-800/40 text-slate-300",
+      } %}
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <p class="label-eyebrow">Achievements</p>
+          <span class="text-xs text-slate-500">{{ user_achievements | length }} earned</span>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          {% for ua in user_achievements %}
+            {% set tone = tier_classes.get(ua.achievement.tier, tier_classes["slate"]) %}
+            <div class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium {{ tone }}"
+                 title="{{ ua.achievement.description }} · earned {{ ua.unlocked_at.strftime('%Y-%m-%d') }}">
+              <span>{{ ua.achievement.icon }}</span>
+              <span>{{ ua.achievement.name }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endcall %}
+    {% endif %}
+
   </section>
 
   <script>
