@@ -135,19 +135,19 @@ def new() -> object:
     # unset (no friend code, never synced); the form still allows
     # picking Club but the service-layer guard rejects it with a
     # clean error pointing them at the profile refresh path.
+    # PR-M1 — name comes from the first-class Club cache instead
+    # of re-fetching the uma.moe trainer summary on every render.
+    from ..services import clubs as clubs_service
     from ..services import profiles as profiles_service
 
     organizer_profile = profiles_service.get_or_create_profile(current_user)
     organizer_club_id = organizer_profile.club_id
-    organizer_club_name: str | None = None
-    if organizer_club_id is not None and organizer_profile.friend_code:
-        from ..services import uma_moe as uma_moe_service
-
-        trainer = uma_moe_service.fetch_trainer_summary(
-            organizer_profile.friend_code
-        )
-        if trainer is not None:
-            organizer_club_name = trainer.circle_name
+    organizer_club = (
+        clubs_service.get_club(organizer_club_id)
+        if organizer_club_id is not None
+        else None
+    )
+    organizer_club_name = organizer_club.name if organizer_club else None
     return render_template(
         "official/new.html",
         form=form,
@@ -195,20 +195,21 @@ def detail(race_id: int) -> object:
     expired = official_service.is_room_code_expired(race)
     # PR-L1 — when the race is Club-only, surface the organizer's
     # club name on the chip so non-members understand what they're
-    # looking at. Pulled from the existing uma.moe trainer cache —
-    # no extra fetch when the cache is fresh.
+    # looking at. PR-M1 — sourced from the first-class Club cache,
+    # so we don't re-fetch the uma.moe trainer cache for the
+    # organizer's friend_code on every detail render.
+    club_id: int | None = None
     club_name: str | None = None
     if race.visibility == "club":
+        from ..services import clubs as clubs_service
         from ..services import profiles as profiles_service
-        from ..services import uma_moe as uma_moe_service
 
         organizer_profile = profiles_service.get_or_create_profile(race.organizer)
-        if organizer_profile.friend_code:
-            trainer = uma_moe_service.fetch_trainer_summary(
-                organizer_profile.friend_code
-            )
-            if trainer is not None:
-                club_name = trainer.circle_name
+        club_id = organizer_profile.club_id
+        if club_id is not None:
+            club = clubs_service.get_club(club_id)
+            if club is not None:
+                club_name = club.name
     return render_template(
         "official/detail.html",
         race=race,
@@ -219,6 +220,7 @@ def detail(race_id: int) -> object:
         results_form=results_form,
         csrf_form=csrf_form,
         room_code_expired=expired,
+        club_id=club_id,
         club_name=club_name,
     )
 

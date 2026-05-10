@@ -1,6 +1,7 @@
 from .admin_audit import AdminAuditLog
 from .auth_identity import AuthIdentity
 from .champions_meeting import ChampionsMeeting
+from .club import Club
 from .draft_invite import DraftMatchInvite
 from .draft_matches import (
     DraftEloChange,
@@ -54,6 +55,7 @@ __all__ = [
     "AdminAuditLog",
     "AuthIdentity",
     "ChampionsMeeting",
+    "Club",
     "Direction",
     "DistanceCategory",
     "DiscordNotificationAttempt",

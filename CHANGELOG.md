@@ -16,6 +16,16 @@ log for the full history.
   subsequent visits log you straight in. We request only your
   Google ID and display name — no email, no contacts, no Drive.
 
+### Clubs
+
+- **Club pages.** A new `/clubs/<id>` page lists every Uma Ladder
+  member of a uma.moe club. Click any club name from a player's
+  profile or a Club-only race chip to land on it. The page links
+  out to uma.moe for the deep stats view; the roster + (eventually)
+  per-club ladder live on Uma Ladder. Member rows reuse the same
+  card style as the Players index — avatar, display name,
+  username, oshi.
+
 ## 2026-05-09
 
 ### Sign-in

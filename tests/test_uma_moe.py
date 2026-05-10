@@ -191,9 +191,11 @@ def test_public_profile_renders_card_when_friend_code_set(
     assert "2,000,000" in body  # gain_7d
     assert "Global rank" in body
     assert "via uma.moe" in body
-    # PR-J7 — the club name must link to uma.moe/circles/<circle_id>
-    # so trainers can hop to the club page.
-    assert 'href="https://uma.moe/circles/9999"' in body
+    # PR-J7 → PR-M1 — the Club tile now links to the internal
+    # /clubs/<id> page (member roster + future per-club ladder); the
+    # uma.moe deep link survives as the "View on uma.moe →" button
+    # on the Club page itself.
+    assert 'href="/clubs/9999"' in body
 
 
 def test_public_profile_links_trainer_name_to_uma_moe(

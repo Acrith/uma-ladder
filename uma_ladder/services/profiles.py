@@ -90,7 +90,8 @@ def find_user_by_username(username: str) -> User | None:
 
 def sync_club_id_from_trainer(profile: UserProfile, trainer) -> None:  # noqa: ANN001
     """Reconcile ``profile.club_id`` from a freshly-fetched
-    ``TrainerSummary`` (PR-L1).
+    ``TrainerSummary`` (PR-L1) and refresh the first-class Club
+    cache (PR-M1).
 
     The mirror is what Club-only race visibility consults — kept on
     UserProfile so the visibility check is a single field compare,
@@ -99,17 +100,25 @@ def sync_club_id_from_trainer(profile: UserProfile, trainer) -> None:  # noqa: A
     ``uma_moe.fetch_trainer_summary``.
 
     Idempotent: only writes when the value actually changes, so
-    repeated profile views don't generate noisy commits.
+    repeated profile views don't generate noisy commits. The Club
+    upsert is also idempotent (skips writes when the cached name
+    hasn't changed and the row is fresh).
 
     `trainer` is typed loosely (``Any``) to avoid a circular import
-    with ``services.uma_moe`` — duck-typed access of ``circle_id``
-    is enough.
+    with ``services.uma_moe`` — duck-typed access of ``circle_id`` /
+    ``circle_name`` is enough.
     """
+    from . import clubs as clubs_service
+
     new_value = getattr(trainer, "circle_id", None) if trainer else None
-    if profile.club_id == new_value:
-        return
-    profile.club_id = new_value
-    db.session.commit()
+    if profile.club_id != new_value:
+        profile.club_id = new_value
+        db.session.commit()
+
+    # Always feed the trainer summary into the Club cache, even when
+    # the user's club_id didn't change — the *club's* name may have
+    # been renamed upstream.
+    clubs_service.upsert_club_from_trainer(trainer)
 
 
 @dataclass(frozen=True)

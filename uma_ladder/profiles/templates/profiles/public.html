@@ -522,10 +522,12 @@
           <div class="rounded-lg border border-slate-800 bg-slate-950/30 p-2.5">
             <p class="text-[10px] uppercase tracking-wider text-slate-500">Club</p>
             <p class="mt-0.5 truncate text-sm text-slate-200">
+              {# PR-M1 — link points to the internal /clubs/<id> page
+                 (member roster, future per-club ladder). The Club
+                 page itself surfaces the uma.moe link as a secondary
+                 "View on uma.moe" button. #}
               {% if trainer.circle_name and trainer.circle_id %}
-                <a href="https://uma.moe/circles/{{ trainer.circle_id }}"
-                   target="_blank"
-                   rel="noopener noreferrer"
+                <a href="{{ url_for('clubs.detail', circle_id=trainer.circle_id) }}"
                    class="text-cyan-300 hover:text-cyan-200">{{ trainer.circle_name }}</a>
               {% else %}
                 {{ trainer.circle_name or '—' }}

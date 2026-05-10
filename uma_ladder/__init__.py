@@ -58,6 +58,7 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
 def _register_blueprints(app: Flask) -> None:
     from .admin.routes import bp as admin_bp
     from .auth.routes import bp as auth_bp
+    from .clubs.routes import bp as clubs_bp
     from .dashboard.routes import bp as dashboard_bp
     from .draft.routes import bp as draft_bp
     from .inbox.routes import bp as inbox_bp
@@ -71,6 +72,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(profiles_bp, url_prefix="/profiles")
+    app.register_blueprint(clubs_bp, url_prefix="/clubs")
     app.register_blueprint(official_bp, url_prefix="/official")
     app.register_blueprint(draft_bp, url_prefix="/draft")
     app.register_blueprint(presets_bp, url_prefix="/presets")

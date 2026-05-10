@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, empty_card %}
+{% from "_icons.html" import users as icon_users %}
+{% block title %}{{ (club.name if club and club.name else 'Club #' ~ circle_id) }} · Uma Ladder{% endblock %}
+{% block content %}
+
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div class="min-w-0">
+      <p class="label-eyebrow">Club</p>
+      <h1 class="mt-1 flex items-center gap-2 text-2xl font-semibold text-slate-100">
+        {{ icon_users(class="h-6 w-6 text-cyan-300") }}
+        <span class="truncate">
+          {% if club and club.name %}{{ club.name }}{% else %}Club #{{ circle_id }}{% endif %}
+        </span>
+      </h1>
+      <p class="mt-1 text-xs text-slate-500">
+        uma.moe ID <span class="font-mono text-slate-400">{{ circle_id }}</span>
+        {%- if club and club.cached_at %} · cached {{ club.cached_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}
+      </p>
+    </div>
+    <a href="https://uma.moe/circles/{{ circle_id }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="btn-ghost text-xs">
+      View on uma.moe →
+    </a>
+  </div>
+
+  <section class="mt-6">
+    {% if members %}
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <p class="label-eyebrow">Members on Uma Ladder</p>
+          <span class="text-xs text-slate-500">{{ members | length }} player{% if members | length != 1 %}s{% endif %}</span>
+        </div>
+        <ul class="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {% for u, profile in members %}
+            <li>
+              <a href="{{ url_for('profiles.public', username=u.username) }}"
+                 class="surface-card flex items-center gap-3 p-3 transition hover:border-cyan-500/40">
+                {% if profile and profile.avatar_url %}
+                  <img src="{{ profile.avatar_url }}"
+                       alt=""
+                       loading="lazy"
+                       class="h-10 w-10 shrink-0 rounded-xl border border-slate-800 object-cover {% if profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}" />
+                {% else %}
+                  <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-800 bg-slate-800 text-base font-semibold text-slate-300 {% if profile and profile.oshi %}ring-2 ring-fuchsia-400 shadow-glow-fuchsia{% endif %}">
+                    {{ u.username[:1] | upper }}
+                  </div>
+                {% endif %}
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-medium text-slate-100">
+                    {% if profile and profile.display_name %}{{ profile.display_name }}{% else %}{{ u.username }}{% endif %}
+                  </p>
+                  <p class="truncate text-xs text-slate-500">@{{ u.username }}</p>
+                  {% if profile and profile.oshi %}
+                    <p class="truncate text-[11px] text-fuchsia-200/80">
+                      {{ profile.oshi.name_en }}
+                      {%- if profile.oshi_outfit %} · {{ profile.oshi_outfit.display_title }}{% endif %}
+                    </p>
+                  {% endif %}
+                </div>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    {% else %}
+      {{ empty_card(
+        "Members on Uma Ladder",
+        "No registered members yet",
+        "Nobody from this club has linked their friend code on Uma Ladder. Once any club member sets their friend code on the profile editor and visits their public profile, they'll show up here automatically."
+      ) }}
+    {% endif %}
+  </section>
+
+  <p class="mt-6 text-xs text-slate-500">
+    Roster is built from Uma Ladder members whose linked friend code points at this club on uma.moe. We don't enumerate every uma.moe member of the club here.
+  </p>
+
+{% endblock %}

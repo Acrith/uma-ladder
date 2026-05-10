@@ -26,10 +26,24 @@
           </span>
         {% endif %}
         {% if race.visibility == "club" %}
-          <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
-            {{ icon_users(class="h-3 w-3") }}
-            {% if club_name %}Club: {{ club_name }}{% else %}Club only{% endif %}
-          </span>
+          {# PR-M1 — when we know the club_id, the chip becomes a
+             link to the internal /clubs/<id> page (member roster +
+             future per-club ladder). Falls back to a plain chip
+             when the organizer has no synced club_id (rare; happens
+             only if their friend code was unset between race
+             creation and now). #}
+          {% if club_id %}
+            <a href="{{ url_for('clubs.detail', circle_id=club_id) }}"
+               class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-cyan-500/10 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/20 hover:text-cyan-200">
+              {{ icon_users(class="h-3 w-3") }}
+              {% if club_name %}Club: {{ club_name }}{% else %}Club only{% endif %}
+            </a>
+          {% else %}
+            <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
+              {{ icon_users(class="h-3 w-3") }}
+              Club only
+            </span>
+          {% endif %}
         {% endif %}
         {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
         {% if race.preset %}{{ chip(race.preset.name, "violet") }}{% endif %}
