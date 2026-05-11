@@ -44,6 +44,12 @@
     {% endcall %}
 
     {% call card(class="p-5") %}
+      <p class="label-eyebrow">Reports</p>
+      <p class="mt-1 text-sm text-slate-400">User-on-user moderation reports.</p>
+      <a href="{{ url_for('admin.reports_queue') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Open queue →</a>
+    {% endcall %}
+
+    {% call card(class="p-5") %}
       <p class="label-eyebrow">Champions Meeting</p>
       <p class="mt-1 text-sm text-slate-400">Upcoming CM schedule shown on the dashboard.</p>
       <a href="{{ url_for('admin.cm_list') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage CMs →</a>

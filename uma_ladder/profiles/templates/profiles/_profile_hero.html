@@ -227,4 +227,40 @@
     </div>
     <div class="hidden md:block"></div>
   </div>
+
+  {# PR-Q3b — Report this user. Subtle footer strip on the hero;
+     visible only when an authenticated viewer is looking at
+     someone else's profile. Details/summary keeps the form
+     collapsed by default so the hero stays clean. Reason text-
+     area is capped on the server side at 500 chars. #}
+  {% if current_user.is_authenticated and current_user.id != user.id %}
+    <div class="relative border-t border-slate-800/60 px-6 py-3 md:px-10">
+      <details class="group">
+        <summary class="cursor-pointer list-none text-xs text-slate-500 transition hover:text-rose-300">
+          <span class="inline-flex items-center gap-1.5">
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21V4m0 0h13l-3 4 3 4H3"/></svg>
+            Report this user
+          </span>
+        </summary>
+        <form method="post" action="{{ url_for('profiles.report', username=user.username) }}" class="mt-3 space-y-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <p class="text-xs text-slate-400">
+            Reports go to admins for review. Include enough detail
+            (race ID, draft match link, screenshot URL) for someone
+            who wasn't there to act on it. False reports are tracked.
+          </p>
+          <textarea name="reason"
+                    rows="3"
+                    maxlength="500"
+                    required
+                    placeholder="What's going on?"
+                    class="input-base resize-y"></textarea>
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[11px] text-slate-500">Max 500 characters.</p>
+            <button type="submit" class="btn-warning text-xs">Send report</button>
+          </div>
+        </form>
+      </details>
+    </div>
+  {% endif %}
 </article>

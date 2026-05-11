@@ -6,6 +6,23 @@ log for the full history.
 
 ## 2026-05-11
 
+### Safety
+
+- **Report this user.** A new collapsed *Report this user* control
+  on each player profile (visible only to logged-in viewers looking
+  at someone else's profile) lets the community flag bad behaviour
+  for admin review. Reports include a free-text reason (capped at
+  500 characters) and the URL the report was filed from so an admin
+  can jump straight to the context. The new **Admin → Reports**
+  queue lists open reports newest first; each row shows a
+  credibility chip (e.g. *3 prior dismissed*) when the reporter has
+  previously had reports dismissed, so admins can weigh suspicious
+  reporting patterns at a glance. Resolving a report is a one-click
+  *Mark actioned* or *Dismiss* with an optional notes field for the
+  next admin reviewing the log. Reports are rate-limited at 5 per
+  hour per IP to keep the queue scannable; all transitions are
+  audit-logged.
+
 ### Admin
 
 - **Disable account (soft delete).** A new **Moderation** card on

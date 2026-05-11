@@ -358,3 +358,45 @@ def public_achievements(username: str) -> object:
         total_count=len(catalogue),
         **base,
     )
+
+
+# ─── PR-Q3b — Report this user ──────────────────────────────────
+
+
+@bp.post("/<username>/report")
+@login_required
+@limiter.limit("5 per hour")
+def report(username: str) -> object:
+    """File a moderation report on `username`. Rate-limited to 5
+    per hour per IP — enough for the legitimate "this user is
+    cheating / harassing me" case across a few targets, tight
+    enough that a bad actor can't bury the admin queue. Reasons
+    are capped to MAX_REASON_CHARS by the service."""
+    from ..services import reports as reports_service
+
+    target = profiles_service.find_user_by_username(username)
+    if target is None or target.disabled_at is not None:
+        # Disabled users have already been moderated — no point
+        # filing a report. 404 keeps the surface consistent with
+        # the public profile route's behaviour.
+        abort(404)
+    reason = (request.form.get("reason") or "").strip()
+    if not reason:
+        flash("Reason is required.")
+        return redirect(url_for("profiles.public", username=username))
+    context = url_for("profiles.public", username=username)
+    try:
+        reports_service.file_report(
+            reporter=current_user,
+            reported_user_id=target.id,
+            reason=reason,
+            context=context,
+        )
+    except reports_service.SelfReportError:
+        flash("You can't report yourself.")
+        return redirect(url_for("profiles.public", username=username))
+    except reports_service.ReportError as exc:
+        flash(str(exc))
+        return redirect(url_for("profiles.public", username=username))
+    flash("Report sent. An admin will review it.")
+    return redirect(url_for("profiles.public", username=username))

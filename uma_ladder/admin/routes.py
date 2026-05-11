@@ -19,6 +19,7 @@ from ..services import admin as admin_service
 from ..services import admin_audit as admin_audit_service
 from ..services import cm as cm_service
 from ..services import draft as draft_service
+from ..services import reports as reports_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
 from ..services.redirects import safe_redirect_target
@@ -603,6 +604,67 @@ def season_edit(season_id: int) -> object:
         season=season,
         csrf_form=csrf_form,
     )
+
+
+@bp.get("/reports")
+@min_role_required(Role.ADMIN)
+def reports_queue() -> object:
+    """PR-Q3b — moderation queue for user-on-user reports. Paginated
+    open reports newest first. Each row carries a credibility
+    chip showing how many of that reporter's prior reports were
+    dismissed."""
+    page = max(1, request.args.get("page", 1, type=int))
+    page_obj = reports_service.list_open(page=page, page_size=25)
+    dismissed_counts = {
+        r.reporter_user_id: reports_service.dismissed_count_for_reporter(
+            r.reporter_user_id
+        )
+        for r in page_obj.entries
+    }
+    return render_template(
+        "admin/reports.html",
+        page=page_obj,
+        dismissed_counts=dismissed_counts,
+        csrf_form=CsrfOnlyForm(),
+    )
+
+
+@bp.post("/reports/<int:report_id>/action")
+@min_role_required(Role.ADMIN)
+def reports_action(report_id: int) -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    notes = (request.form.get("notes") or "").strip() or None
+    try:
+        reports_service.mark_actioned(
+            report_id, actor=current_user, notes=notes
+        )
+        flash(f"Report #{report_id} marked as actioned.")
+    except reports_service.ReportNotFoundError:
+        abort(404)
+    except reports_service.AlreadyResolvedError:
+        flash(f"Report #{report_id} is already resolved.")
+    return redirect(url_for("admin.reports_queue"))
+
+
+@bp.post("/reports/<int:report_id>/dismiss")
+@min_role_required(Role.ADMIN)
+def reports_dismiss(report_id: int) -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    notes = (request.form.get("notes") or "").strip() or None
+    try:
+        reports_service.dismiss(
+            report_id, actor=current_user, notes=notes
+        )
+        flash(f"Report #{report_id} dismissed.")
+    except reports_service.ReportNotFoundError:
+        abort(404)
+    except reports_service.AlreadyResolvedError:
+        flash(f"Report #{report_id} is already resolved.")
+    return redirect(url_for("admin.reports_queue"))
 
 
 @bp.get("/audit")

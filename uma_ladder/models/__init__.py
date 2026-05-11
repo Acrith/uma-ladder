@@ -44,6 +44,7 @@ from .official_races import (
 )
 from .presets import RacePreset
 from .profiles import UserProfile
+from .reports import Report, ReportStatus
 from .seasons import Season
 from .uma_character import UmaCharacter
 from .uma_moe_cache import UmaMoeCache
@@ -88,6 +89,8 @@ __all__ = [
     "RacePreset",
     "RaceSeason",
     "RegistrationStatus",
+    "Report",
+    "ReportStatus",
     "Role",
     "Season",
     "SeasonStatus",
