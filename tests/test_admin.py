@@ -346,3 +346,139 @@ def test_admin_route_full_recovery_round_trip(
         follow_redirects=False,
     )
     assert good.status_code == 302
+
+
+# ---------------------------------------------------------------------------
+# PR-R1 — delete_user. Superadmin-gated; CASCADE FKs handle children.
+
+
+def test_delete_user_service_blocks_self(app: Flask, make_user) -> None:
+    only_super = make_user(username="lone_sup", role=Role.SUPERADMIN)
+    with app.app_context():
+        u = db.session.get(User, only_super["id"])
+        with pytest.raises(admin_service.CannotEditSelfError):
+            admin_service.delete_user(actor=u, target=u)
+        # Untouched.
+        assert db.session.get(User, only_super["id"]) is not None
+
+
+def test_delete_user_service_blocks_last_superadmin(
+    app: Flask, make_user
+) -> None:
+    target = make_user(username="onlysup", role=Role.SUPERADMIN)
+    helper = make_user(username="adm_helper", role=Role.ADMIN)
+    with app.app_context():
+        actor = db.session.get(User, helper["id"])
+        # Forge a superadmin actor without committing — same pattern as
+        # the demote-last-superadmin test, so we exercise the count
+        # guard rather than the rank guard.
+        db.session.expunge(actor)
+        actor.role = Role.SUPERADMIN
+        t = db.session.get(User, target["id"])
+        with pytest.raises(admin_service.LastSuperadminError):
+            admin_service.delete_user(actor=actor, target=t)
+        assert db.session.get(User, target["id"]) is not None
+
+
+def test_delete_user_service_succeeds_and_cascades(
+    app: Flask, make_user
+) -> None:
+    """Happy path: superadmin deletes a regular user. The CASCADE
+    FKs on the User PK sweep profile + identities; we verified the
+    ORM cascade in test_app_factory_hardening, so here we just
+    confirm the user row is gone + the audit row is in."""
+    from uma_ladder.models import AdminAuditLog
+
+    super_a = make_user(username="sup_a", role=Role.SUPERADMIN)
+    super_b = make_user(username="sup_b", role=Role.SUPERADMIN)  # keeps quorum
+    victim = make_user(username="goner", role=Role.USER)
+    with app.app_context():
+        actor = db.session.get(User, super_a["id"])
+        target = db.session.get(User, victim["id"])
+        admin_service.delete_user(actor=actor, target=target)
+        assert db.session.get(User, victim["id"]) is None
+        # Sanity: super_b still around so the quorum guard wasn't tripped.
+        assert db.session.get(User, super_b["id"]) is not None
+        # Audit row written, mentions the deleted username.
+        row = db.session.scalars(
+            db.select(AdminAuditLog).where(AdminAuditLog.action == "user_delete")
+        ).first()
+        assert row is not None
+        assert "goner" in (row.details or "")
+
+
+def test_admin_route_delete_requires_superadmin(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Plain admins must not see the route — `min_role_required`
+    on the route is the policy gate, not the service."""
+    make_user(username="adm", role=Role.ADMIN)
+    target = make_user(username="goner", role=Role.USER)
+    _login(client, "adm")
+    resp = client.post(
+        f"/admin/users/{target['id']}/delete",
+        data={"confirm_username": "goner"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+    with app.app_context():
+        assert db.session.get(User, target["id"]) is not None
+
+
+def test_admin_route_delete_rejects_wrong_confirm(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Typo / wrong username in the confirmation field bounces back
+    with a flash; row stays. Belt-and-suspenders against fat-finger."""
+    make_user(username="sup", role=Role.SUPERADMIN)
+    make_user(username="sup2", role=Role.SUPERADMIN)  # quorum
+    target = make_user(username="goner", role=Role.USER)
+    _login(client, "sup")
+    resp = client.post(
+        f"/admin/users/{target['id']}/delete",
+        data={"confirm_username": "wrong"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert f"/admin/users/{target['id']}" in resp.headers["Location"]
+    with app.app_context():
+        assert db.session.get(User, target["id"]) is not None
+
+
+def test_admin_route_delete_happy_path(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="sup", role=Role.SUPERADMIN)
+    make_user(username="sup2", role=Role.SUPERADMIN)  # quorum
+    target = make_user(username="goner", role=Role.USER)
+    _login(client, "sup")
+    resp = client.post(
+        f"/admin/users/{target['id']}/delete",
+        data={"confirm_username": "goner"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/admin/users")
+    with app.app_context():
+        assert db.session.get(User, target["id"]) is None
+
+
+def test_admin_route_delete_username_check_case_insensitive(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Usernames are stored lowercased, but the confirmation
+    `.lower()` step means typing them in any case still matches.
+    Avoids confusing the admin when the displayed label feels
+    proper-cased even though storage is lower."""
+    make_user(username="sup", role=Role.SUPERADMIN)
+    make_user(username="sup2", role=Role.SUPERADMIN)
+    target = make_user(username="goner", role=Role.USER)
+    _login(client, "sup")
+    resp = client.post(
+        f"/admin/users/{target['id']}/delete",
+        data={"confirm_username": "GoNeR"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        assert db.session.get(User, target["id"]) is None

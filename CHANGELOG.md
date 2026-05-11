@@ -4,6 +4,29 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-05-11
+
+### Admin
+
+- **Delete user from the admin panel.** A new **Danger zone** card
+  on the admin user detail page lets a superadmin permanently remove
+  an account — useful for cleaning up duplicates created when
+  someone clicks "Continue with Discord" instead of logging in.
+  Type the username to confirm; the deletion sweeps profile, linked
+  OAuth identities, draft match participations, race registrations,
+  inbox notifications and achievements. Past *race results* (saved
+  placings) survive as `@?` so leaderboards and history stay
+  consistent. Audit-logged. Superadmin-only for now; admin-level
+  access can be granted later by relaxing the route gate.
+
+### Official races
+
+- **Display names on the registration list.** The Registrations card
+  and the manual results entry form on a race detail page now show
+  each player's display name (proper-cased, may contain spaces)
+  instead of their lowercased storage username. Same pattern the
+  Players index and Rankings table already use.
+
 ## 2026-05-10
 
 ### Sign-in

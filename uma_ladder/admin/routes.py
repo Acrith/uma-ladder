@@ -136,6 +136,39 @@ def issue_password_reset(user_id: int) -> object:
     )
 
 
+@bp.post("/users/<int:user_id>/delete")
+@min_role_required(Role.SUPERADMIN)
+def delete_user(user_id: int) -> object:
+    """PR-R1 — superadmin-gated hard delete. The user is required to
+    type the target username into a confirmation field; if it doesn't
+    match, we flash and bounce back without touching the row. CASCADE
+    FKs handle the dependent rows; `official_race_results.user_id` is
+    SET NULL so race history rows survive as `@?`."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    typed = (request.form.get("confirm_username") or "").strip().lower()
+    if typed != target.username.lower():
+        flash(
+            f"Confirmation didn't match — type @{target.username} exactly to delete."
+        )
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    username = target.username
+    try:
+        admin_service.delete_user(actor=current_user, target=target)
+    except admin_service.CannotEditSelfError:
+        flash("You cannot delete your own account.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    except admin_service.LastSuperadminError:
+        flash("Cannot delete the last superadmin.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    flash(f"@{username} deleted.")
+    return redirect(url_for("admin.users_list"))
+
+
 @bp.post("/users/<int:user_id>/role")
 @min_role_required(Role.ADMIN)
 def update_user_role(user_id: int) -> object:
