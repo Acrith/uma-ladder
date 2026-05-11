@@ -6,6 +6,20 @@ log for the full history.
 
 ## 2026-05-11
 
+### Safety
+
+- **Per-IP rate limiting on sensitive endpoints.** Registration,
+  login, password-reset request, OAuth callbacks (Discord +
+  Google), profile updates, avatar removal, and every OCR /
+  screenshot upload route now have per-IP rate limits sized for
+  legitimate use. A flood of attempts (e.g. mass-account creation
+  or rapid OCR upload) hits a friendly **Too many requests** page
+  with the limit and "try again later" instead of consuming
+  resources. Login already had per-username lockout (PR-J10); this
+  adds the per-IP cap so the two layers compose. In-memory
+  counters reset on app restart; we'll move to a shared backend
+  when we scale beyond one Fly machine.
+
 ### Admin
 
 - **Delete user from the admin panel.** A new **Danger zone** card

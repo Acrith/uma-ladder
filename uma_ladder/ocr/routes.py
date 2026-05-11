@@ -14,7 +14,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from ..extensions import db
+from ..extensions import db, limiter
 from ..models import OcrParseAttempt, UploadedImage
 from ..services import ocr as ocr_service
 from .forms import CsrfOnlyForm, UploadForm
@@ -29,6 +29,7 @@ def index() -> object:
 
 @bp.route("/upload", methods=["GET", "POST"])
 @login_required
+@limiter.limit("30 per hour", methods=["POST"])
 def upload() -> object:
     form = UploadForm()
     if form.validate_on_submit():

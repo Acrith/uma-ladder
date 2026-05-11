@@ -12,7 +12,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from ..extensions import db
+from ..extensions import db, limiter
 from ..models import UploadedImage
 from ..models.enums import UploadPurpose
 from ..services import auth_identities as identity_service
@@ -34,6 +34,7 @@ def index() -> object:
 
 @bp.route("/me", methods=["GET", "POST"])
 @login_required
+@limiter.limit("30 per hour", methods=["POST"])
 def me() -> object:
     profile = profiles_service.get_or_create_profile(current_user)
     form = ProfileForm(obj=profile)
@@ -168,6 +169,7 @@ def partial_outfits() -> object:
 
 @bp.post("/me/avatar/remove")
 @login_required
+@limiter.limit("30 per hour")
 def remove_avatar() -> object:
     """Clear the user's avatar_url. The underlying UploadedImage row is
     kept so storage usage stays small enough that we don't need a GC

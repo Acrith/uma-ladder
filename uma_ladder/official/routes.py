@@ -11,7 +11,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from ..extensions import db
+from ..extensions import db, limiter
 from ..models import (
     OcrParseAttempt,
     OfficialRaceRegistration,
@@ -505,6 +505,7 @@ def submit_results(race_id: int) -> object:
 
 @bp.post("/<int:race_id>/results-screenshot")
 @min_role_required(Role.ORGANIZER)
+@limiter.limit("30 per hour")
 def upload_result_screenshot(race_id: int) -> object:
     """Step 1 of the OCR-driven results flow: organiser uploads a result
     screenshot. We save the image, run the configured OCR provider, and
@@ -598,6 +599,7 @@ def _match_ocr_to_registrations(
 
 @bp.post("/<int:race_id>/results/<int:result_id>/details-screenshot")
 @min_role_required(Role.ORGANIZER)
+@limiter.limit("30 per hour")
 def upload_result_details_screenshot(race_id: int, result_id: int) -> object:
     """Step 1 of the per-result OCR enrichment flow: upload a stat-screen
     screenshot for one specific completed result. Saves + parses, then

@@ -15,6 +15,7 @@ from flask import (
 )
 from flask_login import current_user, login_required, login_user, logout_user
 
+from ..extensions import limiter
 from ..services import auth as auth_service
 from ..services import auth_identities as identity_service
 from ..services import oauth as oauth_service
@@ -102,6 +103,7 @@ def index() -> str:
 
 
 @bp.route("/register", methods=["GET", "POST"])
+@limiter.limit("5 per hour", methods=["POST"])
 def register() -> object:
     if current_user.is_authenticated:
         return redirect(url_for("dashboard.index"))
@@ -125,6 +127,7 @@ def register() -> object:
 
 
 @bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("20 per 15 minutes", methods=["POST"])
 def login() -> object:
     if current_user.is_authenticated:
         return redirect(url_for("dashboard.index"))
@@ -168,6 +171,7 @@ def logout() -> object:
 
 
 @bp.route("/reset", methods=["GET", "POST"])
+@limiter.limit("5 per hour", methods=["POST"])
 def request_reset() -> object:
     form = RequestResetForm()
     issued_token: str | None = None
@@ -353,6 +357,7 @@ def discord_start() -> object:
 
 
 @bp.get("/discord/callback")
+@limiter.limit("10 per hour")
 def discord_callback() -> object:
     return _oauth_callback("discord")
 
@@ -397,6 +402,7 @@ def google_start() -> object:
 
 
 @bp.get("/google/callback")
+@limiter.limit("10 per hour")
 def google_callback() -> object:
     return _oauth_callback("google")
 

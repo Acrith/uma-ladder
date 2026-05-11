@@ -6,7 +6,7 @@ from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import BaseConfig, get_config
-from .extensions import csrf, db, login_manager, migrate
+from .extensions import csrf, db, limiter, login_manager, migrate
 
 
 def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
@@ -40,6 +40,15 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
     csrf.init_app(app)
+    # PR-Q2 — rate-limiter. Disabled in tests so the suite doesn't 429
+    # itself; in dev / prod the per-route `@limiter.limit(...)`
+    # decorators activate. RATELIMIT_ENABLED is the official toggle
+    # flask-limiter reads off `app.config`.
+    app.config.setdefault(
+        "RATELIMIT_ENABLED", not app.config.get("TESTING", False)
+    )
+    limiter.init_app(app)
+    _register_rate_limit_error_handler(app)
     _warn_if_tailwind_built_but_missing(app)
 
     from . import models  # noqa: F401 — register mappers for Alembic + tests
@@ -143,6 +152,24 @@ def _init_sentry(app: Flask) -> None:
         traces_sample_rate=0.0,
         send_default_pii=False,
     )
+
+
+def _register_rate_limit_error_handler(app: Flask) -> None:
+    """Render a friendly 429 instead of flask-limiter's bare text
+    body. The handler runs both for the synthetic per-route limits
+    (PR-Q2) and any future global limits."""
+    from flask import render_template
+
+    @app.errorhandler(429)
+    def _too_many_requests(error):  # noqa: ANN001 — Flask error handler shape
+        # `error.description` is flask-limiter's "N per HOUR"
+        # string; surfacing it lets the user understand what they
+        # tripped without having to inspect Retry-After headers.
+        retry_after = getattr(error, "description", None)
+        return render_template(
+            "errors/429.html",
+            retry_after=retry_after,
+        ), 429
 
 
 def _register_inbox_context(app: Flask) -> None:

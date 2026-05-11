@@ -11,7 +11,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from ..extensions import db
+from ..extensions import db, limiter
 from ..models import DraftBanType, DraftMatchStatus, OcrParseAttempt, UmaOutfit
 from ..models.enums import VENUES, Direction, DistanceCategory, Surface
 from ..services import draft as draft_service
@@ -630,6 +630,7 @@ def _user_can_submit_results(match) -> bool:
 
 @bp.post("/<int:match_id>/results-screenshot")
 @login_required
+@limiter.limit("30 per hour")
 def upload_result_screenshot(match_id: int) -> object:
     """Step 1 of OCR-driven results: upload, parse, redirect to
     review.
