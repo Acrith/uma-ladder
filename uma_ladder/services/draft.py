@@ -845,6 +845,17 @@ def _apply_result_decision(
     match.completed_at = _utcnow()
     match.status = DraftMatchStatus.COMPLETED
     db.session.commit()
+    # PR-P5 — milestone auto-grants. Runs for both fresh
+    # submit_results and admin edit_results (both go through this
+    # function). Internally try/except'd so an achievement bug
+    # never breaks the match completion.
+    from . import achievements as achievements_service
+
+    achievements_service.grant_on_draft_match_completion(
+        host_user_id=match.host_user_id,
+        opponent_user_id=match.opponent_user_id,
+        winner_user_id=winner_id,
+    )
     return winner_change, loser_change
 
 

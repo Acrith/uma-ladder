@@ -395,3 +395,119 @@ def grant(
     db.session.add(row)
     db.session.commit()
     return row
+
+
+# ─── Auto-grant hooks (PR-P5) ────────────────────────────────────
+#
+# Wrapped in try/except at the boundary so a grant bug — unknown
+# achievement key, FK collision, transient DB error — never breaks
+# the parent result-save / season-close transaction. Idempotent at
+# both layers: `grant()` already returns the existing row when the
+# user has the achievement, AND these helpers can be called more
+# than once safely (e.g. across `submit_results` + `edit_results`
+# replays).
+
+
+def _safe_grant(user_id: int, key: str, *, source: str) -> None:
+    """Resolve user_id → User and call `grant()`, swallowing any
+    error so an achievement issue never breaks the calling
+    transaction. Logs at warning level so Sentry catches the
+    failure path."""
+    try:
+        user = db.session.get(User, user_id)
+        if user is None:
+            return
+        grant(user, key, source=source)
+    except Exception:  # noqa: BLE001
+        try:
+            from flask import current_app
+
+            current_app.logger.warning(
+                "auto-grant failed: key=%s user_id=%s", key, user_id,
+                exc_info=True,
+            )
+        except Exception:  # noqa: BLE001 — even logger may fail outside app ctx
+            pass
+
+
+def grant_on_official_result(user_id: int, placement: int) -> None:
+    """PR-P5 — fired after a result row lands in `submit_results`.
+    Grants milestone achievements based on placement:
+
+    - `first_official_race`: any placement (just participating).
+    - `first_official_podium`: placement <= 3.
+    - `first_official_win`: placement == 1.
+    """
+    _safe_grant(user_id, "first_official_race", source="auto:race_result")
+    if placement <= 3:
+        _safe_grant(
+            user_id, "first_official_podium", source="auto:race_result"
+        )
+    if placement == 1:
+        _safe_grant(
+            user_id, "first_official_win", source="auto:race_result"
+        )
+
+
+def grant_on_draft_match_completion(
+    *,
+    host_user_id: int,
+    opponent_user_id: int | None,
+    winner_user_id: int | None,
+) -> None:
+    """PR-P5 — fired after a draft match transitions to COMPLETED
+    via `_apply_result_decision` (covers both fresh `submit_results`
+    and admin `edit_results`).
+
+    - `first_draft_match`: both participants. Even if opponent is
+      None (shouldn't happen in practice at this point), we just
+      skip them.
+    - `first_draft_win`: only the winner.
+    """
+    _safe_grant(host_user_id, "first_draft_match", source="auto:draft_match")
+    if opponent_user_id is not None:
+        _safe_grant(
+            opponent_user_id, "first_draft_match", source="auto:draft_match"
+        )
+    if winner_user_id is not None:
+        _safe_grant(winner_user_id, "first_draft_win", source="auto:draft_match")
+
+
+def grant_on_season_close(season_id: int) -> None:
+    """PR-P5 — fired when a season's status flips to COMPLETED.
+    Reads the final Official ladder for that season and grants:
+
+    - `season_champion` to rank 1.
+    - `season_top_3` to ranks 1, 2, 3.
+
+    Draft ladder finishers are intentionally NOT auto-granted today:
+    the season_top_3 / season_champion seed entries are scoped to the
+    Official ladder per their descriptions; a parallel "Draft season
+    podium" achievement would belong as a follow-up to the
+    achievements backlog (separate keys, separate seed).
+    """
+    try:
+        # Lazy import — services/seasons would otherwise import
+        # services/achievements which imports User; the indirection
+        # avoids a tangle in cold-start.
+        from . import official as official_service
+
+        rows = official_service.season_ladder(season_id, limit=3)
+    except Exception:  # noqa: BLE001
+        try:
+            from flask import current_app
+
+            current_app.logger.warning(
+                "season-close ladder lookup failed: season_id=%s",
+                season_id,
+                exc_info=True,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return
+
+    source = f"auto:season_close:{season_id}"
+    for idx, row in enumerate(rows):
+        _safe_grant(row.user_id, "season_top_3", source=source)
+        if idx == 0:
+            _safe_grant(row.user_id, "season_champion", source=source)

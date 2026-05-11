@@ -714,6 +714,16 @@ def submit_results(
 
     race.status = OfficialRaceStatus.COMPLETED
     db.session.commit()
+    # PR-P5 — milestone achievement auto-grants. After the commit
+    # so a grant failure can't roll back the result rows. Each
+    # call is internally try/except'd; idempotent re-runs are
+    # no-ops via grant()'s existing-row check.
+    from . import achievements as achievements_service
+
+    for line in lines:
+        achievements_service.grant_on_official_result(
+            line.user_id, line.placement
+        )
     if notify:
         _notify_results(race)
     return saved

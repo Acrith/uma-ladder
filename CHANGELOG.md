@@ -6,6 +6,21 @@ log for the full history.
 
 ## 2026-05-11
 
+### Achievements
+
+- **Badges unlock automatically.** Until now the milestone
+  achievements (*First Official Race*, *First Official Podium*,
+  *First Official Win*, *First Draft Match*, *First Draft Win*,
+  *Season Podium*, *Season Champion*) only landed via admin manual
+  grant. They now grant automatically the moment the underlying
+  event happens — submitting a race result, completing a draft
+  match, or flipping a season to **Completed**. Grants are
+  idempotent (re-submitting or editing a result doesn't multi-
+  award) and fail-safe (an achievement bug can't break the result
+  save or season transition). Manual admin grant stays available
+  for the rest of the catalogue (*Founding Member*, etc.) and for
+  retroactive awards.
+
 ### Safety
 
 - **Report this user.** A new collapsed *Report this user* control

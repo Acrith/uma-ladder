@@ -78,8 +78,20 @@ def set_status(season_id: int, new_status: str) -> Season:
     if new_status not in _VALID_STATUSES:
         raise SeasonError(f"unknown status {new_status!r}")
     season = get_season(season_id)
+    was_completed = season.status == SeasonStatus.COMPLETED.value
     season.status = new_status
     db.session.commit()
+    # PR-P5 — season-close auto-grants for the top 3 on the Official
+    # ladder. Only fires on the PLANNED/ACTIVE → COMPLETED edge —
+    # going COMPLETED → ARCHIVED → COMPLETED back wouldn't re-fire
+    # the grant pass (idempotent anyway, but no point doing the work).
+    if (
+        new_status == SeasonStatus.COMPLETED.value
+        and not was_completed
+    ):
+        from . import achievements as achievements_service
+
+        achievements_service.grant_on_season_close(season_id)
     return season
 
 
