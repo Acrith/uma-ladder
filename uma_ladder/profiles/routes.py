@@ -212,6 +212,13 @@ def _load_profile_or_404(username: str):
     user = profiles_service.find_user_by_username(username)
     if user is None:
         abort(404)
+    # PR-Q3a — soft-deleted users 404 from the public profile
+    # surface. Their handle still appears (masked) in historical
+    # contexts via `masked_display`, but the dedicated profile page
+    # is gone — no avatar, no oshi, no achievement showcase, no
+    # link target. Matches the Players-index "hidden" policy.
+    if user.disabled_at is not None:
+        abort(404)
     profile = profiles_service.get_or_create_profile(user)
 
     # Hero data — every tab needs these for the persistent banner.

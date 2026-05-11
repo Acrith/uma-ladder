@@ -154,6 +154,15 @@ def authenticate(username: str, password: str) -> User:
         raise InvalidCredentialsError()
     if not user.is_active:
         raise InactiveUserError()
+    # PR-Q3a — soft-deleted accounts cannot log in. The password
+    # hash was scrambled by `soft_delete_user` anyway, so this check
+    # is belt-and-suspenders: if a hash collision or future bug let
+    # the check_password() above pass, the disabled_at guard still
+    # holds. Distinct from `is_active` (legacy flag that's barely
+    # used) so we don't accidentally re-enable a soft-deleted user
+    # by flipping is_active.
+    if user.disabled_at is not None:
+        raise InactiveUserError()
     if user.failed_login_count or user.failed_login_at is not None:
         _reset_failed_logins(user)
     return user
@@ -179,6 +188,11 @@ def consume_reset_token(secret_key: str, token: str, max_age_seconds: int = 3600
         raise InvalidResetTokenError("invalid token") from exc
     user = db.session.get(User, data.get("uid"))
     if user is None or not user.is_active:
+        raise InvalidResetTokenError("user not found")
+    # PR-Q3a — refuse to consume a reset token for a soft-deleted
+    # account. The token may predate the disable, but the account
+    # is now gone; an admin re-enabling first is the right flow.
+    if user.disabled_at is not None:
         raise InvalidResetTokenError("user not found")
     return user
 

@@ -57,6 +57,19 @@ class User(UserMixin, db.Model):
     failed_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # PR-Q3a — soft-delete tombstone. When set, the account:
+    #   - cannot log in (authenticate raises InactiveUserError)
+    #   - is hidden from the Players index / rankings
+    #   - renders as a partial mask (`K***e`) anywhere
+    #     its name still appears in historical context (race
+    #     registrations, draft match history, etc.)
+    # Set alongside `services.admin.soft_delete_user`, which also
+    # blanks the linked UserProfile and removes AuthIdentity rows so
+    # OAuth re-link from another account works cleanly. Reversible
+    # via `services.admin.restore_user` while disabled_at is set.
+    disabled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

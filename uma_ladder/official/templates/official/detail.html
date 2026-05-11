@@ -305,15 +305,14 @@
       {% else %}
         <ul class="mt-3 space-y-1.5">
           {% for r in registrations %}
-            {# PR-R1 — show the player's display_name (rich-cased,
-               may contain spaces) rather than the storage username
-               (lowercased on registration). Falls back to username
-               for accounts without a profile yet. Matches the
-               Players index / Rankings pattern. #}
-            {% set _display = (r.user.profile.display_name if r.user.profile and r.user.profile.display_name else r.user.username) %}
+            {# PR-R1 + PR-Q3a — `masked_display` filter returns the
+               player's display_name (fallback username) for active
+               accounts, and a fixed-length partial mask
+               `K***************e` for soft-deleted accounts so the
+               raw handle never leaks from historical surfaces. #}
             <li class="flex items-center gap-2 text-sm">
               <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
-              <a class="flex-1 text-slate-200 hover:text-cyan-300" href="{{ url_for('profiles.public', username=r.user.username) }}">{{ _display }}</a>
+              <a class="flex-1 text-slate-200 hover:text-cyan-300" href="{{ url_for('profiles.public', username=r.user.username) }}">{{ r.user | masked_display }}</a>
               {% if current_user.is_authenticated and current_user.has_at_least('organizer') and race.status not in ('cancelled', 'completed') %}
                 <form method="post"
                       action="{{ url_for('official.remove_registration', race_id=race.id, registration_id=r.id) }}"
@@ -397,11 +396,10 @@
             </thead>
             <tbody>
               {% for r in registrations %}
-                {% set _display = (r.user.profile.display_name if r.user.profile and r.user.profile.display_name else r.user.username) %}
                 <tr class="border-t border-slate-800">
                   <td class="pr-3 py-2 text-slate-200">
                     <a href="{{ url_for('profiles.public', username=r.user.username) }}"
-                       class="hover:text-cyan-300">{{ _display }}</a>
+                       class="hover:text-cyan-300">{{ r.user | masked_display }}</a>
                   </td>
                   <td class="pr-3 py-2"><input type="number" min="1" name="placement_{{ r.id }}" class="input-base w-20" /></td>
                   <td class="py-2"><input type="text" name="uma_name_{{ r.id }}" class="input-base" /></td>
@@ -430,8 +428,12 @@
                   <p class="text-sm">
                     <span class="text-mono-pill mr-1">#{{ r.placement }}</span>
                     {% if r.user %}
+                      {# PR-Q3a — masked_display also handles
+                         soft-deleted users; SET NULL'd rows (user
+                         removed entirely via hard delete) still
+                         render as @?. #}
                       <a href="{{ url_for('profiles.public', username=r.user.username) }}"
-                         class="font-medium text-slate-100 hover:text-cyan-300">@{{ r.user.username }}</a>
+                         class="font-medium text-slate-100 hover:text-cyan-300">{{ r.user | masked_display }}</a>
                     {% else %}
                       <span class="font-medium text-slate-100">@?</span>
                     {% endif %}

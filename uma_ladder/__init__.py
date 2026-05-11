@@ -61,6 +61,7 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
     _register_blueprints(app)
     _register_health(app)
     _register_inbox_context(app)
+    _register_template_filters(app)
 
     from .cli import register_cli
 
@@ -170,6 +171,19 @@ def _register_rate_limit_error_handler(app: Flask) -> None:
             "errors/429.html",
             retry_after=retry_after,
         ), 429
+
+
+def _register_template_filters(app: Flask) -> None:
+    """PR-Q3a — single Jinja filter so historical-context templates
+    render user names consistently. Active accounts get
+    display_name (fallback to username), soft-deleted accounts get
+    the `K***************e` partial mask. Templates use
+    `{{ user | masked_display }}` instead of inlining the
+    display_name-or-username fallback (which would leak the raw
+    handle for any soft-deleted user)."""
+    from .services.profiles import masked_display_for
+
+    app.jinja_env.filters["masked_display"] = masked_display_for
 
 
 def _register_inbox_context(app: Flask) -> None:

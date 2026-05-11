@@ -87,6 +87,120 @@ def change_user_role(*, actor: User, target: User, new_role: str) -> User:
     return target
 
 
+def soft_delete_user(*, actor: User, target: User) -> None:
+    """PR-Q3a — disable an account without nuking its FK'd history.
+
+    The "delete" we want for active racers: race results, draft
+    history, opponent ELO chains all stay intact, but the user can't
+    log in and their identity is stripped from anywhere it surfaces
+    publicly. Re-enable via `restore_user`.
+
+    What happens:
+    1. Blank the linked UserProfile so no display_name / oshi /
+       avatar / friend code / Discord handle leaks. The profile row
+       stays (FKs to it remain valid).
+    2. Delete all linked AuthIdentity rows so the OAuth provider's
+       external_id is free to re-bind to another account (the
+       legitimate-original-account case: someone OAuth'd into a
+       duplicate, we disable the duplicate, they re-link Discord
+       to their real account).
+    3. Set `users.disabled_at = now()` so login refuses, render
+       helpers mask the username, and the Players index / rankings
+       hide the row.
+    4. Scramble `password_hash` so password login is broken even if
+       a future bug skips the `disabled_at` check.
+    5. Audit-log under `user_disable`.
+
+    Guards: cannot disable yourself, cannot disable the last
+    superadmin. Route layer additionally restricts who can call this
+    (`min_role_required(Role.SUPERADMIN)` for now — same policy as
+    hard delete; relax later as moderation tooling matures).
+
+    Note: the linked race history rows survive intact, so the user
+    still appears in past race detail pages — but renders via
+    `masked_display_for` as `K***e`.
+    """
+    if actor.id == target.id:
+        raise CannotEditSelfError()
+
+    if target.role == Role.SUPERADMIN:
+        other_supers = db.session.scalar(
+            select(func.count(User.id))
+            .where(User.role == Role.SUPERADMIN)
+            .where(User.id != target.id)
+        )
+        if not other_supers:
+            raise LastSuperadminError()
+
+    import secrets
+    from datetime import UTC, datetime
+
+    from ..models import AuthIdentity
+
+    # 1. Blank the profile (idempotent — profile may not exist yet).
+    profile = target.profile
+    if profile is not None:
+        profile.display_name = None
+        profile.avatar_url = None
+        profile.description = None
+        profile.friend_code = None
+        profile.discord_handle = None
+        profile.discord_user_id = None
+        profile.club_id = None
+        profile.avatar_border = None
+        profile.showcased_achievement_ids = None
+        profile.oshi_character_id = None
+        profile.oshi_outfit_id = None
+
+    # 2. Drop linked OAuth identities so their external_id is free
+    #    to re-bind elsewhere.
+    db.session.query(AuthIdentity).filter(
+        AuthIdentity.user_id == target.id
+    ).delete(synchronize_session=False)
+
+    # 3 + 4. Stamp the tombstone + scramble the password.
+    target.disabled_at = datetime.now(UTC)
+    target.password_hash = secrets.token_urlsafe(32)
+
+    db.session.commit()
+
+    from . import admin_audit
+
+    admin_audit.log_action(
+        actor_user_id=actor.id,
+        action="user_disable",
+        target_user_id=target.id,
+        details=f"@{target.username} (id={target.id}, role={target.role})",
+    )
+
+
+def restore_user(*, actor: User, target: User) -> None:
+    """PR-Q3a — undo a soft-delete. Clears `disabled_at` so the
+    account becomes loginable again. Does NOT re-populate the
+    blanked profile fields — the user can fill them back in
+    themselves once they're back in. Also requires the admin to
+    issue a password reset link (existing /admin/users/<id>/
+    reset-password) since the password was scrambled by soft_delete.
+
+    Audit-logged. Same guards as the other admin actions on user
+    rows (self-block; rank checks happen at the route layer).
+    """
+    if actor.id == target.id:
+        raise CannotEditSelfError()
+
+    target.disabled_at = None
+    db.session.commit()
+
+    from . import admin_audit
+
+    admin_audit.log_action(
+        actor_user_id=actor.id,
+        action="user_restore",
+        target_user_id=target.id,
+        details=f"@{target.username} (id={target.id})",
+    )
+
+
 def delete_user(*, actor: User, target: User) -> None:
     """PR-R1 — hard-delete an account.
 

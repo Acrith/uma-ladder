@@ -180,18 +180,70 @@ class PlayersPage:
         return max(1, (self.total + self.page_size - 1) // self.page_size)
 
 
+_MASK_LENGTH = 3
+
+
+def masked_display_for(user: User) -> str:
+    """PR-Q3a — name to render for a user wherever they show up in
+    historical context (race detail, draft match history, etc.).
+
+    Active accounts: returns `profile.display_name` if set, else the
+    raw username — same fallback the Players index and Rankings
+    table already use.
+
+    Soft-deleted accounts (`disabled_at is not None`): returns a
+    fixed-length partial mask `<first><3 asterisks><last>` — e.g.
+    `kezuke` → `k***e`. The asterisk count is constant (not
+    proportional to the original username) so we don't leak the
+    username length to anyone who didn't know it before; the count
+    is small enough that the masked form is always shorter than
+    the username for any non-trivial handle, which keeps it from
+    blowing out narrow UI columns (Registrations card, draft match
+    cards, etc.). Preserving the first + last letter keeps the
+    contextual record meaningful — an opponent reading past race
+    detail can still recall who they raced ("started with k, ended
+    with e") without seeing the raw handle.
+
+    Single source of truth: every template that renders a user name
+    in historical context goes through this helper (or its Jinja
+    filter alias) instead of `r.user.profile.display_name or
+    r.user.username`. New surfaces should follow the same rule —
+    otherwise a soft-deleted user's name will leak the moment a new
+    template misses the refactor.
+    """
+    if user.disabled_at is not None:
+        uname = user.username
+        if not uname:
+            return "*" * _MASK_LENGTH
+        if len(uname) == 1:
+            return uname[0] + ("*" * _MASK_LENGTH)
+        return f"{uname[0]}{'*' * _MASK_LENGTH}{uname[-1]}"
+    profile = user.profile
+    if profile is not None and profile.display_name:
+        return profile.display_name
+    return user.username
+
+
 def list_players(
     *, q: str = "", page: int = 1, page_size: int = 30
 ) -> PlayersPage:
     """Paginated player browse for /profiles/. Joins User + UserProfile
     so the template can render avatar / display_name / oshi inline.
-    Search is case-insensitive substring on username."""
+    Search is case-insensitive substring on username.
+
+    PR-Q3a — filters out soft-deleted (`disabled_at IS NOT NULL`)
+    users entirely. They're never browseable from this surface; they
+    only surface in historical contexts via `masked_display_for`."""
     from sqlalchemy import func as sa_func
 
     page = max(1, page)
     page_size = max(1, page_size)
 
-    base = select(User).order_by(User.username.asc())
+    base = (
+        select(User)
+        .where(User.disabled_at.is_(None))
+        .order_by(User.username.asc())
+    )
     qstr = q.strip().lower()
     if qstr:
         base = base.where(sa_func.lower(User.username).contains(qstr))

@@ -165,10 +165,15 @@
                 {% if side.user %}
                   <a href="{{ url_for('profiles.public', username=side.user.username) }}"
                      class="block hover:text-cyan-300">
+                    {# PR-Q3a — masked_display falls through to the
+                       display_name / username for active accounts,
+                       and emits a fixed-length mask for soft-deleted
+                       accounts so neither the display_name nor the
+                       handle leaks from past draft match cards. #}
                     <p class="mt-0.5 truncate text-base font-semibold text-slate-50">
-                      {% if side.profile and side.profile.display_name %}{{ side.profile.display_name }}{% else %}{{ side.user.username }}{% endif %}
+                      {{ side.user | masked_display }}
                     </p>
-                    <p class="text-xs text-slate-400">@{{ side.user.username }}</p>
+                    <p class="text-xs text-slate-400">{% if side.user.disabled_at %}—{% else %}@{{ side.user.username }}{% endif %}</p>
                   </a>
                 {% else %}
                   <p class="mt-0.5 truncate text-base font-semibold text-slate-50">— waiting —</p>
@@ -789,9 +794,9 @@
             <p class="mt-1 text-lg text-slate-100">
               Winner:
               {% if match.winner_user_id == match.host_user_id %}
-                <a href="{{ url_for('profiles.public', username=match.host.username) }}" class="text-fuchsia-300 font-semibold hover:text-fuchsia-200">{{ match.host.username }}</a>
+                <a href="{{ url_for('profiles.public', username=match.host.username) }}" class="text-fuchsia-300 font-semibold hover:text-fuchsia-200">{{ match.host | masked_display }}</a>
               {% elif match.opponent and match.winner_user_id == match.opponent_user_id %}
-                <a href="{{ url_for('profiles.public', username=match.opponent.username) }}" class="text-fuchsia-300 font-semibold hover:text-fuchsia-200">{{ match.opponent.username }}</a>
+                <a href="{{ url_for('profiles.public', username=match.opponent.username) }}" class="text-fuchsia-300 font-semibold hover:text-fuchsia-200">{{ match.opponent | masked_display }}</a>
               {% else %}
                 <span class="text-fuchsia-300 font-semibold">user_id {{ match.winner_user_id }}</span>
               {% endif %}

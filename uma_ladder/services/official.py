@@ -772,6 +772,12 @@ def season_ladder(
         .join(OfficialRaceResult, OfficialRaceResult.user_id == User.id)
         .join(OfficialRace, OfficialRace.id == OfficialRaceResult.official_race_id)
         .where(OfficialRace.season_id == season_id)
+        # PR-Q3a — soft-deleted users hide from rankings entirely
+        # (matches the Players-index policy). Their points still
+        # live in the result rows, but no leaderboard surfaces them
+        # while they're disabled. Restoring the account brings them
+        # back without recomputation.
+        .where(User.disabled_at.is_(None))
         .group_by(User.id, User.username)
         .order_by(
             total_points_expr.desc(),

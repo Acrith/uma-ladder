@@ -6,6 +6,26 @@ log for the full history.
 
 ## 2026-05-11
 
+### Admin
+
+- **Disable account (soft delete).** A new **Moderation** card on
+  the admin user detail page lets a superadmin disable an account
+  without nuking its history. Disabling blanks the public profile
+  (display name, oshi, avatar, friend code, Discord handle), drops
+  linked OAuth identities so a legitimate-original user can re-link
+  Discord/Google to their real account, scrambles the password so
+  login is impossible, and hides the user from the Players index +
+  Rankings tabs. **Past race results, draft matches, and opponent
+  ELO chains stay intact** — the disabled user just renders as
+  `K***e` everywhere they still appear in history. A
+  **Restore account** button replaces the disable card while the
+  account is in the disabled state; restoring re-enables login but
+  leaves the blanked profile alone (the user fills it back in
+  themselves once the admin issues a password reset link). The
+  existing Danger zone (hard delete) stays available for empty
+  duplicates with no history; for active racers, disable is the
+  right tool. Audit-logged under `user_disable` / `user_restore`.
+
 ### Performance
 
 - **Firefox: lower GPU usage from the dark UI.** Firefox-family

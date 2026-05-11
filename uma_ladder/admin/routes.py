@@ -136,6 +136,70 @@ def issue_password_reset(user_id: int) -> object:
     )
 
 
+@bp.post("/users/<int:user_id>/disable")
+@min_role_required(Role.SUPERADMIN)
+def disable_user(user_id: int) -> object:
+    """PR-Q3a — soft-delete (anonymize + lock out). The non-nuke
+    option for the case where we want the account inert but FK'd
+    race / draft history preserved (anonymized via the
+    `masked_display` filter). Reversible via `enable_user`.
+
+    Same type-username confirmation gate as the hard-delete path
+    next door — both are destructive enough to warrant the
+    deliberate keystroke."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    typed = (request.form.get("confirm_username") or "").strip().lower()
+    if typed != target.username.lower():
+        flash(
+            f"Confirmation didn't match — type @{target.username} exactly to disable."
+        )
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    username = target.username
+    try:
+        admin_service.soft_delete_user(actor=current_user, target=target)
+    except admin_service.CannotEditSelfError:
+        flash("You cannot disable your own account.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    except admin_service.LastSuperadminError:
+        flash("Cannot disable the last superadmin.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    flash(f"@{username} disabled.")
+    return redirect(url_for("admin.user_detail", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/enable")
+@min_role_required(Role.SUPERADMIN)
+def enable_user(user_id: int) -> object:
+    """PR-Q3a — restore a soft-deleted account. Clears `disabled_at`
+    so login + OAuth + Players index visibility return. Does NOT
+    re-populate the blanked profile fields (oshi, friend code, etc.)
+    or re-link OAuth identities — the user has to redo those bits.
+    Password also needs a fresh reset (it was scrambled at
+    soft-delete time); the admin uses the existing **Generate
+    password reset link** card to give them a way back in."""
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    if target.disabled_at is None:
+        flash(f"@{target.username} is not disabled.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    try:
+        admin_service.restore_user(actor=current_user, target=target)
+    except admin_service.CannotEditSelfError:
+        flash("You cannot restore your own account.")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    flash(f"@{target.username} restored. Issue a password reset to let them back in.")
+    return redirect(url_for("admin.user_detail", user_id=user_id))
+
+
 @bp.post("/users/<int:user_id>/delete")
 @min_role_required(Role.SUPERADMIN)
 def delete_user(user_id: int) -> object:

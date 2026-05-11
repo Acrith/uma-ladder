@@ -1094,6 +1094,11 @@ def season_elo_ladder(
         .join(DraftEloChange, DraftEloChange.user_id == User.id)
         .join(latest_subq, latest_subq.c.max_id == DraftEloChange.id)
         .where(DraftEloChange.season_id == season_id)
+        # PR-Q3a — same policy as official ladder + Players index:
+        # soft-deleted users hide from rankings. Their elo changes
+        # stay in the table so a restore brings them back without
+        # any recomputation.
+        .where(User.disabled_at.is_(None))
         .group_by(User.id, User.username, DraftEloChange.rating_after)
         .order_by(DraftEloChange.rating_after.desc(), User.username.asc())
     )
