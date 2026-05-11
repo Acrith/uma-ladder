@@ -6,6 +6,17 @@ log for the full history.
 
 ## 2026-05-11
 
+### Performance
+
+- **Firefox: lower GPU usage from the dark UI.** Firefox-family
+  browsers (Firefox, Zen, LibreWolf, etc.) draw the site's frosted
+  cards and blurred background glows on the GPU's slow path,
+  sustaining 40-50% GPU on some Linux setups just from scrolling.
+  We now detect Firefox at page load and disable the backdrop blur
+  + reduce the decorative blur halos for that engine only — the
+  page still has its dark cards and colour washes, just without
+  the heavy filter. Chrome / Safari / Edge users see no change.
+
 ### Safety
 
 - **Per-IP rate limiting on sensitive endpoints.** Registration,

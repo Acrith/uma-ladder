@@ -42,3 +42,31 @@
     @apply inline-flex items-center rounded-md border border-slate-700 bg-ink-900 px-2 py-0.5 font-mono text-xs text-cyan-300;
   }
 }
+
+/* PR-S1 — Firefox-only performance overrides. Tagged at <html> by the
+   inline UA-detection script in base.html. Gecko's backdrop-filter +
+   large blur(64px) surfaces rasterize in software on many setups,
+   driving sustained 40-50% GPU. Chromium handles the same patterns
+   on the compositor and stays cheap — so we keep the look there. */
+.ua-firefox header[class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: rgb(7 9 18 / 0.92);
+}
+.ua-firefox .surface-card {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.ua-firefox [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+/* The full-page decorative gradients (base.html + dashboard hero)
+   carry blur-3xl (~64px). Replacing the filter with reduced opacity
+   keeps the colour-wash but skips the expensive rasterization. */
+.ua-firefox .blur-3xl,
+.ua-firefox .blur-2xl,
+.ua-firefox .blur-xl {
+  filter: none;
+  opacity: 0.35;
+}

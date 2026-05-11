@@ -4,6 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}Uma Ladder{% endblock %}</title>
+    {# PR-S1 — Firefox-family browsers (Firefox, Zen, LibreWolf, etc.)
+       hit ~40-50% GPU usage on this page due to Gecko's backdrop-filter
+       implementation rasterizing large blurred surfaces every paint.
+       Chromium handles the same patterns cheaply, so we don't want to
+       strip the blur globally. This early-running script tags the
+       `<html>` element so the `.ua-firefox` CSS overrides in
+       static/css/input.css (rebuilt into output.css) kick in *before*
+       first paint — no FOUC, no GPU spike on the impacted users.
+       Other browsers ignore the class entirely. #}
+    <script>
+      if (navigator.userAgent.indexOf("Firefox") !== -1) {
+        document.documentElement.classList.add("ua-firefox");
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
