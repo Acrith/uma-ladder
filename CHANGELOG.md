@@ -6,6 +6,28 @@ log for the full history.
 
 ## 2026-05-12
 
+### Anti-spam
+
+- **Invite-only signup gate.** A new admin page at
+  **Admin → Invite codes** lets a moderator mint invite codes
+  (`XXXX-XXXX-XXXX`, drawn from a no-ambiguous-glyphs alphabet) and
+  flip a single switch to require one on every new signup. The gate
+  ships **OFF by default** — landing this update changes nothing
+  until an admin enables it, so you can mint a batch of codes,
+  decide who to send them to, then turn the toggle on when the
+  semi-closed beta starts. Existing accounts always log in
+  unaffected: password reset, OAuth-link-to-existing, and ordinary
+  login skip the gate. When it's on, the sign-up page shows a
+  single invite-code field above the *Continue with Discord /
+  Google* buttons and the password form — the same code applies to
+  every signup path. Codes can be **single-use** (default), shared
+  with a custom max-uses count (e.g. one code for a 25-person
+  club), or generated in a **bulk batch** so each invitee gets
+  their own auditable token. Each code carries an optional label
+  ("InyanyaCup club bulk," "DM @kezuke," etc.) so you can audit
+  who got what later, and a one-click **Revoke** kills any code
+  that leaks. All flip / mint / revoke actions are audit-logged.
+
 ### Official races
 
 - **Cleaner race detail header + live countdown.** The race detail

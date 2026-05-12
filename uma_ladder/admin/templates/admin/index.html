@@ -50,6 +50,12 @@
     {% endcall %}
 
     {% call card(class="p-5") %}
+      <p class="label-eyebrow">Invite codes</p>
+      <p class="mt-1 text-sm text-slate-400">Anti-spam gate for new signups.</p>
+      <a href="{{ url_for('admin.invite_codes_index') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage →</a>
+    {% endcall %}
+
+    {% call card(class="p-5") %}
       <p class="label-eyebrow">Champions Meeting</p>
       <p class="mt-1 text-sm text-slate-400">Upcoming CM schedule shown on the dashboard.</p>
       <a href="{{ url_for('admin.cm_list') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage CMs →</a>

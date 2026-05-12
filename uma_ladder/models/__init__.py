@@ -1,5 +1,6 @@
 from .achievements import Achievement, UserAchievement
 from .admin_audit import AdminAuditLog
+from .app_settings import AppSetting
 from .auth_identity import AuthIdentity
 from .champions_meeting import ChampionsMeeting
 from .club import Club
@@ -33,6 +34,7 @@ from .enums import (
     Weather,
 )
 from .inbox import UserNotification
+from .invite_codes import InviteCode, InviteCodeUse
 from .notifications import DiscordNotificationAttempt
 from .official_races import (
     OfficialRace,
@@ -57,6 +59,7 @@ __all__ = [
     "VENUES",
     "Achievement",
     "AdminAuditLog",
+    "AppSetting",
     "AuthIdentity",
     "ChampionsMeeting",
     "Club",
@@ -72,6 +75,8 @@ __all__ = [
     "DraftMatchStatus",
     "DraftRaceResult",
     "GroundCondition",
+    "InviteCode",
+    "InviteCodeUse",
     "NotificationEvent",
     "NotificationStatus",
     "NotificationTarget",

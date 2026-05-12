@@ -6,6 +6,10 @@ from wtforms.validators import DataRequired, EqualTo, Length
 
 
 class RegisterForm(FlaskForm):
+    # PR-Q4 — invite_code is optional at the form level; the route
+    # enforces "required if invite-only flag is on" so the field can
+    # stay dormant on the page when the gate is off.
+    invite_code = StringField("Invite code", validators=[Length(max=32)])
     username = StringField("Username", validators=[DataRequired(), Length(min=3, max=64)])
     password = PasswordField("Password", validators=[DataRequired(), Length(min=8, max=128)])
     confirm = PasswordField(

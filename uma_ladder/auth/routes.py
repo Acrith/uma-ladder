@@ -16,8 +16,10 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 
 from ..extensions import limiter
+from ..services import app_settings as settings_service
 from ..services import auth as auth_service
 from ..services import auth_identities as identity_service
+from ..services import invite_codes as invite_codes_service
 from ..services import oauth as oauth_service
 from ..services.redirects import safe_redirect_target
 from .forms import LoginForm, RegisterForm, RequestResetForm, ResetPasswordForm
@@ -108,22 +110,72 @@ def register() -> object:
     if current_user.is_authenticated:
         return redirect(url_for("dashboard.index"))
     form = RegisterForm()
+    # PR-Q4 — when the gate is OFF, the invite_code field stays
+    # invisible on the rendered page and any value submitted is
+    # ignored. When ON, the field is required and validated against
+    # invite_codes before we create the user — so a failed code never
+    # leaves an orphaned account.
+    invite_only = settings_service.is_invite_only_enabled()
     if form.validate_on_submit():
-        try:
-            user = auth_service.register_user(
-                auth_service.RegistrationRequest(
-                    username=form.username.data or "",
-                    password=form.password.data or "",
+        code_row = None
+        raw_code = (form.invite_code.data or "").strip()
+        if invite_only:
+            if not raw_code:
+                form.invite_code.errors.append(
+                    "An invite code is required to register right now."
                 )
-            )
-        except auth_service.UsernameTakenError:
-            form.username.errors.append("That username is already taken.")
-        except auth_service.AuthError as exc:
-            form.username.errors.append(str(exc))
-        else:
-            login_user(user)
-            return redirect(url_for("dashboard.index"))
-    return render_template("auth/register.html", form=form)
+            else:
+                try:
+                    code_row = invite_codes_service.validate_code(raw_code)
+                except invite_codes_service.InviteCodeError:
+                    form.invite_code.errors.append(
+                        "This invite code isn't valid or has been used up."
+                    )
+        if not form.errors:
+            try:
+                user = auth_service.register_user(
+                    auth_service.RegistrationRequest(
+                        username=form.username.data or "",
+                        password=form.password.data or "",
+                    )
+                )
+            except auth_service.UsernameTakenError:
+                form.username.errors.append("That username is already taken.")
+            except auth_service.AuthError as exc:
+                form.username.errors.append(str(exc))
+            else:
+                if code_row is not None:
+                    # consume_code re-validates against the live row,
+                    # so a concurrent claim on the last seat fails
+                    # cleanly here rather than letting two users in.
+                    try:
+                        invite_codes_service.consume_code(
+                            code_row.code,
+                            user_id=user.id,
+                            claimed_from_ip=request.remote_addr,
+                        )
+                    except invite_codes_service.InviteCodeError:
+                        # Lost the race for the last seat. Roll the
+                        # user back so the only outcome is "try again
+                        # with a different code".
+                        from ..extensions import db
+
+                        db.session.delete(user)
+                        db.session.commit()
+                        form.invite_code.errors.append(
+                            "This invite code was just used up. "
+                            "Please use a different one."
+                        )
+                        return render_template(
+                            "auth/register.html",
+                            form=form,
+                            invite_only=invite_only,
+                        )
+                login_user(user)
+                return redirect(url_for("dashboard.index"))
+    return render_template(
+        "auth/register.html", form=form, invite_only=invite_only
+    )
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -211,6 +263,9 @@ _PROVIDER_LABELS: dict[str, str] = {
 }
 
 
+_INVITE_CODE_SESSION_KEY = "oauth_invite_code"
+
+
 def _oauth_start(provider: str) -> object:
     """Kick off the OAuth dance.
 
@@ -225,9 +280,37 @@ def _oauth_start(provider: str) -> object:
     The branch is inferred at the callback from the live session
     rather than encoded in state, so a stale start URL can't be
     weaponised across sessions.
+
+    PR-Q4 — when the invite-only flag is on and we're acting on
+    behalf of an anonymous visitor, an ``invite_code`` query param
+    forwarded from /register is validated up-front and stashed in
+    session for the callback. We do NOT consume here; consume only
+    happens if the callback ends up creating a new user.
     """
     if not _oauth_configured(provider):
         abort(404)
+
+    # Drop any code left in session from a previous attempt before
+    # we either stash a new one or proceed without.
+    session.pop(_INVITE_CODE_SESSION_KEY, None)
+
+    if (
+        not current_user.is_authenticated
+        and settings_service.is_invite_only_enabled()
+    ):
+        raw = (request.args.get("invite_code") or "").strip()
+        if raw:
+            try:
+                code_row = invite_codes_service.validate_code(raw)
+            except invite_codes_service.InviteCodeError:
+                flash(
+                    "Your invite code isn't valid or has been used up."
+                )
+                return redirect(url_for("auth.register"))
+            session[_INVITE_CODE_SESSION_KEY] = code_row.code
+        # Missing code is fine here — the callback will only enforce
+        # if it actually needs to mint a new user (existing-identity
+        # login still works without a code).
 
     state = oauth_service.generate_state()
     verifier, challenge = oauth_service.generate_pkce_pair()
@@ -329,6 +412,30 @@ def _oauth_callback(provider: str) -> object:
     # display name with suffix-on-collision; the new account has an
     # unguessable random password, so admin-issued reset is the
     # only password-side recovery path.
+    #
+    # PR-Q4 — invite-only gate. We only enforce on the new-user path;
+    # existing-identity login (above) is unaffected. Code presence is
+    # checked here rather than at /oauth/start because we can't know
+    # at /start whether the OAuth attempt will end up as login-mode
+    # or signup-mode (depends on whether the provider profile maps
+    # to an existing AuthIdentity).
+    stashed_code = session.pop(_INVITE_CODE_SESSION_KEY, None)
+    if settings_service.is_invite_only_enabled():
+        if not stashed_code:
+            flash(
+                "New accounts need an invite code right now. Please "
+                "head to the sign-up page and enter one before "
+                f"continuing with {label}."
+            )
+            return redirect(url_for("auth.register"))
+        try:
+            invite_codes_service.validate_code(stashed_code)
+        except invite_codes_service.InviteCodeError:
+            flash(
+                "Your invite code isn't valid or has been used up."
+            )
+            return redirect(url_for("auth.register"))
+
     try:
         user = identity_service.create_user_for_oauth(profile)
     except identity_service.UsernameDerivationError:
@@ -342,6 +449,27 @@ def _oauth_callback(provider: str) -> object:
             "Please contact an admin."
         )
         return redirect(url_for("auth.login"))
+
+    if stashed_code:
+        # consume after the user row exists. If we lose the race for
+        # the last seat (vanishingly unlikely between validate and
+        # here), roll the new user back and bounce to /register.
+        try:
+            invite_codes_service.consume_code(
+                stashed_code,
+                user_id=user.id,
+                claimed_from_ip=request.remote_addr,
+            )
+        except invite_codes_service.InviteCodeError:
+            from ..extensions import db
+
+            db.session.delete(user)
+            db.session.commit()
+            flash(
+                "Your invite code was just used up. Please try "
+                "again with a different one."
+            )
+            return redirect(url_for("auth.register"))
 
     login_user(user)
     flash(f"Welcome, {user.username}! Account created via {label}.")

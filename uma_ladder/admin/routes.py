@@ -17,8 +17,10 @@ from ..models import (
 )
 from ..services import admin as admin_service
 from ..services import admin_audit as admin_audit_service
+from ..services import app_settings as settings_service
 from ..services import cm as cm_service
 from ..services import draft as draft_service
+from ..services import invite_codes as invite_codes_service
 from ..services import reports as reports_service
 from ..services import seasons as seasons_service
 from ..services.permissions import min_role_required
@@ -665,6 +667,126 @@ def reports_dismiss(report_id: int) -> object:
     except reports_service.AlreadyResolvedError:
         flash(f"Report #{report_id} is already resolved.")
     return redirect(url_for("admin.reports_queue"))
+
+
+@bp.get("/invite-codes")
+@min_role_required(Role.ADMIN)
+def invite_codes_index() -> object:
+    """PR-Q4 — invite-only signup gate management. One page handles
+    the toggle, minting (single + bulk), and the listing/revoke
+    table. Codes are global, not per-admin; any admin can mint and
+    any admin can revoke."""
+    codes = invite_codes_service.list_codes()
+    return render_template(
+        "admin/invite_codes.html",
+        codes=codes,
+        invite_only=settings_service.is_invite_only_enabled(),
+        csrf_form=CsrfOnlyForm(),
+    )
+
+
+@bp.post("/invite-codes/toggle")
+@min_role_required(Role.ADMIN)
+def invite_codes_toggle() -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    before = settings_service.is_invite_only_enabled()
+    settings_service.set_invite_only_enabled(
+        not before, actor_user_id=current_user.id
+    )
+    admin_audit_service.log_action(
+        actor_user_id=current_user.id,
+        action="invite_only_disable" if before else "invite_only_enable",
+        details=f"invite_only_enabled: {before} → {not before}",
+    )
+    flash(
+        "Invite-only signup is now {}.".format(
+            "OFF — anyone can register."
+            if before
+            else "ON — new accounts need a code."
+        )
+    )
+    return redirect(url_for("admin.invite_codes_index"))
+
+
+@bp.post("/invite-codes/mint")
+@min_role_required(Role.ADMIN)
+def invite_codes_mint() -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    # max_uses — empty string means "unlimited" (NULL); a numeric
+    # value is required to be a positive int.
+    max_uses_raw = (request.form.get("max_uses") or "").strip()
+    max_uses: int | None
+    if max_uses_raw == "":
+        max_uses = None
+    else:
+        try:
+            max_uses = int(max_uses_raw)
+        except ValueError:
+            flash("Max uses must be a number or empty for unlimited.")
+            return redirect(url_for("admin.invite_codes_index"))
+        if max_uses < 1:
+            flash("Max uses must be at least 1.")
+            return redirect(url_for("admin.invite_codes_index"))
+    count_raw = (request.form.get("count") or "1").strip() or "1"
+    try:
+        count = int(count_raw)
+    except ValueError:
+        flash("Bulk count must be a number.")
+        return redirect(url_for("admin.invite_codes_index"))
+    if count < 1 or count > 100:
+        flash("Bulk count must be between 1 and 100.")
+        return redirect(url_for("admin.invite_codes_index"))
+    label = (request.form.get("label") or "").strip() or None
+    req = invite_codes_service.MintRequest(
+        max_uses=max_uses, expires_at=None, label=label
+    )
+    try:
+        codes = invite_codes_service.bulk_mint(
+            req, count=count, actor_user_id=current_user.id
+        )
+    except invite_codes_service.InviteCodeError as exc:
+        flash(f"Could not mint codes: {exc}")
+        return redirect(url_for("admin.invite_codes_index"))
+    for code in codes:
+        admin_audit_service.log_action(
+            actor_user_id=current_user.id,
+            action="invite_code_mint",
+            target_kind="invite_code",
+            target_id=code.id,
+            details=(
+                f"code={code.code} max_uses={code.max_uses} "
+                f"label={code.label!r}"
+            ),
+        )
+    flash(
+        f"Minted {len(codes)} code{'s' if len(codes) != 1 else ''}."
+    )
+    return redirect(url_for("admin.invite_codes_index"))
+
+
+@bp.post("/invite-codes/<int:code_id>/revoke")
+@min_role_required(Role.ADMIN)
+def invite_codes_revoke(code_id: int) -> object:
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        code = invite_codes_service.revoke_code(code_id)
+    except invite_codes_service.InviteCodeNotFoundError:
+        abort(404)
+    admin_audit_service.log_action(
+        actor_user_id=current_user.id,
+        action="invite_code_revoke",
+        target_kind="invite_code",
+        target_id=code.id,
+        details=f"code={code.code}",
+    )
+    flash(f"Code {code.code} revoked.")
+    return redirect(url_for("admin.invite_codes_index"))
 
 
 @bp.get("/audit")
