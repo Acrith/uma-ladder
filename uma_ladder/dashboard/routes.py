@@ -78,13 +78,34 @@ def changelog() -> object:
 
     404 if the file is missing — better than rendering an empty
     shell that looks broken to a user clicking the navbar link."""
+    return _render_repo_markdown(
+        "CHANGELOG.md", template="dashboard/changelog.html"
+    )
+
+
+@bp.get("/privacy")
+def privacy() -> object:
+    """PR-Q7 — privacy policy + GDPR contact. Same render path as
+    /changelog: edit PRIVACY.md at the repo root, the page picks it
+    up. Public, no auth required so prospective signups can read
+    it before creating an account."""
+    return _render_repo_markdown(
+        "PRIVACY.md", template="dashboard/privacy.html"
+    )
+
+
+def _render_repo_markdown(filename: str, *, template: str) -> object:
+    """Shared helper: read a trusted markdown file from the repo
+    root, render to HTML, hand off to ``template``. 404 if missing
+    so a misnamed deploy fails loudly rather than rendering an
+    empty shell."""
     repo_root = Path(current_app.root_path).parent
-    src = repo_root / "CHANGELOG.md"
+    src = repo_root / filename
     if not src.exists():
         abort(404)
     md = src.read_text(encoding="utf-8")
     html = markdown.markdown(md, extensions=["extra", "sane_lists"])
-    return render_template("dashboard/changelog.html", body=Markup(html))
+    return render_template(template, body=Markup(html))
 
 
 @bp.get("/_partials/official-top5")

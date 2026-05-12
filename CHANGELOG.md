@@ -6,6 +6,21 @@ log for the full history.
 
 ## 2026-05-12
 
+### Legal
+
+- **Privacy policy + GDPR contact.** A new
+  [Privacy](/privacy) page (linked from the footer) explains what
+  Uma Ladder collects (account fields, OAuth identities, race /
+  draft history, IP for rate limiting), who it's shared with
+  (Fly.io as host, Discord / Google for OAuth, uma.moe for club
+  sync, Sentry if configured), how long we keep it (active forever,
+  soft-deleted indefinitely with anonymized rendering, hard-deleted
+  immediately on request), and how to exercise your GDPR rights —
+  including a real contact email
+  (**r.krawczak@protonmail.com**) for data-deletion or
+  data-export requests. Source lives at `PRIVACY.md` in the repo
+  so edits go through the same review path as code.
+
 ### Anti-spam
 
 - **Invite-only signup gate.** A new admin page at
