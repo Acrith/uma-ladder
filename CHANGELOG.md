@@ -4,6 +4,28 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-05-12
+
+### Official races
+
+- **Cleaner race detail header + live countdown.** The race detail
+  page used to fan out every detail as a chip row — track, season,
+  scheduled time, weather, ground, plus three separate
+  visibility-switch buttons and the cancel/delete buttons all
+  competing for attention next to *Open registration*. Track info
+  (preset name, surface, distance, direction, course variant) and
+  conditions (race season, weather, ground) now live in a dedicated
+  amber-bordered **Track** card directly below the title, matching
+  the layout Draft matches already use. *Make public / private /
+  club-only* collapsed into a single **Visibility ▾** dropdown that
+  shows the current state at a glance, and *Cancel race* +
+  *Delete race* hide inside an **Actions ▾** dropdown so the eye
+  goes straight to the primary CTA. The scheduled time now renders
+  in **your browser's local timezone** with a live *"— starts in
+  5d 14h"* tail that updates every 30 seconds (and flips to
+  *"started X ago"* once the race begins), so you no longer have to
+  do the UTC math in your head.
+
 ## 2026-05-11
 
 ### Achievements
