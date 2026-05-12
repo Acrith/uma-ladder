@@ -83,15 +83,26 @@ anyone except as required by law.
 ## How long we keep it
 
 - **Active accounts:** as long as the account exists.
-- **Soft-deleted (disabled) accounts:** indefinitely. Your profile
-  is blanked, your linked OAuth identities are dropped, and you
-  render as `K***e`-style partial mask everywhere you appear in
-  race / draft history. The historical records stay intact so
-  other players' rankings remain accurate.
-- **Hard-deleted accounts:** immediately on request. Hard delete
-  cascades into race registrations, draft results, and other rows
-  tied to your account — depending on the row, this may also
-  affect other players' visible history.
+- **Account deletion on request — soft delete is the default.**
+  If you ask us to delete your account, we soft-delete it: your
+  public profile is blanked (display name, oshi, avatar, friend
+  code, Discord handle all cleared), your linked Discord / Google
+  identities are dropped so a future owner of that Discord can't
+  inherit your history, your password is scrambled so login is
+  impossible, and you render as a partially-anonymized
+  `K***e`-style mask everywhere you still appear in race / draft
+  history. This preserves other players' rankings and match
+  records while removing your personal identifiers — your account
+  is no longer addressable, queryable, or distinguishable from
+  any other deleted account from the outside.
+- **Hard delete is an admin-only edge case.** Reserved for things
+  like a fresh duplicate signup with no history, or a clear
+  policy violation where soft-delete isn't appropriate. Hard
+  delete cascades into race registrations, draft results, and
+  other rows tied to the account, which can affect other players'
+  visible history. We won't hard-delete a user-requested deletion
+  unless you specifically ask for it AND the history loss is
+  acceptable to you.
 - **Rate-limit IP data:** in-memory only; lost on every restart.
 - **Audit logs and report records:** indefinitely.
 

@@ -13,13 +13,16 @@ log for the full history.
   Uma Ladder collects (account fields, OAuth identities, race /
   draft history, IP for rate limiting), who it's shared with
   (Fly.io as host, Discord / Google for OAuth, uma.moe for club
-  sync, Sentry if configured), how long we keep it (active forever,
-  soft-deleted indefinitely with anonymized rendering, hard-deleted
-  immediately on request), and how to exercise your GDPR rights —
-  including a real contact email
-  (**r.krawczak@protonmail.com**) for data-deletion or
-  data-export requests. Source lives at `PRIVACY.md` in the repo
-  so edits go through the same review path as code.
+  sync, Sentry if configured), and how to exercise your GDPR
+  rights. **Deletion-on-request is soft-delete by default** —
+  your public profile is blanked, OAuth links are dropped, and
+  you render as a `K***e`-style mask everywhere you still appear
+  in race / draft history, so the records other players rely on
+  stay intact. Hard delete is reserved for admin edge cases and
+  isn't applied to a user-deletion request unless you specifically
+  ask for it. Contact for any data request:
+  **r.krawczak@protonmail.com**. Source lives at `PRIVACY.md` in
+  the repo so edits go through the same review path as code.
 
 ### Anti-spam
 

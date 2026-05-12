@@ -64,10 +64,10 @@
         {% if race.status not in ('cancelled', 'completed') %}
           {% set vis_label = {'public': 'Public', 'private': 'Private', 'club': 'Club only'}[race.visibility] %}
           <details data-autoclose-outside class="relative">
-            <summary class="cursor-pointer list-none inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-600 hover:text-slate-100">
-              {% if race.visibility == 'public' %}{{ icon_globe(class="h-3.5 w-3.5") }}
-              {% elif race.visibility == 'private' %}{{ icon_lock(class="h-3.5 w-3.5") }}
-              {% else %}{{ icon_users(class="h-3.5 w-3.5") }}{% endif %}
+            <summary class="cursor-pointer list-none inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-sm font-medium text-slate-300 hover:border-slate-600 hover:text-slate-100">
+              {% if race.visibility == 'public' %}{{ icon_globe(class="h-4 w-4") }}
+              {% elif race.visibility == 'private' %}{{ icon_lock(class="h-4 w-4") }}
+              {% else %}{{ icon_users(class="h-4 w-4") }}{% endif %}
               {{ vis_label }} <span aria-hidden="true">▾</span>
             </summary>
             <div class="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
@@ -117,7 +117,7 @@
         {% set show_delete = current_user.has_at_least('admin') %}
         {% if show_cancel or show_delete %}
           <details data-autoclose-outside class="relative">
-            <summary class="cursor-pointer list-none inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-slate-300 hover:border-rose-500/50 hover:text-rose-200">
+            <summary class="cursor-pointer list-none inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-sm font-medium text-slate-300 hover:border-rose-500/50 hover:text-rose-200">
               Actions <span aria-hidden="true">▾</span>
             </summary>
             <div class="absolute right-0 z-10 mt-1 w-44 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">

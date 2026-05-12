@@ -36,6 +36,7 @@ COPY uma_ladder ./uma_ladder
 COPY migrations ./migrations
 COPY data ./data
 COPY CHANGELOG.md ./
+COPY PRIVACY.md ./
 COPY --from=tailwind /build/output.css ./uma_ladder/static/css/output.css
 
 # Drop privileges.
