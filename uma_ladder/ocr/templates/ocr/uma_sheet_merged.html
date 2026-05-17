@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Uma sheet merged parse · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">OCR · Sandbox · Merged</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">
+        Merged uma sheet ({{ per_screenshot|length }} screenshot{{ '' if per_screenshot|length == 1 else 's' }})
+      </h1>
+      <p class="mt-1 text-xs text-slate-500">
+        Skills union'd across all screenshots; header / stats / aptitudes use
+        first non-empty value per field. Each screenshot stays addressable
+        via its own attempt id.
+      </p>
+    </div>
+    <a href="{{ url_for('ocr.uma_sheet_upload') }}" class="btn-ghost text-xs">+ New upload</a>
+  </div>
+
+  {# Screenshot strip — horizontally scrollable when there's more
+     than one so the visual reference stays at the top. #}
+  <section class="mt-6">
+    {% call card(class="p-3") %}
+      <p class="label-eyebrow">Source screenshots</p>
+      <div class="mt-2 flex gap-3 overflow-x-auto pb-2">
+        {% for s in per_screenshot %}
+          <a href="{{ url_for('ocr.uma_sheet_view', attempt_id=s.attempt.id) }}"
+             class="block shrink-0 rounded-lg border border-slate-800 bg-slate-950/40 p-2 hover:border-cyan-500/50">
+            <img src="{{ url_for('ocr.serve_image', image_id=s.image.id) }}"
+                 alt="uma sheet attempt {{ s.attempt.id }}"
+                 class="max-h-72 w-auto rounded" />
+            <p class="mt-1 text-center text-[10px] text-slate-500">attempt #{{ s.attempt.id }}</p>
+          </a>
+        {% endfor %}
+      </div>
+    {% endcall %}
+  </section>
+
+  {# Right-side panels stacked: header / stats / aptitudes / skills.
+     Each is full-width here since the screenshots already moved to
+     the strip above. #}
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Header</p>
+      <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <dt class="text-slate-500">Uma</dt>
+        <dd class="{{ 'text-cyan-300 font-medium' if merged.header.get('uma_name') else 'text-slate-600' }}">{{ merged.header.get('uma_name') or '—' }}</dd>
+        <dt class="text-slate-500">Outfit</dt>
+        <dd class="{{ 'text-slate-200' if merged.header.get('outfit') else 'text-slate-600' }}">{{ merged.header.get('outfit') or '—' }}</dd>
+        <dt class="text-slate-500">Epithet</dt>
+        <dd class="{{ 'text-slate-200' if merged.header.get('epithet') else 'text-slate-600' }}">{{ merged.header.get('epithet') or '—' }}</dd>
+        <dt class="text-slate-500">Score</dt>
+        <dd class="{{ 'text-amber-300 font-medium' if merged.header.get('uma_score') else 'text-slate-600' }}">{% if merged.header.get('uma_score') %}{{ "{:,}".format(merged.header.get('uma_score')) }}{% else %}—{% endif %}</dd>
+        <dt class="text-slate-500">Trainer</dt>
+        <dd class="{{ 'text-slate-200' if merged.header.get('trainer_name') else 'text-slate-600' }}">{{ merged.header.get('trainer_name') or '—' }}</dd>
+      </dl>
+    {% endcall %}
+
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Stats</p>
+      {% set stat_keys = ["speed", "stamina", "power", "guts", "wisdom"] %}
+      <dl class="mt-3 grid grid-cols-5 gap-2 text-center">
+        {% for key in stat_keys %}
+          <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+            <dt class="text-[10px] uppercase tracking-wider text-slate-500">{{ key }}</dt>
+            <dd class="mt-1 text-xl font-semibold {{ 'text-cyan-300' if merged.stats.get(key) else 'text-slate-600' }}">
+              {{ merged.stats.get(key) if merged.stats.get(key) is not none else '—' }}
+            </dd>
+          </div>
+        {% endfor %}
+      </dl>
+    {% endcall %}
+  </section>
+
+  <section class="mt-4">
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Aptitudes</p>
+      {% if not merged.aptitudes %}
+        <p class="mt-3 text-sm text-slate-500">No aptitude rows recognised.</p>
+      {% else %}
+        <div class="mt-3 space-y-3">
+          {% for cat_key, cat_label, cat_slots in [
+              ('track', 'Track', ['Turf', 'Dirt']),
+              ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
+              ('style', 'Style', ['Front', 'Pace', 'Late', 'End']),
+            ] %}
+            {% set cat_data = merged.aptitudes.get(cat_key) %}
+            {% if cat_data %}
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400">{{ cat_label }}</p>
+                <div class="mt-1 flex flex-wrap gap-2">
+                  {% for slot in cat_slots %}
+                    {% set rank = cat_data.get(slot|lower) %}
+                    <div class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs">
+                      <span class="text-slate-400">{{ slot }}</span>
+                      <span class="font-mono font-semibold {{ 'text-cyan-300' if rank else 'text-slate-600' }}">{{ rank or '—' }}</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endcall %}
+  </section>
+
+  <section class="mt-4">
+    {% call card(class="p-5") %}
+      <div class="flex items-center justify-between">
+        <p class="label-eyebrow">Skills <span class="ml-1 text-slate-500">({{ matched_skills | length }})</span></p>
+        <span class="text-[10px] text-slate-500">union'd across screenshots; tier variants kept separate</span>
+      </div>
+      {% if not matched_skills %}
+        <p class="mt-3 text-sm text-slate-500">No skills resolved. Check the debug block below — if the text we searched is empty, the Skills marker didn't land on any screenshot.</p>
+      {% else %}
+        <ul class="mt-3 flex flex-wrap gap-2 text-xs">
+          {% for s in matched_skills %}
+            <li class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+              {% if s.image_url %}
+                <img src="{{ s.image_url }}"
+                     alt=""
+                     loading="lazy"
+                     referrerpolicy="no-referrer"
+                     class="h-4 w-4 rounded" />
+              {% endif %}
+              <span>{{ s.name_en }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endcall %}
+  </section>
+
+  {# Debug surface — the literal text block we scanned, per-
+     screenshot. This is what diagnoses "why didn't X match" — if
+     the skill name isn't in the block, no amount of matcher tuning
+     will fix it. #}
+  <section class="mt-4">
+    <details data-autoclose-outside class="surface-card p-4">
+      <summary class="cursor-pointer text-sm text-slate-300">Skills-section debug block (what the matcher actually scanned)</summary>
+      <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-[11px] text-slate-400">{{ merged.skills_block_debug or '(empty — Skills marker not found on any screenshot)' }}</pre>
+    </details>
+  </section>
+{% endblock %}

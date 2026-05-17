@@ -17,141 +17,122 @@
     <a href="{{ url_for('ocr.uma_sheet_upload') }}" class="btn-ghost text-xs">+ Another upload</a>
   </div>
 
-  <section class="mt-6 grid gap-4 lg:grid-cols-[3fr_2fr]">
-    {# Screenshot — left column, large so we can read the source. #}
-    {% call card(class="p-3") %}
+  {# Two-column layout: screenshot pinned on the left, all extraction
+     panels stacked on the right. PR-OCR3 fix for the previous
+     full-width-below-screenshot layout that the user flagged. #}
+  <section class="mt-6 grid gap-4 lg:grid-cols-[2fr_3fr]">
+    {% call card(class="p-3 lg:sticky lg:top-4 lg:self-start") %}
       <p class="label-eyebrow">Source screenshot</p>
       <img src="{{ url_for('ocr.serve_image', image_id=image.id) }}"
            alt="uploaded uma sheet"
-           class="mt-2 max-h-[36rem] w-full rounded-lg object-contain bg-slate-950/40" />
+           class="mt-2 max-h-[42rem] w-full rounded-lg object-contain bg-slate-950/40" />
     {% endcall %}
 
     <div class="space-y-4">
-      {# Header card: uma name, outfit, epithet, score, trainer.
-         Each independently optional — em-dash when missing so
-         layout regressions are obvious at a glance. #}
       {% call card(class="p-5") %}
         <p class="label-eyebrow">Header</p>
         <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <dt class="text-slate-500">Uma</dt>
           <dd class="{{ 'text-cyan-300 font-medium' if sheet.header.get('uma_name') else 'text-slate-600' }}">{{ sheet.header.get('uma_name') or '—' }}</dd>
-
           <dt class="text-slate-500">Outfit</dt>
           <dd class="{{ 'text-slate-200' if sheet.header.get('outfit') else 'text-slate-600' }}">{{ sheet.header.get('outfit') or '—' }}</dd>
-
           <dt class="text-slate-500">Epithet</dt>
           <dd class="{{ 'text-slate-200' if sheet.header.get('epithet') else 'text-slate-600' }}">{{ sheet.header.get('epithet') or '—' }}</dd>
-
           <dt class="text-slate-500">Score</dt>
           <dd class="{{ 'text-amber-300 font-medium' if sheet.header.get('uma_score') else 'text-slate-600' }}">{% if sheet.header.get('uma_score') %}{{ "{:,}".format(sheet.header.get('uma_score')) }}{% else %}—{% endif %}</dd>
-
           <dt class="text-slate-500">Trainer</dt>
           <dd class="{{ 'text-slate-200' if sheet.header.get('trainer_name') else 'text-slate-600' }}">{{ sheet.header.get('trainer_name') or '—' }}</dd>
         </dl>
       {% endcall %}
 
-      {# Provider-side confidence metadata, kept tucked under the
-         header card. #}
-      {% if confidence %}
-        {% call card(class="p-4") %}
-          <p class="label-eyebrow">Provider confidence</p>
-          <pre class="mt-2 text-[10px] text-slate-400 overflow-auto">{{ confidence | tojson(indent=2) }}</pre>
-        {% endcall %}
-      {% endif %}
-    </div>
-  </section>
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Stats</p>
+        {% set stat_keys = ["speed", "stamina", "power", "guts", "wisdom"] %}
+        <dl class="mt-3 grid grid-cols-5 gap-2 text-center">
+          {% for key in stat_keys %}
+            <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+              <dt class="text-[10px] uppercase tracking-wider text-slate-500">{{ key }}</dt>
+              <dd class="mt-1 text-xl font-semibold {{ 'text-cyan-300' if sheet.stats.get(key) else 'text-slate-600' }}">
+                {{ sheet.stats.get(key) if sheet.stats.get(key) is not none else '—' }}
+              </dd>
+            </div>
+          {% endfor %}
+        </dl>
+        {% if not sheet.stats %}
+          <p class="mt-3 text-xs text-rose-300">
+            No stats extracted. Check the raw OCR text below — the label-row
+            + value-row pairing relies on both rows being clustered correctly.
+          </p>
+        {% endif %}
+      {% endcall %}
 
-  {# Stats — POSITIONAL extraction. Race-result extractor used to put
-     the same number in every cell; PR-OCR2's _extract_stats_positional
-     pairs the 5 labels on one row with 5 numbers on the next row
-     index-to-index. #}
-  <section class="mt-4">
-    {% call card(class="p-5") %}
-      <p class="label-eyebrow">Stats</p>
-      {% set stat_keys = ["speed", "stamina", "power", "guts", "wisdom"] %}
-      <dl class="mt-3 grid grid-cols-5 gap-2 text-center">
-        {% for key in stat_keys %}
-          <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
-            <dt class="text-[10px] uppercase tracking-wider text-slate-500">{{ key }}</dt>
-            <dd class="mt-1 text-xl font-semibold {{ 'text-cyan-300' if sheet.stats.get(key) else 'text-slate-600' }}">
-              {{ sheet.stats.get(key) if sheet.stats.get(key) is not none else '—' }}
-            </dd>
-          </div>
-        {% endfor %}
-      </dl>
-      {% if not sheet.stats %}
-        <p class="mt-3 text-xs text-rose-300">
-          No stats extracted. Check the raw OCR text below — the label-row
-          + value-row pairing relies on both rows being clustered correctly.
-        </p>
-      {% endif %}
-    {% endcall %}
-  </section>
-
-  {# Aptitudes — 3 categories on 3 rows on the sheet. We render
-     them as a table for compactness. #}
-  <section class="mt-4">
-    {% call card(class="p-5") %}
-      <p class="label-eyebrow">Aptitudes</p>
-      {% if not sheet.aptitudes %}
-        <p class="mt-3 text-sm text-slate-500">No aptitude rows recognised.</p>
-      {% else %}
-        <div class="mt-3 space-y-3">
-          {% for cat_key, cat_label, cat_slots in [
-              ('track', 'Track', ['Turf', 'Dirt']),
-              ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
-              ('style', 'Style', ['Front', 'Pace', 'Late', 'End']),
-            ] %}
-            {% set cat_data = sheet.aptitudes.get(cat_key) %}
-            {% if cat_data %}
-              <div>
-                <p class="text-xs uppercase tracking-wider text-slate-400">{{ cat_label }}</p>
-                <div class="mt-1 flex flex-wrap gap-2">
-                  {% for slot in cat_slots %}
-                    {% set rank = cat_data.get(slot|lower) %}
-                    <div class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs">
-                      <span class="text-slate-400">{{ slot }}</span>
-                      <span class="font-mono font-semibold {{ 'text-cyan-300' if rank else 'text-slate-600' }}">{{ rank or '—' }}</span>
-                    </div>
-                  {% endfor %}
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Aptitudes</p>
+        {% if not sheet.aptitudes %}
+          <p class="mt-3 text-sm text-slate-500">No aptitude rows recognised.</p>
+        {% else %}
+          <div class="mt-3 space-y-3">
+            {% for cat_key, cat_label, cat_slots in [
+                ('track', 'Track', ['Turf', 'Dirt']),
+                ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
+                ('style', 'Style', ['Front', 'Pace', 'Late', 'End']),
+              ] %}
+              {% set cat_data = sheet.aptitudes.get(cat_key) %}
+              {% if cat_data %}
+                <div>
+                  <p class="text-xs uppercase tracking-wider text-slate-400">{{ cat_label }}</p>
+                  <div class="mt-1 flex flex-wrap gap-2">
+                    {% for slot in cat_slots %}
+                      {% set rank = cat_data.get(slot|lower) %}
+                      <div class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs">
+                        <span class="text-slate-400">{{ slot }}</span>
+                        <span class="font-mono font-semibold {{ 'text-cyan-300' if rank else 'text-slate-600' }}">{{ rank or '—' }}</span>
+                      </div>
+                    {% endfor %}
+                  </div>
                 </div>
-              </div>
-            {% endif %}
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endcall %}
-  </section>
-
-  {# Skills — catalogue-resolved from the post-"Skills" text block.
-     Names appear here only if they matched an enabled UmaSkill, so
-     this list is implicitly "clean." Unmatched fragments are still
-     visible in the raw text below for tuning. #}
-  <section class="mt-4">
-    {% call card(class="p-5") %}
-      <div class="flex items-center justify-between">
-        <p class="label-eyebrow">Skills <span class="ml-1 text-slate-500">({{ matched_skills | length }})</span></p>
-        <span class="text-[10px] text-slate-500">found in UmaSkill catalogue, in screen order</span>
-      </div>
-      {% if not matched_skills %}
-        <p class="mt-3 text-sm text-slate-500">No skills resolved. Check the raw text — Vision sometimes splits multi-word skills across rows or merges multiple skills on one row.</p>
-      {% else %}
-        <ul class="mt-3 flex flex-wrap gap-2 text-xs">
-          {% for s in matched_skills %}
-            <li class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
-              {% if s.image_url %}
-                <img src="{{ s.image_url }}"
-                     alt=""
-                     loading="lazy"
-                     referrerpolicy="no-referrer"
-                     class="h-4 w-4 rounded" />
               {% endif %}
-              <span>{{ s.name_en }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endcall %}
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endcall %}
+
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <p class="label-eyebrow">Skills <span class="ml-1 text-slate-500">({{ matched_skills | length }})</span></p>
+          <span class="text-[10px] text-slate-500">tier variants kept separate (◎/○/× are not OCR'd)</span>
+        </div>
+        {% if not matched_skills %}
+          <p class="mt-3 text-sm text-slate-500">No skills resolved. Check the debug block below — if the searched text is empty, the Skills marker didn't land.</p>
+        {% else %}
+          <ul class="mt-3 flex flex-wrap gap-2 text-xs">
+            {% for s in matched_skills %}
+              <li class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+                {% if s.image_url %}
+                  <img src="{{ s.image_url }}"
+                       alt=""
+                       loading="lazy"
+                       referrerpolicy="no-referrer"
+                       class="h-4 w-4 rounded" />
+                {% endif %}
+                <span>{{ s.name_en }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endcall %}
+
+      {# Debug surface — the literal text block the matcher actually
+         scanned. Single most useful diagnostic when a known skill
+         isn't resolving: if it's not IN the block, no matcher
+         tuning will help. #}
+      {% call card(class="p-4") %}
+        <details data-autoclose-outside>
+          <summary class="cursor-pointer text-xs text-slate-400">Skills-section debug block (what was scanned)</summary>
+          <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap text-[11px] text-slate-400">{{ sheet.skills_block_debug or '(empty — Skills marker not found)' }}</pre>
+        </details>
+      {% endcall %}
+    </div>
   </section>
 
   {# All detected row clusters — the source material for the
@@ -174,7 +155,7 @@
   {% endif %}
 
   {# Raw OCR text from Vision — useful for fixture-writing and to
-     spot punctuation tokenisation we missed. Collapsed by default. #}
+     spot tokenisation we missed. Collapsed by default. #}
   <section class="mt-4 space-y-3">
     <details data-autoclose-outside class="surface-card p-4">
       <summary class="cursor-pointer text-sm text-slate-300">Raw OCR text (full)</summary>
@@ -184,5 +165,11 @@
       <summary class="cursor-pointer text-sm text-slate-300">Parsed JSON (raw)</summary>
       <pre class="mt-3 max-h-96 overflow-auto text-[11px] text-slate-400">{{ parsed_pretty }}</pre>
     </details>
+    {% if confidence %}
+      <details data-autoclose-outside class="surface-card p-4">
+        <summary class="cursor-pointer text-sm text-slate-300">Provider confidence</summary>
+        <pre class="mt-2 text-[10px] text-slate-400 overflow-auto">{{ confidence | tojson(indent=2) }}</pre>
+      </details>
+    {% endif %}
   </section>
 {% endblock %}

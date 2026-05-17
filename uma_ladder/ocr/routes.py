@@ -128,29 +128,128 @@ def serve_image(image_id: int) -> object:
 @min_role_required(Role.ADMIN)
 @limiter.limit("30 per hour", methods=["POST"])
 def uma_sheet_upload() -> object:
-    form = UploadForm()
-    if form.validate_on_submit():
-        try:
-            image = ocr_service.save_uploaded_image(
-                form.image.data,
-                uploader_user_id=current_user.id,
-                purpose=UploadPurpose.UMA_SHEET,
-            )
-        except ocr_service.OcrError as exc:
-            flash(str(exc))
+    """PR-OCR3: accepts MULTIPLE files in one submit. Each file
+    becomes its own OcrParseAttempt; on success we redirect to the
+    merged view with `?ids=...` so the user sees all screenshots'
+    extractions combined into one panel set.
+
+    A single-file upload still works — it just redirects to the
+    merged view with one id, which renders the same way as the old
+    single view (the merger is a no-op for one input)."""
+    form = CsrfOnlyForm()
+    if request.method == "POST":
+        if not form.validate_on_submit():
+            abort(400)
+        files = request.files.getlist("image")
+        files = [f for f in files if f and getattr(f, "filename", "")]
+        if not files:
+            flash("Pick at least one image to upload.")
             return redirect(url_for("ocr.uma_sheet_upload"))
-        try:
-            attempt = ocr_service.run_parse(image)
-        except RuntimeError as exc:
-            # google_vision raises RuntimeError on transport / API
-            # failures. Surface the message so a misconfigured key
-            # or rate-limit response is debuggable in the sandbox.
-            flash(f"OCR provider error: {exc}")
+        attempt_ids: list[int] = []
+        for f in files:
+            try:
+                image = ocr_service.save_uploaded_image(
+                    f,
+                    uploader_user_id=current_user.id,
+                    purpose=UploadPurpose.UMA_SHEET,
+                )
+            except ocr_service.OcrError as exc:
+                flash(f"{f.filename}: {exc}")
+                continue
+            try:
+                attempt = ocr_service.run_parse(image)
+            except RuntimeError as exc:
+                # google_vision raises RuntimeError on transport / API
+                # failures. Surface the message so a misconfigured key
+                # or rate-limit response is debuggable in the sandbox.
+                flash(f"{f.filename}: OCR provider error: {exc}")
+                continue
+            attempt_ids.append(attempt.id)
+        if not attempt_ids:
             return redirect(url_for("ocr.uma_sheet_upload"))
         return redirect(
-            url_for("ocr.uma_sheet_view", attempt_id=attempt.id)
+            url_for(
+                "ocr.uma_sheet_merged",
+                ids=",".join(str(i) for i in attempt_ids),
+            )
         )
     return render_template("ocr/uma_sheet_upload.html", form=form)
+
+
+@bp.get("/uma-sheet/merged")
+@min_role_required(Role.ADMIN)
+def uma_sheet_merged() -> object:
+    """PR-OCR3 — merged view across N attempts. Driven by the
+    `?ids=1,2,3` query string the multi-upload handler builds.
+    Skills are union+dedupe, header/stats/aptitudes take first
+    non-empty per field. Each screenshot stays addressable via
+    /ocr/uma-sheet/<id>; this is the merged surface."""
+    raw_ids = (request.args.get("ids") or "").strip()
+    if not raw_ids:
+        abort(400)
+    try:
+        ids = [int(x) for x in raw_ids.split(",") if x.strip()]
+    except ValueError:
+        abort(400)
+    if not ids:
+        abort(400)
+    # Preserve user-supplied order so screenshots render left-to-right
+    # in upload order. Each id is looked up individually; a missing
+    # one drops out rather than 404'ing the whole page.
+    attempts: list = []
+    for aid in ids:
+        a = db.session.get(OcrParseAttempt, aid)
+        if a is None:
+            continue
+        attempts.append(a)
+    if not attempts:
+        abort(404)
+
+    from ..models import UmaSkill
+    from ..services.ocr_uma_sheet import extract_uma_sheet, merge_extracts
+
+    per_screenshot: list[dict[str, object]] = []
+    extracts = []
+    for a in attempts:
+        parsed = a.parsed_json or {}
+        rows = parsed.get("rows") or []
+        line_texts = [
+            (r.get("raw_line") or r.get("uma_name") or "").strip()
+            for r in rows
+        ]
+        line_texts = [t for t in line_texts if t]
+        ex = extract_uma_sheet(line_texts)
+        extracts.append(ex)
+        per_screenshot.append({"attempt": a, "image": a.image, "extract": ex})
+
+    merged = merge_extracts(extracts)
+
+    # Resolve catalogue icons for the merged skill list.
+    skill_ids = [s["id"] for s in merged.skills]
+    skill_lookup: dict[int, UmaSkill] = {}
+    if skill_ids:
+        for s in (
+            db.session.query(UmaSkill).filter(UmaSkill.id.in_(skill_ids)).all()
+        ):
+            skill_lookup[s.id] = s
+    matched_skills = [
+        {
+            "name_en": s["name_en"],
+            "image_url": (
+                skill_lookup[s["id"]].image_url
+                if s["id"] in skill_lookup
+                else None
+            ),
+        }
+        for s in merged.skills
+    ]
+
+    return render_template(
+        "ocr/uma_sheet_merged.html",
+        per_screenshot=per_screenshot,
+        merged=merged,
+        matched_skills=matched_skills,
+    )
 
 
 @bp.get("/uma-sheet/<int:attempt_id>")

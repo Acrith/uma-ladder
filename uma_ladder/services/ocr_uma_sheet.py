@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -163,10 +164,17 @@ def _extract_aptitudes(
 # ─── Skills ──────────────────────────────────────────────────────
 
 # Tab-bar marker that demarcates the start of the skills section on
-# the Uma profile screen. Vision reads it as one row containing all
-# three tab labels.
-_SKILLS_MARKER_RE = re.compile(
+# the Uma profile screen. Originally tuned for `Skills Inspiration
+# Career Info` (Vision clusters all three tabs as one row). PR-OCR3:
+# fall back to a standalone "Skills" line because Vision sometimes
+# splits the tabs into separate paragraphs — in which case the
+# stricter `skills + career` pattern fails and we'd return zero
+# skills despite the section being right there.
+_SKILLS_MARKER_FULL_RE = re.compile(
     r"\bskills?\b.*\bcareer\b", re.IGNORECASE
+)
+_SKILLS_MARKER_LONE_RE = re.compile(
+    r"^\s*skills?\s*$", re.IGNORECASE
 )
 
 # End markers. "Close" is the dialog dismiss button; "Save As" /
@@ -195,24 +203,34 @@ def _normalize_for_skill_search(s: str) -> str:
     return _SKILL_NAME_NOISE_RE.sub("", s.lower())
 
 
+def _find_skills_marker(line_texts: Sequence[str]) -> int | None:
+    """Locate the start of the post-Skills section. Tries the full
+    `Skills … Career` cluster first (preferred — definitive when
+    Vision clusters all three tabs on one row), falls back to a
+    lone `Skills` line (handles the split-tabs case)."""
+    for i, line in enumerate(line_texts):
+        if _SKILLS_MARKER_FULL_RE.search(line):
+            return i + 1
+    for i, line in enumerate(line_texts):
+        if _SKILLS_MARKER_LONE_RE.match(line):
+            return i + 1
+    return None
+
+
 def _extract_skills_section_text(
     line_texts: Sequence[str],
 ) -> str:
     """Return the joined post-Skills, pre-Close text block."""
-    start_idx: int | None = None
-    end_idx = len(line_texts)
-    for i, line in enumerate(line_texts):
-        if start_idx is None and _SKILLS_MARKER_RE.search(line):
-            start_idx = i + 1
-            continue
-        if start_idx is not None:
-            # Stop at the first line that's ONLY an end token.
-            tokens = line.lower().split()
-            if tokens and tokens[0] in _SKILLS_END_TOKENS:
-                end_idx = i
-                break
+    start_idx = _find_skills_marker(line_texts)
     if start_idx is None:
         return ""
+    end_idx = len(line_texts)
+    for i in range(start_idx, len(line_texts)):
+        # Stop at the first line that's ONLY an end token.
+        tokens = line_texts[i].lower().split()
+        if tokens and tokens[0] in _SKILLS_END_TOKENS:
+            end_idx = i
+            break
     block = " ".join(line_texts[start_idx:end_idx])
     # Strip level / circle noise BEFORE returning so the catalogue
     # scan doesn't have to know about them.
@@ -223,8 +241,16 @@ def _extract_skills(
     line_texts: Sequence[str],
 ) -> list[dict[str, object]]:
     """Find every UmaSkill catalogue name occurring in the post-Skills
-    text block. Returns [{"id": int, "name_en": str, "raw_pos": int}]
-    ordered by first occurrence so the UI lists them in screen order."""
+    text block. Returns ``[{"id", "name_en", "raw_pos"}]`` ordered by
+    first occurrence so the UI lists them in screen order.
+
+    Tier variants (Right-Handed ◎ / ○ / × all normalize to
+    ``righthanded``) are kept as separate entries: the OCR can't
+    distinguish the tier glyph reliably, so we surface ALL catalogue
+    rows that share the normalized name and let the human decide
+    which one was actually on-screen. Dedupe is by skill id, so
+    inherited-variant duplicates (same name_en, same id space) still
+    collapse."""
     block = _extract_skills_section_text(line_texts)
     if not block:
         return []
@@ -233,41 +259,48 @@ def _extract_skills(
         return []
     # Load enabled skills once. ~2k rows is cheap.
     catalog = db.session.query(UmaSkill).filter(UmaSkill.enabled.is_(True)).all()
-    # Sort longest-first so "Long Corners" matches before "Long" if
-    # both were ever in the catalogue. Prevents a shorter substring
-    # skill from cannibalising a longer one's text.
-    catalog_norm = sorted(
-        (
-            (_normalize_for_skill_search(s.name_en), s.id, s.name_en)
-            for s in catalog
-        ),
-        key=lambda t: (-len(t[0]), t[2]),
+    # Group by normalized name so all tier variants of "Right-Handed"
+    # come out together at the same matched position.
+    groups: dict[str, list[UmaSkill]] = defaultdict(list)
+    for s in catalog:
+        norm = _normalize_for_skill_search(s.name_en)
+        if not norm or len(norm) < 3:
+            # Skip degenerate short names that would false-positive
+            # all over the place ("a", "go" etc).
+            continue
+        groups[norm].append(s)
+    # Longest-first so "Long Corners" matches before "Long" if both
+    # are in the catalogue — prevents a shorter prefix-skill from
+    # cannibalising a longer one's text. Tie-break on name_en for
+    # determinism.
+    sorted_norms = sorted(
+        groups.keys(),
+        key=lambda n: (-len(n), n),
     )
     found: list[tuple[int, int, str]] = []
     consumed: list[bool] = [False] * len(norm_block)
-    for norm_name, skill_id, name_en in catalog_norm:
-        if not norm_name or len(norm_name) < 3:
-            # Skip degenerate short names that would false-positive
-            # all over the place.
-            continue
-        # Search every occurrence; on each hit, mark that span as
-        # consumed so a shorter prefix-skill can't claim the same
-        # characters.
+    for norm_name in sorted_norms:
+        skills_in_group = groups[norm_name]
         start = 0
         while True:
             idx = norm_block.find(norm_name, start)
             if idx < 0:
                 break
-            span = consumed[idx : idx + len(norm_name)]
-            if any(span):
+            if any(consumed[idx : idx + len(norm_name)]):
                 start = idx + 1
                 continue
             for k in range(idx, idx + len(norm_name)):
                 consumed[k] = True
-            found.append((idx, skill_id, name_en))
+            # Emit every skill that shares this normalized name —
+            # the tier glyph is not in the OCR'd text, so the human
+            # picks which tier from the rendered list.
+            for s in skills_in_group:
+                found.append((idx, s.id, s.name_en))
             start = idx + len(norm_name)
     found.sort()
-    # Dedupe by skill_id, preserving order of first occurrence.
+    # Dedupe by skill id (inherited variants in same catalogue share
+    # name_en but have distinct ids — keep both; only collapse exact
+    # id repeats which shouldn't happen here but is cheap to guard).
     seen: set[int] = set()
     out: list[dict[str, object]] = []
     for pos, sid, name_en in found:
@@ -359,12 +392,15 @@ class UmaSheetExtract:
 
     Every field is independently optional; the sandbox renders
     em-dashes for any missing piece so a layout change still gives
-    us partial data."""
+    us partial data. `skills_block_debug` is the post-"Skills"
+    text the parser actually scanned — exposed so the sandbox can
+    show "here's exactly what we searched" when matches go wrong."""
 
     stats: dict[str, int] = field(default_factory=dict)
     aptitudes: dict[str, dict[str, str]] = field(default_factory=dict)
     skills: list[dict[str, object]] = field(default_factory=list)
     header: dict[str, object] = field(default_factory=dict)
+    skills_block_debug: str = ""
 
 
 def extract_uma_sheet(line_texts: Sequence[str]) -> UmaSheetExtract:
@@ -373,4 +409,61 @@ def extract_uma_sheet(line_texts: Sequence[str]) -> UmaSheetExtract:
         aptitudes=_extract_aptitudes(line_texts),
         skills=_extract_skills(line_texts),
         header=_extract_header(line_texts),
+        skills_block_debug=_extract_skills_section_text(line_texts),
+    )
+
+
+# ─── Merging extracts from multiple screenshots ──────────────────
+
+
+def merge_extracts(extracts: Sequence[UmaSheetExtract]) -> UmaSheetExtract:
+    """Combine N extracts (one per screenshot) into a single view.
+
+    Strategy:
+    - Header / stats / aptitudes: first non-empty value per field
+      wins. The user uploads screenshots in some order; assume the
+      first one is the most complete header source.
+    - Skills: union, deduped by skill id. The whole point of multi-
+      screenshot uploads — first screen had skills 1-N, second had
+      N+1-M, the merged view shows them all.
+    - skills_block_debug: concatenate the per-screenshot blocks with
+      `\n--- screenshot N ---\n` separators so the debug pane shows
+      everything that contributed.
+    """
+    if not extracts:
+        return UmaSheetExtract()
+
+    header: dict[str, object] = {}
+    stats: dict[str, int] = {}
+    aptitudes: dict[str, dict[str, str]] = {}
+    seen_skill_ids: set[int] = set()
+    skills: list[dict[str, object]] = []
+    debug_chunks: list[str] = []
+
+    for i, e in enumerate(extracts, start=1):
+        for k, v in e.header.items():
+            header.setdefault(k, v)
+        for k, v in e.stats.items():
+            if v is not None:
+                stats.setdefault(k, v)
+        for cat, slots in e.aptitudes.items():
+            cat_dest = aptitudes.setdefault(cat, {})
+            for slot, rank in slots.items():
+                cat_dest.setdefault(slot, rank)
+        for s in e.skills:
+            sid = s.get("id")
+            if isinstance(sid, int) and sid not in seen_skill_ids:
+                seen_skill_ids.add(sid)
+                skills.append(s)
+        if e.skills_block_debug:
+            debug_chunks.append(
+                f"--- screenshot {i} ---\n{e.skills_block_debug}"
+            )
+
+    return UmaSheetExtract(
+        stats=stats,
+        aptitudes=aptitudes,
+        skills=skills,
+        header=header,
+        skills_block_debug="\n\n".join(debug_chunks),
     )

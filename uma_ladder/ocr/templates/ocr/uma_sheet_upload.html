@@ -5,25 +5,82 @@
   <p class="label-eyebrow">OCR · Sandbox</p>
   <h1 class="mt-1 text-2xl font-semibold text-slate-100">Uma sheet OCR — iteration bench</h1>
   <p class="mt-2 max-w-2xl text-sm text-slate-400">
-    Drop in an in-game Uma profile / character-sheet screenshot. Runs through
-    the same <code class="text-mono-pill text-xs">google_vision</code> pipeline
-    the race-result flow uses, then renders the raw OCR text plus the
-    structured stats + skill-candidate output side-by-side so we can see what
-    needs sheet-specific extraction logic. Nothing is saved against any race
-    or profile — pure inspection.
+    Drop in one or more in-game Uma profile / character-sheet screenshots.
+    Runs through the same <code class="text-mono-pill text-xs">google_vision</code>
+    pipeline the race-result flow uses, then renders structured stats +
+    aptitudes + skill matches side-by-side with the screenshots so we can
+    see where the parser still has gaps. Pick multiple files at once (or
+    paste from clipboard) to merge skills across several sheets of the
+    same uma — useful when one screenshot only fits half the skill list.
+    Nothing is saved against any race or profile.
   </p>
 
-  {% call card(class="mt-6 p-6 max-w-md") %}
-    <form method="post" enctype="multipart/form-data">
+  {% call card(class="mt-6 p-6 max-w-2xl") %}
+    <form method="post" enctype="multipart/form-data" data-clipboard-paste>
       {{ form.hidden_tag() }}
-      <label class="text-sm text-slate-300">{{ form.image.label.text }}</label>
-      {{ form.image(class="mt-1 block w-full text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-cyan-500 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-950 file:hover:bg-cyan-400") }}
-      {% if form.image.errors %}
-        <ul class="mt-1 text-xs text-rose-300">
-          {% for err in form.image.errors %}<li>{{ err }}</li>{% endfor %}
-        </ul>
-      {% endif %}
-      <button class="btn-primary mt-4">Upload &amp; parse</button>
+      <label class="text-sm text-slate-300">Screenshots</label>
+      <input type="file"
+             name="image"
+             multiple
+             accept="image/png,image/jpeg,image/webp"
+             class="mt-1 block w-full text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-cyan-500 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-950 file:hover:bg-cyan-400" />
+      <p class="mt-1 text-xs text-slate-500">PNG / JPG / WEBP. Hold Ctrl / Shift to multi-select in the file picker.</p>
+      <div class="mt-4 flex flex-wrap items-center gap-2">
+        <button class="btn-primary">Upload &amp; parse</button>
+        <button type="button" data-paste-arm class="btn-ghost text-xs" title="Click then Ctrl+V to paste one clipboard image and auto-submit">
+          📋 Paste from clipboard
+        </button>
+        <span class="text-xs text-slate-500">Multi-clipboard paste isn't supported yet — for batches, use the file picker.</span>
+      </div>
     </form>
   {% endcall %}
+
+  {# Re-uses the clipboard-paste helper from official/detail.html.
+     Arms the form on click; the next Ctrl+V on the page captures
+     one clipboard image, drops it into the file input, and submits.
+     Auto-disarms after 10s. #}
+  <script>
+    (function() {
+      let armed = null;
+      let disarmTimer = null;
+      function disarm() {
+        if (armed) {
+          armed.classList.remove('ring-2', 'ring-cyan-400', 'shadow-glow-cyan');
+        }
+        armed = null;
+        if (disarmTimer) { clearTimeout(disarmTimer); disarmTimer = null; }
+      }
+      document.querySelectorAll('[data-clipboard-paste]').forEach(function(form) {
+        const btn = form.querySelector('[data-paste-arm]');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+          if (armed === form) { disarm(); return; }
+          disarm();
+          armed = form;
+          form.classList.add('ring-2', 'ring-cyan-400', 'shadow-glow-cyan');
+          disarmTimer = setTimeout(disarm, 10000);
+        });
+      });
+      document.addEventListener('paste', function(e) {
+        if (!armed) return;
+        const items = (e.clipboardData && e.clipboardData.items) || [];
+        for (const item of items) {
+          if (!item.type || !item.type.startsWith('image/')) continue;
+          const file = item.getAsFile();
+          if (!file) continue;
+          e.preventDefault();
+          const input = armed.querySelector('input[type=file]');
+          if (input) {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+          }
+          const formToSubmit = armed;
+          disarm();
+          formToSubmit.submit();
+          return;
+        }
+      });
+    })();
+  </script>
 {% endblock %}

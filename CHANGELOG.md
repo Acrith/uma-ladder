@@ -8,6 +8,35 @@ log for the full history.
 
 ### Behind the scenes
 
+- **Uma-sheet OCR sandbox: multi-upload, tier variants, layout
+  cleanup (PR-OCR3).** Three concrete improvements driven by the
+  first prod run of the sandbox:
+  - **Pick multiple screenshots at once.** A single uma's profile
+    often takes two screenshots to fit all skills. The upload form
+    now accepts multi-select (and still supports single-shot
+    clipboard paste). The post-upload view at
+    `/ocr/uma-sheet/merged?ids=…` shows every screenshot in a
+    horizontal strip and merges the extractions — skills are
+    union'd + deduped, header / stats / aptitudes take the first
+    non-empty value across screenshots.
+  - **Green skills now resolve.** The catalogue stores tier
+    variants of green skills (`Right-Handed ◎ / ○ / ×`) but the
+    OCR can't read the tier glyph, so the previous matcher missed
+    them entirely. Now all variants that share a normalized name
+    surface as separate chips — you can see which tier was
+    actually in the screenshot from the rendered list.
+  - **Skills-section debug block.** Each result page exposes the
+    literal text the matcher scanned (the post-"Skills" section),
+    so when a known skill won't resolve you can see immediately
+    whether the text is even in the block or the marker landed
+    wrong. Also added a fallback for the `Skills` marker that
+    handles screenshots where Vision splits the three tabs into
+    separate rows.
+  - **Layout cleanup.** Single-attempt view now stacks all
+    extraction panels next to the screenshot in a 2-column layout
+    instead of below it, so cross-referencing the screenshot
+    against the parsed fields stays at-a-glance.
+
 - **Uma-sheet OCR sandbox: sheet-specific extractor (PR-OCR2).**
   Replaces the race-result parser's stat / skill extractors on
   the sandbox surface only — the race-result flow is untouched.

@@ -171,3 +171,130 @@ def test_ocr_index_hides_sandbox_link_from_regular_user(
     resp = client.get("/ocr/")
     assert resp.status_code == 200
     assert "Uma sheet sandbox" not in resp.data.decode()
+
+
+# ─── PR-OCR3: multi-upload + merged view ─────────────────────────
+
+
+def test_multi_upload_creates_one_attempt_per_file(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """POST with N files creates N OcrParseAttempts and redirects
+    to /uma-sheet/merged?ids=... with each id in order."""
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+    make_user(username="root", password="password123", role=Role.ADMIN)
+    _login(client, "root", "password123")
+
+    resp = client.post(
+        "/ocr/uma-sheet/upload",
+        data={
+            "image": [
+                (io.BytesIO(_png()), "first.png"),
+                (io.BytesIO(_png()), "second.png"),
+                (io.BytesIO(_png()), "third.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/ocr/uma-sheet/merged?ids=" in resp.headers["Location"]
+    with app.app_context():
+        # Three attempts created, one per file.
+        attempts = (
+            db.session.query(OcrParseAttempt).order_by(OcrParseAttempt.id).all()
+        )
+        assert len(attempts) == 3
+
+
+def test_multi_upload_with_zero_files_re_renders(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="root", password="password123", role=Role.ADMIN)
+    _login(client, "root", "password123")
+    resp = client.post(
+        "/ocr/uma-sheet/upload",
+        data={},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    # Redirects back to the upload form with a flash.
+    assert resp.status_code == 302
+    assert "/ocr/uma-sheet/upload" in resp.headers["Location"]
+    with app.app_context():
+        assert db.session.query(OcrParseAttempt).count() == 0
+
+
+def test_merged_view_requires_admin(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="alice", password="password123")
+    _login(client, "alice", "password123")
+    resp = client.get("/ocr/uma-sheet/merged?ids=1", follow_redirects=False)
+    assert resp.status_code == 403
+
+
+def test_merged_view_400_on_missing_ids(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="root", password="password123", role=Role.ADMIN)
+    _login(client, "root", "password123")
+    resp = client.get("/ocr/uma-sheet/merged", follow_redirects=False)
+    assert resp.status_code == 400
+
+
+def test_merged_view_400_on_garbage_ids(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    make_user(username="root", password="password123", role=Role.ADMIN)
+    _login(client, "root", "password123")
+    resp = client.get(
+        "/ocr/uma-sheet/merged?ids=abc,def", follow_redirects=False
+    )
+    assert resp.status_code == 400
+
+
+def test_merged_view_renders_after_multi_upload(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """End-to-end: multi-upload → follow the redirect → merged view
+    renders with both screenshots referenced."""
+    with app.app_context():
+        app.config["OCR_PROVIDER"] = "mock"
+    make_user(username="root", password="password123", role=Role.ADMIN)
+    _login(client, "root", "password123")
+
+    resp = client.post(
+        "/ocr/uma-sheet/upload",
+        data={
+            "image": [
+                (io.BytesIO(_png()), "a.png"),
+                (io.BytesIO(_png()), "b.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Merged uma sheet" in body
+    assert "Source screenshots" in body
+    # Both attempt-detail links should appear.
+    with app.app_context():
+        ids = [a.id for a in db.session.query(OcrParseAttempt).all()]
+    for aid in ids:
+        assert f"/ocr/uma-sheet/{aid}" in body
+
+
+def test_merged_view_404_when_all_ids_missing(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """When ALL ids resolve to nothing, return 404 — the page would
+    be empty otherwise."""
+    make_user(username="root", password="password123", role=Role.ADMIN)
+    _login(client, "root", "password123")
+    resp = client.get(
+        "/ocr/uma-sheet/merged?ids=99998,99999", follow_redirects=False
+    )
+    assert resp.status_code == 404

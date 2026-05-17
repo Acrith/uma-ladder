@@ -17,6 +17,7 @@ from uma_ladder.models import UmaSkill
 from uma_ladder.services.ocr_uma_sheet import (
     UmaSheetExtract,
     extract_uma_sheet,
+    merge_extracts,
 )
 
 # Exact lines from a real Tamamo Cross profile screenshot, in the
@@ -268,3 +269,202 @@ def test_extract_returns_dataclass(app: Flask) -> None:
     assert result.aptitudes == {}
     assert result.skills == []
     assert result.header == {}
+
+
+# ─── PR-OCR3: tier-variant matching ──────────────────────────────
+
+
+def test_tier_variants_all_emit(app: Flask) -> None:
+    """Right-Handed ◎/○/× all normalize to the same key. When the
+    OCR'd text says just `Right-Handed`, all three catalogue
+    variants should appear in the result so the user can pick
+    which tier was actually on-screen — the OCR can't read the
+    tier glyph reliably."""
+    with app.app_context():
+        db.session.add_all(
+            [
+                UmaSkill(gametora_id=91000, name_en="Right-Handed ◎", enabled=True),
+                UmaSkill(gametora_id=91001, name_en="Right-Handed ○", enabled=True),
+                UmaSkill(gametora_id=91002, name_en="Right-Handed ×", enabled=True),
+            ]
+        )
+        db.session.commit()
+        result = extract_uma_sheet(
+            [
+                "Skills Inspiration Career Info",
+                "Right-Handed",
+                "Close",
+            ]
+        )
+    names = [s["name_en"] for s in result.skills]
+    assert "Right-Handed ◎" in names
+    assert "Right-Handed ○" in names
+    assert "Right-Handed ×" in names
+
+
+def test_longer_skill_still_shadows_shorter(
+    app: Flask,
+) -> None:
+    """Right-Handed Demon and Right-Handed ○ both exist. The longer
+    name should match its own text without the shorter prefix
+    cannibalising it."""
+    with app.app_context():
+        db.session.add_all(
+            [
+                UmaSkill(gametora_id=92000, name_en="Right-Handed Demon", enabled=True),
+                UmaSkill(gametora_id=92001, name_en="Right-Handed ○", enabled=True),
+            ]
+        )
+        db.session.commit()
+        result = extract_uma_sheet(
+            [
+                "Skills Inspiration Career Info",
+                "Right-Handed Demon",
+                "Close",
+            ]
+        )
+    names = [s["name_en"] for s in result.skills]
+    # The longer name claimed the text first; the shorter shouldn't
+    # also fire on the same characters.
+    assert "Right-Handed Demon" in names
+    assert "Right-Handed ○" not in names
+
+
+# ─── PR-OCR3: lone-`Skills` marker fallback ──────────────────────
+
+
+def test_marker_falls_back_to_lone_skills_line(
+    app: Flask, seeded_skills: list[UmaSkill]
+) -> None:
+    """When Vision splits the tabs onto separate rows, the strict
+    `Skills … Career` regex fails. The fallback finds a row that's
+    JUST 'Skills' and uses that as the start marker."""
+    with app.app_context():
+        result = extract_uma_sheet(
+            [
+                "Career Info",
+                "Skills",
+                "Inspiration",
+                "Anchors Aweigh!",
+                "Close",
+            ]
+        )
+    names = [s["name_en"] for s in result.skills]
+    assert "Anchors Aweigh!" in names
+
+
+def test_marker_prefers_full_pattern_when_both_present(
+    app: Flask, seeded_skills: list[UmaSkill]
+) -> None:
+    """If a row with all three tabs exists, use it — even if a
+    standalone `Skills` line also appears earlier. The full
+    pattern is the definitive signal."""
+    with app.app_context():
+        result = extract_uma_sheet(
+            [
+                "Skills",  # lone — would absorb everything below
+                "noise line that contains Anchors Aweigh! but isn't the skills section",
+                "Skills Inspiration Career Info",  # full pattern
+                "Anchors Aweigh!",
+                "Close",
+            ]
+        )
+    names = [s["name_en"] for s in result.skills]
+    # Whichever marker won, Anchors Aweigh! should resolve once.
+    assert names.count("Anchors Aweigh!") == 1
+
+
+# ─── PR-OCR3: skills block debug ─────────────────────────────────
+
+
+def test_skills_block_debug_exposed(
+    app: Flask, seeded_skills: list[UmaSkill]
+) -> None:
+    """`skills_block_debug` on the result is the literal text the
+    matcher actually scanned — the single most useful debugging
+    surface when a known skill won't resolve."""
+    with app.app_context():
+        result = extract_uma_sheet(
+            [
+                "Skills Inspiration Career Info",
+                "Anchors Aweigh!",
+                "Close",
+            ]
+        )
+    assert "Anchors Aweigh!" in result.skills_block_debug
+
+
+def test_skills_block_debug_empty_when_no_marker(
+    app: Flask, seeded_skills: list[UmaSkill]
+) -> None:
+    with app.app_context():
+        result = extract_uma_sheet(["just some text"])
+    assert result.skills_block_debug == ""
+
+
+# ─── PR-OCR3: merge_extracts ─────────────────────────────────────
+
+
+def test_merge_empty_returns_empty_extract(app: Flask) -> None:
+    with app.app_context():
+        m = merge_extracts([])
+    assert isinstance(m, UmaSheetExtract)
+    assert m.stats == {}
+    assert m.skills == []
+
+
+def test_merge_unions_skills_dedupes_by_id(app: Flask) -> None:
+    a = UmaSheetExtract(
+        skills=[
+            {"id": 1, "name_en": "Anchors Aweigh!", "raw_pos": 0},
+            {"id": 2, "name_en": "Barcarole of Blessings", "raw_pos": 10},
+        ]
+    )
+    b = UmaSheetExtract(
+        skills=[
+            {"id": 2, "name_en": "Barcarole of Blessings", "raw_pos": 0},
+            {"id": 3, "name_en": "Long Corners ○", "raw_pos": 8},
+        ]
+    )
+    with app.app_context():
+        m = merge_extracts([a, b])
+    ids = [s["id"] for s in m.skills]
+    assert ids == [1, 2, 3]
+
+
+def test_merge_takes_first_non_empty_per_stat(app: Flask) -> None:
+    """When the first screenshot fills speed/stamina and the second
+    fills power/guts/wisdom, merging gives the full set."""
+    a = UmaSheetExtract(stats={"speed": 1197, "stamina": 1070})
+    b = UmaSheetExtract(stats={"power": 1105, "guts": 553, "wisdom": 638})
+    with app.app_context():
+        m = merge_extracts([a, b])
+    assert m.stats == {
+        "speed": 1197,
+        "stamina": 1070,
+        "power": 1105,
+        "guts": 553,
+        "wisdom": 638,
+    }
+
+
+def test_merge_header_first_wins(app: Flask) -> None:
+    a = UmaSheetExtract(header={"uma_name": "Tamamo Cross"})
+    b = UmaSheetExtract(
+        header={"uma_name": "Different Uma", "trainer_name": "Yuuta"}
+    )
+    with app.app_context():
+        m = merge_extracts([a, b])
+    assert m.header["uma_name"] == "Tamamo Cross"  # first wins
+    assert m.header["trainer_name"] == "Yuuta"  # only b had it
+
+
+def test_merge_debug_block_concatenates(app: Flask) -> None:
+    a = UmaSheetExtract(skills_block_debug="anchors aweigh")
+    b = UmaSheetExtract(skills_block_debug="long corners")
+    with app.app_context():
+        m = merge_extracts([a, b])
+    assert "screenshot 1" in m.skills_block_debug
+    assert "screenshot 2" in m.skills_block_debug
+    assert "anchors aweigh" in m.skills_block_debug
+    assert "long corners" in m.skills_block_debug
