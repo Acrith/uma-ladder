@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Uma sheet OCR result #{{ attempt.id }} · Uma Ladder{% endblock %}
+{% block content %}
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="label-eyebrow">OCR · Sandbox</p>
+      <h1 class="mt-1 text-2xl font-semibold text-slate-100">
+        Uma sheet parse #{{ attempt.id }}
+      </h1>
+      <p class="mt-1 text-xs text-slate-500">
+        {{ attempt.created_at.strftime('%Y-%m-%d %H:%M UTC') }}
+        · provider <code class="text-mono-pill text-xs">{{ attempt.provider or '?' }}</code>
+        · status <code class="text-mono-pill text-xs">{{ attempt.status }}</code>
+      </p>
+    </div>
+    <a href="{{ url_for('ocr.uma_sheet_upload') }}" class="btn-ghost text-xs">+ Another upload</a>
+  </div>
+
+  <section class="mt-6 grid gap-4 lg:grid-cols-[3fr_2fr]">
+    {# Screenshot — left column, large so we can read the source. #}
+    {% call card(class="p-3") %}
+      <p class="label-eyebrow">Source screenshot</p>
+      <img src="{{ url_for('ocr.serve_image', image_id=image.id) }}"
+           alt="uploaded uma sheet"
+           class="mt-2 max-h-[36rem] w-full rounded-lg object-contain bg-slate-950/40" />
+    {% endcall %}
+
+    {# Stats — right column top. Five-stat grid; missing values render
+       em-dashed so the extraction gap is obvious at a glance. #}
+    <div class="space-y-4">
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Stats</p>
+        {% set stat_keys = ["speed", "stamina", "power", "guts", "wisdom"] %}
+        <dl class="mt-3 grid grid-cols-5 gap-2 text-center">
+          {% for key in stat_keys %}
+            <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+              <dt class="text-[10px] uppercase tracking-wider text-slate-500">{{ key }}</dt>
+              <dd class="mt-1 text-xl font-semibold {{ 'text-cyan-300' if stats.get(key) else 'text-slate-600' }}">
+                {{ stats.get(key) if stats.get(key) is not none else '—' }}
+              </dd>
+            </div>
+          {% endfor %}
+        </dl>
+        {% if not stats %}
+          <p class="mt-3 text-xs text-rose-300">
+            No stats were extracted. Likely the in-game profile screen uses
+            a different layout than the race-result screen the parser was
+            tuned for — sheet-specific logic needed.
+          </p>
+        {% endif %}
+      {% endcall %}
+
+      {# Confidence + provider-side metadata. Surfaced so we know
+         whether a weak parse is a Vision-confidence issue or a
+         parser-logic issue. #}
+      {% if confidence %}
+        {% call card(class="p-4") %}
+          <p class="label-eyebrow">Provider confidence</p>
+          <pre class="mt-2 text-[10px] text-slate-400 overflow-auto">{{ confidence | tojson(indent=2) }}</pre>
+        {% endcall %}
+      {% endif %}
+    </div>
+  </section>
+
+  {# Matched skills — green check chips for catalogue hits, with
+     icons so we can sanity-check the match visually. #}
+  <section class="mt-6">
+    {% call card(class="p-5") %}
+      <div class="flex items-center justify-between">
+        <p class="label-eyebrow">Matched skills <span class="ml-1 text-slate-500">({{ matched | length }})</span></p>
+        <span class="text-[10px] text-slate-500">resolved against UmaSkill catalogue</span>
+      </div>
+      {% if not matched %}
+        <p class="mt-3 text-sm text-slate-500">No skill candidates matched. See "Unmatched candidates" below for what came back.</p>
+      {% else %}
+        <ul class="mt-3 flex flex-wrap gap-2 text-xs">
+          {% for s in matched %}
+            <li class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+              {% if s.image_url %}
+                <img src="{{ s.image_url }}"
+                     alt=""
+                     loading="lazy"
+                     referrerpolicy="no-referrer"
+                     class="h-4 w-4 rounded" />
+              {% endif %}
+              <span>{{ s.name_en }}</span>
+              {% if s.raw != s.name_en %}
+                <span class="text-[9px] text-emerald-400/70" title="raw OCR text">← "{{ s.raw }}"</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endcall %}
+  </section>
+
+  {# Unmatched candidates — what the parser thought might be a skill
+     but didn't resolve in the catalogue. Most of these are noise we
+     should filter out (UI chrome, stat labels we missed) or real
+     skills mis-OCR'd badly enough that even the fuzzy matcher gave
+     up. Both signals are useful for tuning. #}
+  <section class="mt-4">
+    {% call card(class="p-5") %}
+      <div class="flex items-center justify-between">
+        <p class="label-eyebrow text-amber-300">Unmatched candidates <span class="ml-1 text-slate-500">({{ unmatched | length }})</span></p>
+        <span class="text-[10px] text-slate-500">noise OR real skills the matcher missed</span>
+      </div>
+      {% if not unmatched %}
+        <p class="mt-3 text-sm text-slate-500">All candidates matched. Either a clean parse or the extraction is too restrictive.</p>
+      {% else %}
+        <ul class="mt-3 flex flex-wrap gap-1.5 text-xs">
+          {% for raw in unmatched %}
+            <li class="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/5 px-2 py-0.5 text-amber-200">{{ raw }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endcall %}
+  </section>
+
+  {# "Other detected text" — clusters that survived the placement
+     filter but weren't classified. Useful for spotting fields we
+     haven't yet added extractors for (aptitudes, factors, etc.). #}
+  {% if other_rows %}
+    <section class="mt-4">
+      {% call card(class="p-5") %}
+        <p class="label-eyebrow">Other detected text rows <span class="ml-1 text-slate-500">({{ other_rows | length }})</span></p>
+        <ul class="mt-3 space-y-1 text-xs text-slate-400">
+          {% for r in other_rows %}
+            <li class="border-b border-slate-900 pb-1 last:border-0">
+              {% if r.placement is not none %}
+                <span class="text-mono-pill text-[10px] mr-2">#{{ r.placement }}</span>
+              {% endif %}
+              <span>{{ r.raw_line or r.uma_name or '' }}</span>
+              {% if r.confidence %}<span class="ml-2 text-[10px] text-slate-600">conf {{ "%.2f" % r.confidence }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    </section>
+  {% endif %}
+
+  {# Raw OCR text + raw JSON — collapsed by default. The full text
+     is what the parser sees; raw JSON is what we'd write a test
+     fixture against. #}
+  <section class="mt-4 space-y-3">
+    <details data-autoclose-outside class="surface-card p-4">
+      <summary class="cursor-pointer text-sm text-slate-300">Raw OCR text</summary>
+      <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-[11px] text-slate-400">{{ raw_text or '(empty)' }}</pre>
+    </details>
+    <details data-autoclose-outside class="surface-card p-4">
+      <summary class="cursor-pointer text-sm text-slate-300">Parsed JSON (full)</summary>
+      <pre class="mt-3 max-h-96 overflow-auto text-[11px] text-slate-400">{{ parsed_pretty }}</pre>
+    </details>
+  </section>
+{% endblock %}

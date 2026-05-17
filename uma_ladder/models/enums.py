@@ -162,6 +162,11 @@ class NotificationTarget(StrEnum):
 class UploadPurpose(StrEnum):
     OCR_RESULT = "ocr_result"
     AVATAR = "avatar"
+    # PR-OCR1 — sandbox uploads of the in-game Uma profile / character
+    # sheet. Tagged distinctly from OCR_RESULT so the admin sandbox can
+    # filter to its own attempts and future Uma-sheet-specific parsing
+    # logic knows what input shape to expect.
+    UMA_SHEET = "uma_sheet"
     OTHER = "other"
 
 

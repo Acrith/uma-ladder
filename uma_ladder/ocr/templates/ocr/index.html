@@ -11,9 +11,21 @@
   </p>
 
   {% if current_user.is_authenticated %}
-    <div class="mt-6">
+    <div class="mt-6 flex flex-wrap items-center gap-3">
       <a href="{{ url_for('ocr.upload') }}" class="btn-primary">+ Upload screenshot</a>
+      {% if current_user.has_at_least('admin') %}
+        <a href="{{ url_for('ocr.uma_sheet_upload') }}" class="btn-ghost">
+          Uma sheet sandbox →
+        </a>
+      {% endif %}
     </div>
+    {% if current_user.has_at_least('admin') %}
+      <p class="mt-2 text-xs text-slate-500">
+        The <em>Uma sheet sandbox</em> is an admin-only iteration bench for
+        the in-game profile / character-sheet parser. Read-only — nothing
+        is written to any race or profile.
+      </p>
+    {% endif %}
   {% else %}
     <div class="mt-6">
       <a href="{{ url_for('auth.login') }}" class="btn-ghost">Log in to upload</a>

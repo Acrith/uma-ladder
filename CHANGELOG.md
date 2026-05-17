@@ -4,6 +4,22 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-05-18
+
+### Behind the scenes
+
+- **Uma-sheet OCR sandbox (admin).** A new admin-only iteration
+  bench at **OCR → Uma sheet sandbox** lets a maintainer upload an
+  in-game Uma profile / character-sheet screenshot and see what
+  the OCR pipeline extracts — raw text, structured stats panel,
+  matched-vs-unmatched skill candidates against the `UmaSkill`
+  catalogue, and any other detected text clusters that didn't fit
+  a known field. Read-only: nothing is saved to any race or
+  profile. Purpose is iteration — we'll use it to figure out what
+  sheet-specific extraction heuristics the parser needs before
+  wiring the data anywhere user-facing. Regular users won't see
+  the tile.
+
 ## 2026-05-12
 
 ### Legal

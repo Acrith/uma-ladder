@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_components.html" import card %}
+{% block title %}Uma sheet OCR sandbox · Uma Ladder{% endblock %}
+{% block content %}
+  <p class="label-eyebrow">OCR · Sandbox</p>
+  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Uma sheet OCR — iteration bench</h1>
+  <p class="mt-2 max-w-2xl text-sm text-slate-400">
+    Drop in an in-game Uma profile / character-sheet screenshot. Runs through
+    the same <code class="text-mono-pill text-xs">google_vision</code> pipeline
+    the race-result flow uses, then renders the raw OCR text plus the
+    structured stats + skill-candidate output side-by-side so we can see what
+    needs sheet-specific extraction logic. Nothing is saved against any race
+    or profile — pure inspection.
+  </p>
+
+  {% call card(class="mt-6 p-6 max-w-md") %}
+    <form method="post" enctype="multipart/form-data">
+      {{ form.hidden_tag() }}
+      <label class="text-sm text-slate-300">{{ form.image.label.text }}</label>
+      {{ form.image(class="mt-1 block w-full text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-cyan-500 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-950 file:hover:bg-cyan-400") }}
+      {% if form.image.errors %}
+        <ul class="mt-1 text-xs text-rose-300">
+          {% for err in form.image.errors %}<li>{{ err }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <button class="btn-primary mt-4">Upload &amp; parse</button>
+    </form>
+  {% endcall %}
+{% endblock %}
