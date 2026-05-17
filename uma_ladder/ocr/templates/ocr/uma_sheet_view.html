@@ -26,34 +26,32 @@
            class="mt-2 max-h-[36rem] w-full rounded-lg object-contain bg-slate-950/40" />
     {% endcall %}
 
-    {# Stats — right column top. Five-stat grid; missing values render
-       em-dashed so the extraction gap is obvious at a glance. #}
     <div class="space-y-4">
+      {# Header card: uma name, outfit, epithet, score, trainer.
+         Each independently optional — em-dash when missing so
+         layout regressions are obvious at a glance. #}
       {% call card(class="p-5") %}
-        <p class="label-eyebrow">Stats</p>
-        {% set stat_keys = ["speed", "stamina", "power", "guts", "wisdom"] %}
-        <dl class="mt-3 grid grid-cols-5 gap-2 text-center">
-          {% for key in stat_keys %}
-            <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
-              <dt class="text-[10px] uppercase tracking-wider text-slate-500">{{ key }}</dt>
-              <dd class="mt-1 text-xl font-semibold {{ 'text-cyan-300' if stats.get(key) else 'text-slate-600' }}">
-                {{ stats.get(key) if stats.get(key) is not none else '—' }}
-              </dd>
-            </div>
-          {% endfor %}
+        <p class="label-eyebrow">Header</p>
+        <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <dt class="text-slate-500">Uma</dt>
+          <dd class="{{ 'text-cyan-300 font-medium' if sheet.header.get('uma_name') else 'text-slate-600' }}">{{ sheet.header.get('uma_name') or '—' }}</dd>
+
+          <dt class="text-slate-500">Outfit</dt>
+          <dd class="{{ 'text-slate-200' if sheet.header.get('outfit') else 'text-slate-600' }}">{{ sheet.header.get('outfit') or '—' }}</dd>
+
+          <dt class="text-slate-500">Epithet</dt>
+          <dd class="{{ 'text-slate-200' if sheet.header.get('epithet') else 'text-slate-600' }}">{{ sheet.header.get('epithet') or '—' }}</dd>
+
+          <dt class="text-slate-500">Score</dt>
+          <dd class="{{ 'text-amber-300 font-medium' if sheet.header.get('uma_score') else 'text-slate-600' }}">{% if sheet.header.get('uma_score') %}{{ "{:,}".format(sheet.header.get('uma_score')) }}{% else %}—{% endif %}</dd>
+
+          <dt class="text-slate-500">Trainer</dt>
+          <dd class="{{ 'text-slate-200' if sheet.header.get('trainer_name') else 'text-slate-600' }}">{{ sheet.header.get('trainer_name') or '—' }}</dd>
         </dl>
-        {% if not stats %}
-          <p class="mt-3 text-xs text-rose-300">
-            No stats were extracted. Likely the in-game profile screen uses
-            a different layout than the race-result screen the parser was
-            tuned for — sheet-specific logic needed.
-          </p>
-        {% endif %}
       {% endcall %}
 
-      {# Confidence + provider-side metadata. Surfaced so we know
-         whether a weak parse is a Vision-confidence issue or a
-         parser-logic issue. #}
+      {# Provider-side confidence metadata, kept tucked under the
+         header card. #}
       {% if confidence %}
         {% call card(class="p-4") %}
           <p class="label-eyebrow">Provider confidence</p>
@@ -63,19 +61,83 @@
     </div>
   </section>
 
-  {# Matched skills — green check chips for catalogue hits, with
-     icons so we can sanity-check the match visually. #}
-  <section class="mt-6">
+  {# Stats — POSITIONAL extraction. Race-result extractor used to put
+     the same number in every cell; PR-OCR2's _extract_stats_positional
+     pairs the 5 labels on one row with 5 numbers on the next row
+     index-to-index. #}
+  <section class="mt-4">
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Stats</p>
+      {% set stat_keys = ["speed", "stamina", "power", "guts", "wisdom"] %}
+      <dl class="mt-3 grid grid-cols-5 gap-2 text-center">
+        {% for key in stat_keys %}
+          <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+            <dt class="text-[10px] uppercase tracking-wider text-slate-500">{{ key }}</dt>
+            <dd class="mt-1 text-xl font-semibold {{ 'text-cyan-300' if sheet.stats.get(key) else 'text-slate-600' }}">
+              {{ sheet.stats.get(key) if sheet.stats.get(key) is not none else '—' }}
+            </dd>
+          </div>
+        {% endfor %}
+      </dl>
+      {% if not sheet.stats %}
+        <p class="mt-3 text-xs text-rose-300">
+          No stats extracted. Check the raw OCR text below — the label-row
+          + value-row pairing relies on both rows being clustered correctly.
+        </p>
+      {% endif %}
+    {% endcall %}
+  </section>
+
+  {# Aptitudes — 3 categories on 3 rows on the sheet. We render
+     them as a table for compactness. #}
+  <section class="mt-4">
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Aptitudes</p>
+      {% if not sheet.aptitudes %}
+        <p class="mt-3 text-sm text-slate-500">No aptitude rows recognised.</p>
+      {% else %}
+        <div class="mt-3 space-y-3">
+          {% for cat_key, cat_label, cat_slots in [
+              ('track', 'Track', ['Turf', 'Dirt']),
+              ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
+              ('style', 'Style', ['Front', 'Pace', 'Late', 'End']),
+            ] %}
+            {% set cat_data = sheet.aptitudes.get(cat_key) %}
+            {% if cat_data %}
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400">{{ cat_label }}</p>
+                <div class="mt-1 flex flex-wrap gap-2">
+                  {% for slot in cat_slots %}
+                    {% set rank = cat_data.get(slot|lower) %}
+                    <div class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs">
+                      <span class="text-slate-400">{{ slot }}</span>
+                      <span class="font-mono font-semibold {{ 'text-cyan-300' if rank else 'text-slate-600' }}">{{ rank or '—' }}</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endcall %}
+  </section>
+
+  {# Skills — catalogue-resolved from the post-"Skills" text block.
+     Names appear here only if they matched an enabled UmaSkill, so
+     this list is implicitly "clean." Unmatched fragments are still
+     visible in the raw text below for tuning. #}
+  <section class="mt-4">
     {% call card(class="p-5") %}
       <div class="flex items-center justify-between">
-        <p class="label-eyebrow">Matched skills <span class="ml-1 text-slate-500">({{ matched | length }})</span></p>
-        <span class="text-[10px] text-slate-500">resolved against UmaSkill catalogue</span>
+        <p class="label-eyebrow">Skills <span class="ml-1 text-slate-500">({{ matched_skills | length }})</span></p>
+        <span class="text-[10px] text-slate-500">found in UmaSkill catalogue, in screen order</span>
       </div>
-      {% if not matched %}
-        <p class="mt-3 text-sm text-slate-500">No skill candidates matched. See "Unmatched candidates" below for what came back.</p>
+      {% if not matched_skills %}
+        <p class="mt-3 text-sm text-slate-500">No skills resolved. Check the raw text — Vision sometimes splits multi-word skills across rows or merges multiple skills on one row.</p>
       {% else %}
         <ul class="mt-3 flex flex-wrap gap-2 text-xs">
-          {% for s in matched %}
+          {% for s in matched_skills %}
             <li class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
               {% if s.image_url %}
                 <img src="{{ s.image_url }}"
@@ -85,9 +147,6 @@
                      class="h-4 w-4 rounded" />
               {% endif %}
               <span>{{ s.name_en }}</span>
-              {% if s.raw != s.name_en %}
-                <span class="text-[9px] text-emerald-400/70" title="raw OCR text">← "{{ s.raw }}"</span>
-              {% endif %}
             </li>
           {% endfor %}
         </ul>
@@ -95,42 +154,16 @@
     {% endcall %}
   </section>
 
-  {# Unmatched candidates — what the parser thought might be a skill
-     but didn't resolve in the catalogue. Most of these are noise we
-     should filter out (UI chrome, stat labels we missed) or real
-     skills mis-OCR'd badly enough that even the fuzzy matcher gave
-     up. Both signals are useful for tuning. #}
-  <section class="mt-4">
-    {% call card(class="p-5") %}
-      <div class="flex items-center justify-between">
-        <p class="label-eyebrow text-amber-300">Unmatched candidates <span class="ml-1 text-slate-500">({{ unmatched | length }})</span></p>
-        <span class="text-[10px] text-slate-500">noise OR real skills the matcher missed</span>
-      </div>
-      {% if not unmatched %}
-        <p class="mt-3 text-sm text-slate-500">All candidates matched. Either a clean parse or the extraction is too restrictive.</p>
-      {% else %}
-        <ul class="mt-3 flex flex-wrap gap-1.5 text-xs">
-          {% for raw in unmatched %}
-            <li class="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/5 px-2 py-0.5 text-amber-200">{{ raw }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endcall %}
-  </section>
-
-  {# "Other detected text" — clusters that survived the placement
-     filter but weren't classified. Useful for spotting fields we
-     haven't yet added extractors for (aptitudes, factors, etc.). #}
-  {% if other_rows %}
+  {# All detected row clusters — the source material for the
+     extractor. Useful for spotting which row a missing field came
+     from (or didn't come from). #}
+  {% if all_rows %}
     <section class="mt-4">
       {% call card(class="p-5") %}
-        <p class="label-eyebrow">Other detected text rows <span class="ml-1 text-slate-500">({{ other_rows | length }})</span></p>
+        <p class="label-eyebrow">All detected row clusters <span class="ml-1 text-slate-500">({{ all_rows | length }})</span></p>
         <ul class="mt-3 space-y-1 text-xs text-slate-400">
-          {% for r in other_rows %}
+          {% for r in all_rows %}
             <li class="border-b border-slate-900 pb-1 last:border-0">
-              {% if r.placement is not none %}
-                <span class="text-mono-pill text-[10px] mr-2">#{{ r.placement }}</span>
-              {% endif %}
               <span>{{ r.raw_line or r.uma_name or '' }}</span>
               {% if r.confidence %}<span class="ml-2 text-[10px] text-slate-600">conf {{ "%.2f" % r.confidence }}</span>{% endif %}
             </li>
@@ -140,16 +173,15 @@
     </section>
   {% endif %}
 
-  {# Raw OCR text + raw JSON — collapsed by default. The full text
-     is what the parser sees; raw JSON is what we'd write a test
-     fixture against. #}
+  {# Raw OCR text from Vision — useful for fixture-writing and to
+     spot punctuation tokenisation we missed. Collapsed by default. #}
   <section class="mt-4 space-y-3">
     <details data-autoclose-outside class="surface-card p-4">
-      <summary class="cursor-pointer text-sm text-slate-300">Raw OCR text</summary>
+      <summary class="cursor-pointer text-sm text-slate-300">Raw OCR text (full)</summary>
       <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-[11px] text-slate-400">{{ raw_text or '(empty)' }}</pre>
     </details>
     <details data-autoclose-outside class="surface-card p-4">
-      <summary class="cursor-pointer text-sm text-slate-300">Parsed JSON (full)</summary>
+      <summary class="cursor-pointer text-sm text-slate-300">Parsed JSON (raw)</summary>
       <pre class="mt-3 max-h-96 overflow-auto text-[11px] text-slate-400">{{ parsed_pretty }}</pre>
     </details>
   </section>

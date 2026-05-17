@@ -8,6 +8,23 @@ log for the full history.
 
 ### Behind the scenes
 
+- **Uma-sheet OCR sandbox: sheet-specific extractor (PR-OCR2).**
+  Replaces the race-result parser's stat / skill extractors on
+  the sandbox surface only — the race-result flow is untouched.
+  Stats now match positionally (5 labels on one row → 5 numbers
+  on the next, index-aligned, fixing the bug that put the same
+  number in every cell). Aptitudes parse across the three rows
+  (Track / Distance / Style) with rank letters. Skills are
+  resolved by scanning the post-"Skills" text block against the
+  UmaSkill catalogue, so multiple skills merged on one row (or
+  decorated with "Lvl N" / circle markers) still resolve. A
+  known limitation: when Vision splits a multi-word skill across
+  rows AND injects another skill between the halves (the
+  "White Lightning Comin' Through!" case), the contiguous
+  substring matcher can't reassemble it — captured as a regression
+  test so a future fix can flip the assertion. Header card now
+  surfaces uma name, outfit, epithet, score, and trainer name
+  when present.
 - **Uma-sheet OCR sandbox (admin).** A new admin-only iteration
   bench at **OCR → Uma sheet sandbox** lets a maintainer upload an
   in-game Uma profile / character-sheet screenshot and see what

@@ -160,54 +160,55 @@ def uma_sheet_view(attempt_id: int) -> object:
     if a is None:
         abort(404)
     parsed = a.parsed_json or {}
-    stats = parsed.get("stats") or {}
-    skill_candidates = parsed.get("skills") or []
-    # Match each candidate against the live UmaSkill catalogue so we
-    # can see at a glance how good the extraction was. Tests already
-    # rely on this private helper (test_official_result_details.py),
-    # so reaching for it here follows the existing convention.
-    from ..services.official import _match_skill_names
+    rows = parsed.get("rows") or []
+    # Reconstruct the per-row text list the sheet extractor wants.
+    # google_vision's clusterer puts the raw row text under `raw_line`
+    # on each parsed_row; falling back to `uma_name` covers rows that
+    # got reshaped by _merge_orphan_followups.
+    line_texts = [
+        (r.get("raw_line") or r.get("uma_name") or "").strip()
+        for r in rows
+    ]
+    line_texts = [t for t in line_texts if t]
 
-    matches = _match_skill_names(skill_candidates)
-    matched: list[dict] = []
-    unmatched: list[str] = []
+    # PR-OCR2 — sheet-specific extractor. Replaces the race-result
+    # _extract_stats / _extract_skill_candidates pass for this surface
+    # because those were tuned for a placement-row layout the profile
+    # screen doesn't use.
+    from ..services.ocr_uma_sheet import extract_uma_sheet
+
+    sheet = extract_uma_sheet(line_texts)
+
+    # Resolve the catalogue-matched skill rows for icons in the view.
     from ..models import UmaSkill
 
-    matched_skill_ids = [sid for _, sid in matches if sid is not None]
-    matched_skills = (
-        db.session.query(UmaSkill)
-        .filter(UmaSkill.id.in_(matched_skill_ids))
-        .all()
-        if matched_skill_ids
-        else []
-    )
-    skills_by_id = {s.id: s for s in matched_skills}
-    for raw, sid in matches:
-        if sid is None:
-            unmatched.append(raw)
-        else:
-            skill = skills_by_id.get(sid)
-            matched.append(
-                {
-                    "raw": raw,
-                    "name_en": skill.name_en if skill else raw,
-                    "image_url": skill.image_url if skill else None,
-                }
-            )
-    # `rows` here is the placement-row output the race-result flow
-    # uses; for an Uma profile screenshot those are typically just
-    # whatever clusters survived the placement filter — useful as
-    # "other detected text" so we see what isn't being categorised.
-    other_rows = parsed.get("rows") or []
+    skill_ids = [s["id"] for s in sheet.skills]
+    skill_lookup: dict[int, UmaSkill] = {}
+    if skill_ids:
+        for s in (
+            db.session.query(UmaSkill).filter(UmaSkill.id.in_(skill_ids)).all()
+        ):
+            skill_lookup[s.id] = s
+    matched_skills = [
+        {
+            "name_en": s["name_en"],
+            "image_url": (
+                skill_lookup[s["id"]].image_url
+                if s["id"] in skill_lookup
+                else None
+            ),
+        }
+        for s in sheet.skills
+    ]
+
     return render_template(
         "ocr/uma_sheet_view.html",
         attempt=a,
         image=a.image,
-        raw_text=parsed.get("raw_text") or "",
-        stats=stats,
-        matched=matched,
-        unmatched=unmatched,
-        other_rows=other_rows,
+        raw_text=a.raw_text or "",
+        sheet=sheet,
+        matched_skills=matched_skills,
+        all_rows=rows,
         confidence=a.confidence_json or {},
         parsed_pretty=json.dumps(parsed, indent=2, ensure_ascii=False),
     )
