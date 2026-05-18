@@ -8,6 +8,20 @@ log for the full history.
 
 ### Official races
 
+- **Resubmitting race results no longer crashes with a UNIQUE
+  constraint (PR-OCR16).** Trying to re-confirm OCR-parsed
+  placements for a race that already had any results saved
+  (e.g. from an earlier partial entry, or an admin-side data
+  ops fix) used to hit `sqlite3.IntegrityError` on the
+  `(official_race_id, user_id)` UNIQUE constraint and return a
+  500. `submit_results` is now idempotent: it UPDATEs existing
+  rows in place where they exist and INSERTs new ones where
+  they don't, preserving per-result detail data (stats, skills,
+  aptitudes, uma_score) that may have been populated by the
+  separate uma-sheet OCR flow. Users dropped from a re-submission
+  get their orphan rows pruned. Discord notifications fire only
+  on the first completion, not on each re-confirm.
+
 - **"Enter at least one placement" on Save Results — fixed
   (PR-OCR15).** Submitting OCR-parsed results returned a flash
   saying no placements were entered, even when the dropdowns

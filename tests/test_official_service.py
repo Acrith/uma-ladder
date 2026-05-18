@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from flask import Flask
+from sqlalchemy import select
 
 from uma_ladder.extensions import db
 from uma_ladder.models import (
@@ -163,6 +164,127 @@ def test_submit_results_assigns_points_and_completes(app: Flask) -> None:
 
         race = official_service.get_race(race.id)
         assert race.status == OfficialRaceStatus.COMPLETED
+
+
+def test_submit_results_is_idempotent_on_resubmit(app: Flask) -> None:
+    """PR-OCR16 — calling submit_results twice for the same race
+    used to crash with sqlite3.IntegrityError on the
+    `uq_official_race_results_race_user` UNIQUE constraint. Now it
+    UPDATEs the existing row in place. Per-result detail fields
+    that came from a separate flow (speed/stamina/etc.) must
+    survive the re-submit."""
+    from uma_ladder.models import OfficialRaceResult
+
+    with app.app_context():
+        season = _make_season()
+        organizer_id = _make_user("org", role=Role.ORGANIZER)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="R", organizer_user_id=organizer_id
+            )
+        )
+        official_service.open_registration(race.id)
+        a = _make_user("alice")
+        b = _make_user("bob")
+        official_service.register(race.id, a)
+        official_service.register(race.id, b)
+
+        # First submission.
+        official_service.submit_results(
+            race.id,
+            [
+                official_service.ResultLine(user_id=a, placement=1, uma_name="Gold Ship"),
+                official_service.ResultLine(user_id=b, placement=2, uma_name="Special Week"),
+            ],
+            confirmed_by_user_id=organizer_id,
+        )
+
+        # Simulate per-result detail upload: stash speed onto alice's row.
+        # This is what the per-result uma-sheet OCR flow would do.
+        alice_row = db.session.execute(
+            select(OfficialRaceResult).where(
+                OfficialRaceResult.official_race_id == race.id,
+                OfficialRaceResult.user_id == a,
+            )
+        ).unique().scalar_one()
+        alice_row.speed = 1197
+        alice_row.uma_score = 17307
+        db.session.commit()
+
+        # Re-submit with corrections (swap placements + fix uma name).
+        # Pre-PR-OCR16 this raised IntegrityError on the UNIQUE
+        # constraint. Post-PR-OCR16 it succeeds.
+        official_service.submit_results(
+            race.id,
+            [
+                official_service.ResultLine(user_id=a, placement=2, uma_name="Gold Ship"),
+                official_service.ResultLine(user_id=b, placement=1, uma_name="Special Week MK2"),
+            ],
+            confirmed_by_user_id=organizer_id,
+        )
+
+        rows = db.session.execute(
+            select(OfficialRaceResult)
+            .where(OfficialRaceResult.official_race_id == race.id)
+            .order_by(OfficialRaceResult.placement)
+        ).unique().scalars().all()
+        assert len(rows) == 2
+        assert rows[0].user_id == b
+        assert rows[0].placement == 1
+        assert rows[0].uma_name == "Special Week MK2"
+        assert rows[1].user_id == a
+        assert rows[1].placement == 2
+        assert rows[1].uma_name == "Gold Ship"
+        # Per-result detail data survived the re-submission.
+        assert rows[1].speed == 1197
+        assert rows[1].uma_score == 17307
+
+
+def test_submit_results_orphan_user_pruned_on_resubmit(app: Flask) -> None:
+    """PR-OCR16 — when a user that had a result is dropped from a
+    re-submission (organizer realized they didn't actually race),
+    the orphan row should be deleted. Otherwise it lingers with the
+    parked -user_id placement."""
+    from uma_ladder.models import OfficialRaceResult
+
+    with app.app_context():
+        season = _make_season()
+        organizer_id = _make_user("org", role=Role.ORGANIZER)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="R", organizer_user_id=organizer_id
+            )
+        )
+        official_service.open_registration(race.id)
+        a = _make_user("alice")
+        b = _make_user("bob")
+        official_service.register(race.id, a)
+        official_service.register(race.id, b)
+
+        official_service.submit_results(
+            race.id,
+            [
+                official_service.ResultLine(user_id=a, placement=1),
+                official_service.ResultLine(user_id=b, placement=2),
+            ],
+            confirmed_by_user_id=organizer_id,
+        )
+
+        # Re-submit with only alice — bob's row should go.
+        official_service.submit_results(
+            race.id,
+            [official_service.ResultLine(user_id=a, placement=1)],
+            confirmed_by_user_id=organizer_id,
+        )
+
+        rows = db.session.execute(
+            select(OfficialRaceResult).where(
+                OfficialRaceResult.official_race_id == race.id
+            )
+        ).unique().scalars().all()
+        assert len(rows) == 1
+        assert rows[0].user_id == a
+        assert rows[0].placement == 1
 
 
 def test_duplicate_placements_rejected(app: Flask) -> None:

@@ -694,6 +694,35 @@ def submit_results(
     if len(set(placements)) != len(placements):
         raise DuplicatePlacementError()
 
+    # PR-OCR16 — idempotent submit. Pull existing results for this
+    # race so a re-submission updates rows in place rather than
+    # racing the (race, user) + (race, placement) UNIQUE constraints.
+    # Per-result detail fields (stats / skills / aptitudes /
+    # uma_score) are populated by a downstream flow and must survive
+    # a re-submit, so we UPDATE rather than DELETE+INSERT.
+    existing_by_user: dict[int, OfficialRaceResult] = {
+        r.user_id: r
+        for r in db.session.execute(
+            select(OfficialRaceResult).where(
+                OfficialRaceResult.official_race_id == race_id
+            )
+        ).unique().scalars()
+    }
+
+    # Park existing placements at -user_id so the (race, placement)
+    # UNIQUE constraint can't collide mid-update when placements
+    # swap between users (e.g. user A was 1st before, user B was
+    # 2nd, new submission flips them — without the parking pass, the
+    # first UPDATE would temporarily collide). user_ids are positive
+    # so -user_id is unique-per-row AND outside the valid placement
+    # range (1..30), so no collision with new placements either.
+    if existing_by_user:
+        for row in existing_by_user.values():
+            row.placement = -row.user_id
+        db.session.flush()
+
+    was_completed_before = race.status == OfficialRaceStatus.COMPLETED
+
     grade = race.preset.grade if race.preset is not None else None
     saved: list[OfficialRaceResult] = []
     for line in lines:
@@ -702,26 +731,52 @@ def submit_results(
             grade=grade,
             apply_grade_multiplier=apply_grade_multiplier,
         )
-        result = OfficialRaceResult(
-            official_race_id=race_id,
-            user_id=line.user_id,
-            uma_character_id=line.uma_character_id,
-            uma_name=line.uma_name,
-            placement=line.placement,
-            points=points,
-            strategy=line.strategy,
-            speed=line.speed,
-            stamina=line.stamina,
-            power=line.power,
-            guts=line.guts,
-            wisdom=line.wisdom,
-            finish_time_or_lengths=line.finish_time_or_lengths,
-            gate=line.gate,
-            fav_rank=line.fav_rank,
-            confirmed_by_user_id=confirmed_by_user_id,
-        )
-        db.session.add(result)
-        saved.append(result)
+        existing = existing_by_user.get(line.user_id)
+        if existing is not None:
+            # UPDATE in place. Only overwrite the fields the
+            # race-result submission owns; speed/stamina/power/guts/
+            # wisdom belong to the per-result uma-sheet OCR flow and
+            # don't get cleared by re-running the placement entry.
+            existing.uma_character_id = line.uma_character_id
+            existing.uma_name = line.uma_name
+            existing.placement = line.placement
+            existing.points = points
+            existing.strategy = line.strategy
+            existing.finish_time_or_lengths = line.finish_time_or_lengths
+            existing.gate = line.gate
+            existing.fav_rank = line.fav_rank
+            existing.confirmed_by_user_id = confirmed_by_user_id
+            saved.append(existing)
+        else:
+            result = OfficialRaceResult(
+                official_race_id=race_id,
+                user_id=line.user_id,
+                uma_character_id=line.uma_character_id,
+                uma_name=line.uma_name,
+                placement=line.placement,
+                points=points,
+                strategy=line.strategy,
+                speed=line.speed,
+                stamina=line.stamina,
+                power=line.power,
+                guts=line.guts,
+                wisdom=line.wisdom,
+                finish_time_or_lengths=line.finish_time_or_lengths,
+                gate=line.gate,
+                fav_rank=line.fav_rank,
+                confirmed_by_user_id=confirmed_by_user_id,
+            )
+            db.session.add(result)
+            saved.append(result)
+
+    # Orphan cleanup — any pre-existing row whose user wasn't in the
+    # new submission is still parked at -user_id. The organizer
+    # dropped that user from the entry, so the row goes too. CASCADE
+    # takes care of result skills.
+    new_user_ids = {line.user_id for line in lines}
+    for user_id, row in existing_by_user.items():
+        if user_id not in new_user_ids:
+            db.session.delete(row)
 
     race.status = OfficialRaceStatus.COMPLETED
     db.session.commit()
@@ -735,7 +790,9 @@ def submit_results(
         achievements_service.grant_on_official_result(
             line.user_id, line.placement
         )
-    if notify:
+    # Notify only on the first completion. Re-submissions don't
+    # re-notify — avoids spamming Discord on every organizer fix.
+    if notify and not was_completed_before:
         _notify_results(race)
     return saved
 
