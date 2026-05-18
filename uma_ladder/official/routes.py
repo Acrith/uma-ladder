@@ -503,6 +503,12 @@ def submit_results(race_id: int) -> object:
                 user_id=reg.user_id,
                 placement=placement,
                 uma_name=request.form.get(f"uma_name_{reg.id}", "").strip() or None,
+                # PR-OCR13 — race-result OCR row parser extracts the
+                # position keyword (Front / Pace / Late / End). The
+                # confirm template carries it through this hidden
+                # field so submit_results saves it onto result.strategy
+                # — pre-fills the per-result details form later.
+                strategy=request.form.get(f"strategy_{reg.id}", "").strip() or None,
                 finish_time_or_lengths=(
                     request.form.get(f"finish_time_{reg.id}", "").strip() or None
                 ),
@@ -664,6 +670,15 @@ def results_from_ocr(race_id: int, attempt_id: int) -> object:
     # there's no signal — organiser picks from the dropdown.
     suggestions = _match_ocr_to_registrations(parsed_rows, registrations)
 
+    # PR-OCR13 — when the upload was a multi-screenshot merge, the
+    # primary attempt's parsed_json carries the full list of
+    # contributing image ids. Default to the single attempt image when
+    # the marker is absent (single-screenshot path).
+    screenshot_image_ids = (
+        (attempt.parsed_json or {}).get("screenshot_image_ids")
+        or [attempt.image.id]
+    )
+
     return render_template(
         "official/results_from_ocr.html",
         race=race,
@@ -671,6 +686,7 @@ def results_from_ocr(race_id: int, attempt_id: int) -> object:
         parsed_rows=parsed_rows,
         registrations=registrations,
         suggestions=suggestions,
+        screenshot_image_ids=screenshot_image_ids,
         results_form=ResultsForm(),
     )
 

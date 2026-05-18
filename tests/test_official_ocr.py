@@ -299,6 +299,174 @@ def test_full_ocr_to_results_round_trip(
         assert [r.uma_name for r in results] == ["MockUma A", "MockUma B"]
 
 
+def test_confirm_page_renders_all_screenshots_after_multi_upload(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR13 — when N screenshots are uploaded for a race result,
+    the confirm page should render all N images in the source-
+    screenshot strip, not just the primary attempt's. Mirrors the
+    PR-OCR10 fix on the per-result detail flow."""
+    from uma_ladder.models import UploadedImage
+
+    app.config["OCR_PROVIDER"] = "mock"
+    sid, pid = _setup(app)
+    make_user(username="org", role=Role.ORGANIZER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    resp = client.post(
+        f"/official/{race_id}/results-screenshot",
+        data={
+            "image": [
+                (io.BytesIO(_png_bytes()), "a.png"),
+                (io.BytesIO(_png_bytes()), "b.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    confirm_path = resp.headers["Location"]
+
+    with app.app_context():
+        image_ids = sorted(
+            i.id for i in db.session.query(UploadedImage).all()
+        )
+        assert len(image_ids) == 2
+
+    resp = client.get(confirm_path)
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Both image-serve URLs should appear on the confirm page.
+    for img_id in image_ids:
+        assert f"/ocr/uploads/{img_id}" in body
+    # And the strip header reflects the plural count.
+    assert "Source screenshots" in body
+
+
+def test_strategy_carries_through_to_result_strategy(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR13 — the parsed `position` field on each OCR row
+    (Front/Pace/Late/End) now carries through the confirm form
+    via the hidden `strategy_<reg.id>` carrier into ResultLine.strategy
+    and onto the OfficialRaceResult.strategy column. Before this PR
+    the field was dropped on the floor and the per-result details
+    form opened with the Strategy input blank."""
+    from uma_ladder.models import OfficialRaceRegistration
+
+    sid, pid = _setup(app)
+    make_user(username="org", role=Role.ORGANIZER)
+    make_user(username="alice", role=Role.USER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice")
+    client.post(f"/official/{race_id}/register")
+    client.post("/auth/logout")
+    _login(client, "org")
+
+    with app.app_context():
+        reg = (
+            db.session.query(OfficialRaceRegistration)
+            .filter_by(official_race_id=race_id)
+            .first()
+        )
+        reg_id = reg.id
+
+    # Simulate the JS-populated hidden strategy_<reg.id> field.
+    resp = client.post(
+        f"/official/{race_id}/results",
+        data={
+            f"placement_{reg_id}": "1",
+            f"uma_name_{reg_id}": "Gold Ship",
+            f"strategy_{reg_id}": "End",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        result = (
+            db.session.query(OfficialRaceResult)
+            .filter_by(official_race_id=race_id)
+            .first()
+        )
+        assert result is not None
+        assert result.strategy == "End"
+
+
+def test_confirm_template_renders_position_chip(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR13 — the parsed `position` shows up as a visible chip
+    in the Detected column so the organiser sees what'll be saved
+    as strategy. Drives the renderer with a hand-built attempt
+    rather than the mock provider (which has no position)."""
+    from uma_ladder.models import OcrParseStatus, UploadedImage
+    from uma_ladder.models.enums import UploadPurpose
+
+    sid, pid = _setup(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+
+    with app.app_context():
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"a-pos-{race_id}.png",
+            mime_type="image/png",
+            size_bytes=100,
+            purpose=UploadPurpose.OCR_RESULT,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            raw_text="",
+            parsed_json={
+                "rows": [
+                    {
+                        "placement": 1,
+                        "uma_name": "Gold Ship",
+                        "position": "End",
+                    }
+                ],
+            },
+            confidence_json={},
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Chip text + the JS carrier both reference "End".
+    assert ">End<" in body or 'value="End"' in body or '"End"' in body
+
+
 # ─── PR-OCR5: multi-file upload + merge-by-placement ─────────────
 
 

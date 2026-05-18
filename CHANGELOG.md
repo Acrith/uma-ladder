@@ -8,6 +8,21 @@ log for the full history.
 
 ### Official races
 
+- **Parsed position auto-fills the result's strategy + all
+  screenshots visible on the OCR confirm page (PR-OCR13).** Two
+  follow-ups on the race-result OCR confirm flow. (1) The row
+  parser already extracts the position keyword (Front / Pace /
+  Late / End) off each placement row, but the value was dropped
+  on submit — the per-result details form opened with the
+  Strategy input blank. The position now rides through a hidden
+  carrier into `result.strategy`, and shows up as a cyan chip in
+  the Detected column so the organiser sees what'll be saved.
+  (2) Multi-screenshot uploads only rendered the primary
+  attempt's image in the source-preview strip, mirroring the
+  pre-PR-OCR10 bug on the per-result detail flow. Confirm page
+  now renders all contributing screenshots stacked vertically
+  with a plural-aware header ("Source screenshots (3)").
+
 - **Multi-word trainer names no longer butcher the result row (PR-OCR12).**
   When a trainer name is more than one word (e.g. "Aisha
   AlSadhazi"), the OCR row parser used to capture only the LAST

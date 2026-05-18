@@ -24,10 +24,20 @@
 
   <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
     {% call card(class="p-3") %}
-      <p class="label-eyebrow">Source screenshot</p>
-      <img src="{{ url_for('ocr.serve_image', image_id=attempt.image.id) }}"
-           alt="result screenshot"
-           class="mt-2 w-full rounded border border-slate-800" />
+      {# PR-OCR13 — render EVERY contributing screenshot, mirroring
+         the per-result detail flow (PR-OCR10). Single-screenshot
+         uploads pass through a 1-element list. #}
+      {% set _ids = screenshot_image_ids or [attempt.image.id] %}
+      <p class="label-eyebrow">
+        Source screenshot{% if _ids|length > 1 %}s <span class="text-slate-500">({{ _ids|length }})</span>{% endif %}
+      </p>
+      <div class="mt-2 space-y-2">
+        {% for img_id in _ids %}
+          <img src="{{ url_for('ocr.serve_image', image_id=img_id) }}"
+               alt="result screenshot {{ loop.index }}"
+               class="w-full rounded border border-slate-800" />
+        {% endfor %}
+      </div>
       <p class="mt-2 text-xs text-slate-500">
         Provider: <span class="text-slate-300">{{ attempt.provider }}</span>
         {% if attempt.confidence_json and attempt.confidence_json.get('overall') is not none %}
@@ -68,6 +78,7 @@
               {% set ocr_time = row.get('time_or_lengths', '') %}
               {% set ocr_gate = row.get('gate', '') %}
               {% set ocr_fav = row.get('fav_rank', '') %}
+              {% set ocr_position = row.get('position', '') %}
               {% set suggested_reg_id = suggestions.get(i) %}
               <tr class="border-t border-slate-800 align-top">
                 <td class="pr-3 py-2">
@@ -89,8 +100,9 @@
                      pipeline pulls off the result screen. Hidden
                      value carriers below mirror these into the
                      submit_results POST. #}
-                  {% if ocr_gate or ocr_time or ocr_fav %}
+                  {% if ocr_gate or ocr_time or ocr_fav or ocr_position %}
                     <p class="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-500">
+                      {% if ocr_position %}{{ chip(ocr_position, "cyan") }}{% endif %}
                       {% if ocr_gate %}{{ chip("Gate " ~ ocr_gate, "slate") }}{% endif %}
                       {% if ocr_time %}{{ chip(ocr_time, "slate") }}{% endif %}
                       {% if ocr_fav %}{{ chip("#" ~ ocr_fav ~ " fav", "slate") }}{% endif %}
@@ -124,11 +136,13 @@
         {# Hidden placement_<reg_id> + uma_name_<reg_id> fields populated
            from the visible OCR rows. PR-A5 — also carry through
            finish_time_or_lengths / gate / fav_rank so they reach the
-           service layer. JS keeps them in sync. #}
+           service layer. PR-OCR13 — strategy from parsed position
+           (Front / Pace / Late / End). JS keeps them in sync. #}
         <div id="ocr-hidden-fields" class="hidden">
           {% for r in registrations %}
             <input type="hidden" name="placement_{{ r.id }}" data-reg-placement="{{ r.id }}" value="" />
             <input type="hidden" name="uma_name_{{ r.id }}" data-reg-uma-name="{{ r.id }}" value="" />
+            <input type="hidden" name="strategy_{{ r.id }}" data-reg-strategy="{{ r.id }}" value="" />
             <input type="hidden" name="finish_time_{{ r.id }}" data-reg-finish-time="{{ r.id }}" value="" />
             <input type="hidden" name="gate_{{ r.id }}" data-reg-gate="{{ r.id }}" value="" />
             <input type="hidden" name="fav_rank_{{ r.id }}" data-reg-fav-rank="{{ r.id }}" value="" />
@@ -182,6 +196,9 @@
       const ocrRowFinishTimes = {};  // ocr row index → time / lengths string
       const ocrRowGates = {};         // ocr row index → gate int
       const ocrRowFavRanks = {};      // ocr row index → fav_rank int
+      // PR-OCR13 — parsed position (Front / Pace / Late / End) maps
+      // 1:1 onto the strategy field on the saved result.
+      const ocrRowStrategies = {};    // ocr row index → strategy string
       {% for i in range(parsed_rows|length) %}
       assignments[{{ i }}] = document.querySelector('[name="ocr_assign_{{ i }}"]').value || null;
       ocrRowPlacements[{{ i }}] = {{ parsed_rows[i].get('placement', i + 1) }};
@@ -189,6 +206,7 @@
       ocrRowFinishTimes[{{ i }}] = {{ parsed_rows[i].get('time_or_lengths', '') | tojson }};
       ocrRowGates[{{ i }}] = {{ parsed_rows[i].get('gate', '') | tojson }};
       ocrRowFavRanks[{{ i }}] = {{ parsed_rows[i].get('fav_rank', '') | tojson }};
+      ocrRowStrategies[{{ i }}] = {{ parsed_rows[i].get('position', '') | tojson }};
       {% endfor %}
 
       function refreshHiddenFromOcr() {
@@ -196,7 +214,7 @@
         // OCR rows currently say. Manual rows below override on
         // submit.
         const fields = [
-          'data-reg-placement', 'data-reg-uma-name',
+          'data-reg-placement', 'data-reg-uma-name', 'data-reg-strategy',
           'data-reg-finish-time', 'data-reg-gate', 'data-reg-fav-rank',
         ];
         fields.forEach(attr =>
@@ -210,11 +228,13 @@
           const place = ocrRowPlacements[i];
           const ph = document.querySelector('[data-reg-placement="' + regId + '"]');
           const nh = document.querySelector('[data-reg-uma-name="' + regId + '"]');
+          const sh = document.querySelector('[data-reg-strategy="' + regId + '"]');
           const fth = document.querySelector('[data-reg-finish-time="' + regId + '"]');
           const gh = document.querySelector('[data-reg-gate="' + regId + '"]');
           const fh = document.querySelector('[data-reg-fav-rank="' + regId + '"]');
           if (ph) ph.value = place;
           if (nh) nh.value = uma;
+          if (sh) sh.value = ocrRowStrategies[i] || '';
           if (fth) fth.value = ocrRowFinishTimes[i] || '';
           if (gh) gh.value = ocrRowGates[i] || '';
           if (fh) fh.value = ocrRowFavRanks[i] || '';
