@@ -6,6 +6,24 @@ log for the full history.
 
 ## 2026-05-18
 
+### Official races
+
+- **Uma sheet OCR available on race-result detail uploads
+  (PR-OCR4).** When an organiser hits "Add details from
+  screenshot" on a race result, the upload now runs through the
+  Uma-sheet-tuned extractor first — stats come out correctly
+  paired (not the all-same-number bug), and the skill list
+  pre-fills from a catalogue scan over the post-`Skills`
+  section. If the upload isn't recognisably a sheet (mock OCR
+  for tests, or a non-sheet screenshot in prod) we fall back to
+  the old race-result extractor so nothing regresses. Available
+  the same way before — re-upload as many times as you want
+  to backfill after the race ends. Tier-variant interactive
+  selection + inherited-ult handling polish remain TODO; for now,
+  inherited variants that share an English name with the
+  original are silently dropped so the confirm form doesn't
+  list "Anchors Aweigh!" twice.
+
 ### Behind the scenes
 
 - **Uma-sheet OCR sandbox: multi-upload, tier variants, layout

@@ -459,6 +459,48 @@ def test_merge_header_first_wins(app: Flask) -> None:
     assert m.header["trainer_name"] == "Yuuta"  # only b had it
 
 
+# ─── PR-OCR4: inherited-variant dedupe ───────────────────────────
+
+
+def test_inherited_variant_dropped_when_original_present(
+    app: Flask,
+) -> None:
+    """The catalogue ships two `Anchors Aweigh!` rows — original
+    (is_inherited=False) and inherited (is_inherited=True). The
+    extractor should emit ONE, preferring the non-inherited.
+    Otherwise the per-result confirm form on Official races would
+    show the same skill twice for the organiser to clean up."""
+    with app.app_context():
+        original = UmaSkill(
+            gametora_id=93001,
+            name_en="Anchors Aweigh!",
+            enabled=True,
+            is_inherited=False,
+        )
+        inherited = UmaSkill(
+            gametora_id=93002,
+            name_en="Anchors Aweigh!",
+            enabled=True,
+            is_inherited=True,
+        )
+        db.session.add_all([original, inherited])
+        db.session.commit()
+        result = extract_uma_sheet(
+            [
+                "Skills Inspiration Career Info",
+                "Anchors Aweigh!",
+                "Close",
+            ]
+        )
+    names = [s["name_en"] for s in result.skills]
+    assert names.count("Anchors Aweigh!") == 1
+    # Specifically the non-inherited one survived.
+    survivor_id = result.skills[0]["id"]
+    with app.app_context():
+        survivor = db.session.get(UmaSkill, survivor_id)
+        assert survivor.is_inherited is False
+
+
 def test_merge_debug_block_concatenates(app: Flask) -> None:
     a = UmaSheetExtract(skills_block_debug="anchors aweigh")
     b = UmaSheetExtract(skills_block_debug="long corners")

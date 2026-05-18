@@ -657,6 +657,33 @@ def result_details_from_ocr(
         abort(404)
 
     parsed = attempt.parsed_json or {}
+    # PR-OCR4 — prefer the Uma-sheet-tuned extractor over the
+    # race-result one. The race-result extractor's _extract_stats
+    # used to put 1197 in every stat cell (it grabbed the first int
+    # after each label); the sheet extractor matches positionally.
+    # Skill candidates also come from the catalogue-matched list
+    # (with inherited-variant dedupe) rather than per-row clusters
+    # which split multi-skill rows badly.
+    #
+    # Fallback: if the sheet extractor produces nothing (e.g. the
+    # organiser uploaded a non-sheet screenshot, OR the mock OCR
+    # provider is in play for tests), drop back to the race-result
+    # parse output that was already in parsed_json. This keeps the
+    # confirm page useful for any image shape.
+    from ..services.ocr_uma_sheet import extract_uma_sheet
+
+    rows = parsed.get("rows") or []
+    line_texts = [
+        (r.get("raw_line") or r.get("uma_name") or "").strip()
+        for r in rows
+    ]
+    line_texts = [t for t in line_texts if t]
+    sheet = extract_uma_sheet(line_texts)
+    sheet_skill_names = [s["name_en"] for s in sheet.skills]
+
+    parsed_stats = sheet.stats or (parsed.get("stats") or {})
+    parsed_skills = sheet_skill_names or (parsed.get("skills") or [])
+
     # Pull every enabled skill name for the typeahead datalist. ~1.8k
     # rows fits in the rendered HTML (≈ 30KB) without JS — modern
     # browsers handle a datalist of this size fine. Sorted so the
@@ -677,8 +704,8 @@ def result_details_from_ocr(
         race=race,
         result=result,
         attempt=attempt,
-        parsed_stats=parsed.get("stats") or {},
-        parsed_skills=parsed.get("skills") or [],
+        parsed_stats=parsed_stats,
+        parsed_skills=parsed_skills,
         skill_names=skill_names,
         csrf_form=CsrfOnlyForm(),
     )

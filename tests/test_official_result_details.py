@@ -100,6 +100,144 @@ def _seed_skills(app: Flask) -> None:
         db.session.commit()
 
 
+# PR-OCR4 — integration test: the per-result confirm page now runs
+# the Uma-sheet extractor over the parsed rows. Mirrors the
+# 21-line Tamamo Cross OCR dump that drives the extractor tests.
+_TAMAMO_ROWS: list[dict] = [
+    {"raw_line": "Umamusume Details", "placement": None, "uma_name": None},
+    {"raw_line": "St [ Fast as Lightning ]", "placement": None, "uma_name": None},
+    {"raw_line": "RANK Tamamo Cross", "placement": None, "uma_name": None},
+    {"raw_line": "Epithet", "placement": None, "uma_name": None},
+    {"raw_line": "Now That's White Lightning!", "placement": None, "uma_name": None},
+    {"raw_line": "17,307 Trainer Yuuta", "placement": None, "uma_name": None},
+    {"raw_line": "Speed ♥ Stamina Power Guts Wit", "placement": None, "uma_name": None},
+    {"raw_line": "1197 1070 1105 553 638", "placement": None, "uma_name": None},
+    {"raw_line": "Track Turf A Dirt F", "placement": None, "uma_name": None},
+    {"raw_line": "Distance Sprint G Mile B Medium A Long A", "placement": None, "uma_name": None},
+    {"raw_line": "Style Front G Pace A Late A End A", "placement": None, "uma_name": None},
+    {"raw_line": "Save As Practice", "placement": None, "uma_name": None},
+    {"raw_line": "Partner", "placement": None, "uma_name": None},
+    {"raw_line": "Skills Inspiration Career Info", "placement": None, "uma_name": None},
+    {"raw_line": "Anchors Aweigh!", "placement": None, "uma_name": None},
+    {"raw_line": "Close", "placement": None, "uma_name": None},
+]
+
+
+def test_per_result_confirm_uses_sheet_extractor(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Race-result extractor put 1197 in EVERY stat cell on Uma sheets.
+    After PR-OCR4 the per-result confirm page runs the sheet extractor
+    on the attempt's parsed rows and renders the positionally-paired
+    values (1197 / 1070 / 1105 / 553 / 638)."""
+    from uma_ladder.models import OcrParseAttempt, OcrParseStatus, UploadedImage
+    from uma_ladder.models.enums import UploadPurpose
+
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    with app.app_context():
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"test-tamamo-{result_id}.png",
+            original_filename="tamamo.png",
+            mime_type="image/png",
+            size_bytes=100,
+            purpose=UploadPurpose.OCR_RESULT,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            raw_text="",
+            parsed_json={
+                "rows": _TAMAMO_ROWS,
+                "stats": {},
+                "skills": [],
+            },
+            confidence_json={},
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        # Seed Anchors Aweigh! so the catalogue scan can resolve it.
+        db.session.add(
+            UmaSkill(
+                gametora_id=20001,
+                name_en="Anchors Aweigh!",
+                is_unique=True,
+                is_inherited=False,
+                enabled=True,
+            )
+        )
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}"
+        f"/details-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+
+    # Stats inputs render with positionally-matched values from the
+    # sheet extractor. The critical one is stamina=1070 — under the
+    # old race-result extractor every cell got the same first int
+    # (1197) and stamina would have rendered as 1197 too.
+    import re
+
+    speed_v = re.search(r'name="speed"[^>]*value="(\d+)"', body)
+    stamina_v = re.search(r'name="stamina"[^>]*value="(\d+)"', body)
+    power_v = re.search(r'name="power"[^>]*value="(\d+)"', body)
+    guts_v = re.search(r'name="guts"[^>]*value="(\d+)"', body)
+    wisdom_v = re.search(r'name="wisdom"[^>]*value="(\d+)"', body)
+    assert speed_v and speed_v.group(1) == "1197"
+    assert stamina_v and stamina_v.group(1) == "1070"
+    assert power_v and power_v.group(1) == "1105"
+    assert guts_v and guts_v.group(1) == "553"
+    assert wisdom_v and wisdom_v.group(1) == "638"
+
+    # The catalogue-matched skill should pre-populate a skill_name_ input.
+    skill_inputs = re.findall(
+        r'<input[^>]*name="skill_name_\d+"[^>]*value="([^"]+)"', body
+    )
+    assert "Anchors Aweigh!" in skill_inputs
+
+
+def test_per_result_confirm_falls_back_when_sheet_extractor_empty(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """If the upload isn't a sheet (mock provider in tests, or a
+    real race-result screenshot in prod), the sheet extractor
+    returns nothing — and we fall back to the original
+    run_parse output. Catches the regression that would have
+    broken the existing per-result confirm flow."""
+    app.config["OCR_PROVIDER"] = "mock"
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={"image": (io.BytesIO(_png_bytes()), "race.png")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    attempt_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}"
+        f"/details-from-ocr/{attempt_id}"
+    )
+    body = resp.data.decode()
+    # Mock provider's stats survive the fallback path.
+    assert 'value="1100"' in body
+    # And its skill candidates make it through too.
+    assert "Warning Shot!" in body
+
+
 def _login(client: FlaskClient, username: str, password: str = "password123") -> None:
     resp = client.post(
         "/auth/login",

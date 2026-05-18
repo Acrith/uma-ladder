@@ -257,8 +257,17 @@ def _extract_skills(
     norm_block = _normalize_for_skill_search(block)
     if not norm_block:
         return []
-    # Load enabled skills once. ~2k rows is cheap.
-    catalog = db.session.query(UmaSkill).filter(UmaSkill.enabled.is_(True)).all()
+    # Load enabled skills once. ~2k rows is cheap. Order so
+    # non-inherited rows come first within the iteration — the
+    # name-dedupe pass below keeps the first one it sees for a given
+    # name_en, so an inherited variant only wins if no original
+    # exists in the catalogue.
+    catalog = (
+        db.session.query(UmaSkill)
+        .filter(UmaSkill.enabled.is_(True))
+        .order_by(UmaSkill.is_inherited.asc(), UmaSkill.id.asc())
+        .all()
+    )
     # Group by normalized name so all tier variants of "Right-Handed"
     # come out together at the same matched position.
     groups: dict[str, list[UmaSkill]] = defaultdict(list)
@@ -298,15 +307,28 @@ def _extract_skills(
                 found.append((idx, s.id, s.name_en))
             start = idx + len(norm_name)
     found.sort()
-    # Dedupe by skill id (inherited variants in same catalogue share
-    # name_en but have distinct ids — keep both; only collapse exact
-    # id repeats which shouldn't happen here but is cheap to guard).
-    seen: set[int] = set()
+    # PR-OCR4 — Two-stage dedupe:
+    # 1. by skill id (cheap guard against the same row matching twice)
+    # 2. by name_en (drops inherited variants that share the original's
+    #    English name — catalogue has e.g. two "Anchors Aweigh!" rows,
+    #    one is_inherited=True, one is_inherited=False. The screenshot
+    #    can't tell them apart by text alone, and showing both would
+    #    spam the confirm form for organisers. We rely on the
+    #    longest-first sort + insertion order: original tends to be
+    #    seeded first / have a smaller id, so it wins. The tier
+    #    variants (◎ / ○ / ×) have DISTINCT name_en values and are
+    #    NOT collapsed by this step — those are real different
+    #    skills.)
+    seen_ids: set[int] = set()
+    seen_names: set[str] = set()
     out: list[dict[str, object]] = []
     for pos, sid, name_en in found:
-        if sid in seen:
+        if sid in seen_ids:
             continue
-        seen.add(sid)
+        if name_en in seen_names:
+            continue
+        seen_ids.add(sid)
+        seen_names.add(name_en)
         out.append({"id": sid, "name_en": name_en, "raw_pos": pos})
     return out
 
