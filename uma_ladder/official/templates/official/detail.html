@@ -559,9 +559,16 @@
                      screen: starting gate, winner's time / gap to
                      the winner, and pre-race favorite number. Null
                      fields skip their pill so manual entries don't
-                     render half-empty rows. #}
-                  {% if r.gate or r.finish_time_or_lengths or r.fav_rank %}
+                     render half-empty rows.
+                     PR-OCR17 — strategy (Front / Pace / Late / End)
+                     joins the pill row; populated by race-result
+                     OCR (PR-OCR13) or hand-edited via the per-result
+                     details form. Cyan tint matches the chip on the
+                     confirm page so the connection between "what
+                     OCR saw" and "what got saved" is visible. #}
+                  {% if r.strategy or r.gate or r.finish_time_or_lengths or r.fav_rank %}
                     <p class="mt-1 flex flex-wrap gap-1 text-[10px]">
+                      {% if r.strategy %}{{ chip(r.strategy, "cyan") }}{% endif %}
                       {% if r.gate %}{{ chip("Gate " ~ r.gate, "slate") }}{% endif %}
                       {% if r.finish_time_or_lengths %}{{ chip(r.finish_time_or_lengths, "slate") }}{% endif %}
                       {% if r.fav_rank %}{{ chip("#" ~ r.fav_rank ~ " fav", "slate") }}{% endif %}

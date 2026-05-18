@@ -8,6 +8,15 @@ log for the full history.
 
 ### Official races
 
+- **Strategy (Front / Pace / Late / End) now visible on the race
+  detail page (PR-OCR17).** The race-result OCR was already
+  saving the parsed position as `result.strategy` (PR-OCR13),
+  but the race detail template never rendered it — so post-import
+  the field looked "missing" even though it was on the row. It
+  now shows as a cyan chip next to gate / time / fav, matching
+  the chip on the confirm page so the in / out are visually
+  consistent.
+
 - **Resubmitting race results no longer crashes with a UNIQUE
   constraint (PR-OCR16).** Trying to re-confirm OCR-parsed
   placements for a race that already had any results saved
@@ -87,17 +96,6 @@ log for the full history.
   The "Detected" column now also displays the parsed trainer name
   under the uma name so it's obvious what the OCR saw.
 
-### OCR sandbox
-
-- **Parse-review page is readable on the dark theme (PR-OCR11).**
-  The `/ocr/attempts/<id>` review page was unstyled legacy and
-  rendered as white-on-white inputs + raw-text blocks — the
-  contents were only visible by selecting them. Migrated to the
-  shared design system (`input-base`, `surface-card`, slate-950
-  pre blocks); same layout, now legible.
-
-### Official races
-
 - **Overall uma rank glyph + score on race results (PR-A6).**
   Each per-result card now shows the in-game **overall** rank
   glyph (G / G+ / … / SS+ / Ug⁰..Ug⁶) next to the uma name,
@@ -124,20 +122,6 @@ log for the full history.
   race detail page as a compact pill row above the stat grid;
   the OCR confirm page also shows them as chips so an organiser
   can see what got parsed. Manual entry can leave them blank.
-
-### Race detail (Official + Draft)
-
-- **Season + weather chips use official game glyphs (PR-A4).**
-  The Track-conditions row on both Official and Draft race detail
-  pages used to show *Spring* as a plain text chip and *Rainy* as
-  a Unicode glyph (`☂ Rainy`). They now render the actual in-game
-  artwork — Cygames' season-name typography and weather icons —
-  for visual parity with the uma sheet. Same fallback behaviour
-  as before: an unknown value falls back to a plain text chip so
-  nothing breaks if the catalogue grows past what's been
-  mirrored. Asset attribution in `static/img/{season,weather}/CREDITS.md`.
-
-### Official races
 
 - **Official-style aptitude glyphs on race results (PR-A3).**
   The Track / Distance / Style aptitude row on each per-result
@@ -291,6 +275,27 @@ log for the full history.
   inherited variants that share an English name with the
   original are silently dropped so the confirm form doesn't
   list "Anchors Aweigh!" twice.
+
+### Race detail (Official + Draft)
+
+- **Season + weather chips use official game glyphs (PR-A4).**
+  The Track-conditions row on both Official and Draft race detail
+  pages used to show *Spring* as a plain text chip and *Rainy* as
+  a Unicode glyph (`☂ Rainy`). They now render the actual in-game
+  artwork — Cygames' season-name typography and weather icons —
+  for visual parity with the uma sheet. Same fallback behaviour
+  as before: an unknown value falls back to a plain text chip so
+  nothing breaks if the catalogue grows past what's been
+  mirrored. Asset attribution in `static/img/{season,weather}/CREDITS.md`.
+
+### OCR sandbox
+
+- **Parse-review page is readable on the dark theme (PR-OCR11).**
+  The `/ocr/attempts/<id>` review page was unstyled legacy and
+  rendered as white-on-white inputs + raw-text blocks — the
+  contents were only visible by selecting them. Migrated to the
+  shared design system (`input-base`, `surface-card`, slate-950
+  pre blocks); same layout, now legible.
 
 ### Behind the scenes
 

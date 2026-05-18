@@ -711,6 +711,36 @@ def test_uma_score_zero_or_missing_skips_render(
     assert "title=\"Rank " not in body
 
 
+def test_race_detail_renders_strategy_chip(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR17 — race detail per-result card surfaces the saved
+    `strategy` value (Front / Pace / Late / End) as a chip. The
+    field was being saved correctly via PR-OCR13's auto-fill from
+    the OCR position keyword, but the detail template never read
+    it. Without this chip the user has to open the per-result
+    details form to see what strategy was saved."""
+    from uma_ladder.models import OfficialRaceResult
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        row = db.session.get(OfficialRaceResult, result_id)
+        row.strategy = "Pace"
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # "Pace" renders inside the per-result card. Don't constrain on
+    # the exact chip markup — the chip() macro is shared and may
+    # evolve. Just check the text + the cyan-tone class hint shows.
+    assert ">Pace<" in body or "Pace</span>" in body or "Pace" in body
+    # Cyan tone is what the confirm-page chip uses too (PR-OCR13).
+    assert "text-cyan-300" in body
+
+
 def test_race_detail_renders_stat_rank_icon(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
