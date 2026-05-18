@@ -145,3 +145,70 @@ def conditions_for(skill_ids: list[int]) -> dict[int, SkillCondition]:
         )
     ).all()
     return {row.skill_id: row for row in rows}
+
+
+def race_context_for(race, result=None) -> RaceContext:
+    """Build a `RaceContext` from an OfficialRace (+ optional
+    OfficialRaceResult). The strategy axis comes from
+    `result.strategy` (the strategy the uma ran with); when no
+    result is given, that axis is None and any style-conditional
+    skill will read as non-applying.
+
+    Defensive `getattr` on each field so callers can pass anything
+    duck-typed — the test suite synthesises objects with just the
+    handful of attributes the function reads."""
+    preset = getattr(race, "preset", None) if race is not None else None
+    return RaceContext(
+        direction=getattr(preset, "direction", None),
+        surface=getattr(preset, "surface", None),
+        weather=getattr(race, "weather", None) if race is not None else None,
+        season=(
+            getattr(race, "race_season", None) if race is not None else None
+        ),
+        distance_category=getattr(preset, "distance_category", None),
+        distance_meters=getattr(preset, "distance_meters", None),
+        strategy=(
+            getattr(result, "strategy", None) if result is not None else None
+        ),
+        venue=getattr(preset, "venue", None),
+    )
+
+
+def inapplicable_skill_ids_by_result(
+    results, race
+) -> dict[int, set[int]]:
+    """For each result in `results`, return the set of skill ids
+    on its `r.skills` list whose `SkillCondition` predicate
+    doesn't match the race + strategy context. Skills without a
+    catalog entry are treated as "applies" (we don't have data
+    to gray them out conservatively).
+
+    Single batched fetch of `SkillCondition` across all skills
+    on all results — avoids N+1 lookups when the page renders
+    a 9-uma race with ~16 skills each."""
+    if not results:
+        return {}
+    all_skill_ids: set[int] = set()
+    for r in results:
+        for assoc in getattr(r, "skills", []) or []:
+            sid = getattr(assoc, "skill_id", None)
+            if sid is not None:
+                all_skill_ids.add(sid)
+    catalog = conditions_for(list(all_skill_ids))
+
+    out: dict[int, set[int]] = {}
+    for r in results:
+        ctx = race_context_for(race, r)
+        inapp: set[int] = set()
+        for assoc in getattr(r, "skills", []) or []:
+            sid = getattr(assoc, "skill_id", None)
+            if sid is None:
+                continue
+            cond = catalog.get(sid)
+            if cond is None:
+                # Unknown skill — default permissive (no gray-out).
+                continue
+            if not condition_matches(cond, ctx):
+                inapp.add(sid)
+        out[r.id] = inapp
+    return out

@@ -458,6 +458,179 @@ def test_seed_updates_existing_refresh_timestamp(
         assert rows[0].value > first
 
 
+def test_race_context_for_pulls_fields_from_race_and_result() -> None:
+    """PR-SK4 — `race_context_for` reads surface/direction/etc.
+    off `race.preset` and weather/season off `race`, plus
+    strategy off the result if given. Duck-typed so the test
+    can synthesise objects without touching the DB."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import race_context_for
+
+    preset = SimpleNamespace(
+        direction="Right", surface="Turf",
+        distance_category="Medium", distance_meters=2400,
+        venue="Tokyo",
+    )
+    race = SimpleNamespace(
+        preset=preset, weather="Sunny", race_season="Spring",
+    )
+    result = SimpleNamespace(strategy="End")
+
+    ctx = race_context_for(race, result)
+    assert ctx.direction == "Right"
+    assert ctx.surface == "Turf"
+    assert ctx.weather == "Sunny"
+    assert ctx.season == "Spring"
+    assert ctx.distance_category == "Medium"
+    assert ctx.distance_meters == 2400
+    assert ctx.strategy == "End"
+    assert ctx.venue == "Tokyo"
+    assert ctx.is_standard_distance is True  # 2400 ∈ {1600,2000,2400,3200}
+
+
+def test_race_context_for_strategy_none_without_result() -> None:
+    """Without a result, strategy is None and any
+    style-conditional skill registers as non-applying."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import race_context_for
+
+    race = SimpleNamespace(preset=SimpleNamespace(direction="Right"),
+                           weather=None, race_season=None)
+    ctx = race_context_for(race, None)
+    assert ctx.direction == "Right"
+    assert ctx.strategy is None
+
+
+def test_inapplicable_skill_ids_batched_per_result(app: Flask) -> None:
+    """PR-SK4 — `inapplicable_skill_ids_by_result` returns a
+    per-result-id mapping of skill ids whose catalog predicate
+    doesn't match the race context. Strategy axis is per-result
+    so the same skill can apply to one uma and gray out for
+    another in the same race.
+
+    Skill setup:
+      - "Right-Handed" (direction=Right, no other constraint)
+      - "Front Runner Savvy" (strategy=Front)
+      - Both seeded as catalog rows.
+
+    Race: Right direction. Two results: Alice (strategy=Front),
+    Bob (strategy=End). Alice has both skills; Bob has both.
+
+    Expected:
+      - Alice: both skills apply (direction matches, strategy=Front
+        matches) → empty inapplicable set.
+      - Bob: Right-Handed still applies (direction matches),
+        Front Runner Savvy does NOT (strategy=End != Front) →
+        {front_runner_id}.
+    """
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    right_handed_id = _seed_skill(app, "Right-Handed RB", direction="Right")
+    front_runner_id = _seed_skill(app, "Front Runner Savvy RB", strategy="Front")
+
+    # Fake the joined associations the route normally builds via
+    # `r.skills`. Each assoc has `skill_id`. result.id is used as
+    # the dict key; result.strategy drives the per-result context.
+    alice_skills = [
+        SimpleNamespace(skill_id=right_handed_id),
+        SimpleNamespace(skill_id=front_runner_id),
+    ]
+    bob_skills = [
+        SimpleNamespace(skill_id=right_handed_id),
+        SimpleNamespace(skill_id=front_runner_id),
+    ]
+    alice = SimpleNamespace(id=1, strategy="Front", skills=alice_skills)
+    bob = SimpleNamespace(id=2, strategy="End", skills=bob_skills)
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction="Right", surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None,
+    )
+
+    with app.app_context():
+        result = inapplicable_skill_ids_by_result([alice, bob], race)
+
+    assert result[alice.id] == set()
+    assert result[bob.id] == {front_runner_id}
+
+
+def test_inapplicable_skill_unknown_in_catalog_is_permissive(
+    app: Flask,
+) -> None:
+    """A skill the uma has but whose catalog entry doesn't exist
+    yet (e.g. brand-new from a gametora refresh that hasn't been
+    seeded) is treated as "applies" — we don't gray out what we
+    don't have data for."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    with app.app_context():
+        # Seed a UmaSkill with NO matching SkillCondition.
+        skill = UmaSkill(
+            gametora_id=987654, name_en="Brand New Skill",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        db.session.add(skill)
+        db.session.commit()
+        sid = skill.id
+
+    result = SimpleNamespace(
+        id=1, strategy="Front",
+        skills=[SimpleNamespace(skill_id=sid)],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction="Right", surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None,
+    )
+
+    with app.app_context():
+        out = inapplicable_skill_ids_by_result([result], race)
+    assert out[result.id] == set()
+
+
+def test_inapplicable_skill_dynamic_always_gray(app: Flask) -> None:
+    """A skill with `is_dynamic=True` (runtime conditions we can't
+    predict) always grays out — even when other static predicates
+    match the race context, the dynamic atom forces conservative
+    treatment."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    dyn_id = _seed_skill(
+        app, "Dynamic Sometimes ◎",
+        direction="Right", is_dynamic=True,
+    )
+    result = SimpleNamespace(
+        id=1, strategy="Front",
+        skills=[SimpleNamespace(skill_id=dyn_id)],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction="Right", surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None,
+    )
+
+    with app.app_context():
+        out = inapplicable_skill_ids_by_result([result], race)
+    assert out[result.id] == {dyn_id}
+
+
 def test_model_buff_columns_default_to_zero(app: Flask) -> None:
     """A SkillCondition row inserted with only the predicate fields
     set must come back with all five buff columns at 0 — items 5/6

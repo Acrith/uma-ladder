@@ -785,6 +785,76 @@ def test_race_detail_no_effective_line_without_aptitudes(
     assert not re.search(r"eff \d+", body)
 
 
+def test_race_detail_grays_out_non_applicable_skill(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-SK4 — when a result has a green skill whose catalog
+    condition doesn't match the race (e.g. a Left-Handed skill
+    on a Right-Handed track), the chip renders with `opacity-60
+    line-through grayscale` and a `title="Doesn't apply..."`
+    tooltip. The applies-skill chip stays cyan.
+    """
+    from uma_ladder.models import (
+        OfficialRaceResult,
+        OfficialRaceResultSkill,
+        SkillCondition,
+        UmaSkill,
+    )
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        # Race preset already says Tokyo / Turf / Medium / Left
+        # per _setup_completed_race. Make our "Left-Handed" skill
+        # apply (matches preset.direction) and "Right-Handed"
+        # skill NOT apply (different direction).
+        left_skill = UmaSkill(
+            gametora_id=200021, name_en="Left-Handed Test ◎",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        right_skill = UmaSkill(
+            gametora_id=200011, name_en="Right-Handed Test ◎",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        db.session.add_all([left_skill, right_skill])
+        db.session.commit()
+        db.session.add_all([
+            SkillCondition(skill_id=left_skill.id, direction="Left", buff_speed=60),
+            SkillCondition(skill_id=right_skill.id, direction="Right", buff_speed=60),
+        ])
+        # Attach both skills to the result.
+        result = db.session.get(OfficialRaceResult, result_id)
+        db.session.add_all([
+            OfficialRaceResultSkill(
+                official_race_result_id=result.id,
+                skill_id=left_skill.id,
+                position=0,
+            ),
+            OfficialRaceResultSkill(
+                official_race_result_id=result.id,
+                skill_id=right_skill.id,
+                position=1,
+            ),
+        ])
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Both skill names render.
+    assert "Left-Handed Test ◎" in body
+    assert "Right-Handed Test ◎" in body
+    # The doesn't-apply title shows somewhere (attached to the
+    # Right-Handed chip on this Left-direction race).
+    assert "Doesn't apply to this race" in body
+    # The cyan styling stays on the applying chip; the rose-free
+    # gray treatment shows the rendered template took the
+    # inapplicable branch at least once.
+    assert "opacity-60" in body
+    assert "line-through" in body
+
+
 def test_race_detail_renders_strategy_chip(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

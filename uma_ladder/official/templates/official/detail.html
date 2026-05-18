@@ -694,18 +694,28 @@
                     </div>
                   {% endif %}
                   {% if r.skills %}
+                    {# PR-SK4 — gray out skills whose static
+                       conditions don't match this race. The set
+                       is pre-computed in the route to avoid an
+                       N+1 SkillCondition lookup. Skills without a
+                       catalog entry render normally (default
+                       permissive — we don't gray out what we
+                       don't have data for). #}
+                    {% set _inapp = inapplicable_skills_by_result.get(r.id) or set() %}
                     <p class="mt-3 flex flex-wrap gap-1.5 text-xs">
                       {% for assoc in r.skills %}
-                        <span class="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/5 px-1.5 py-0.5 text-cyan-200">
+                        {% set _doesnt_apply = assoc.skill_id in _inapp %}
+                        <span class="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 {% if _doesnt_apply %}border-slate-700 bg-slate-900/30 text-slate-500 opacity-60{% else %}border-cyan-500/30 bg-cyan-500/5 text-cyan-200{% endif %}"
+                              {% if _doesnt_apply %}title="Doesn't apply to this race's conditions"{% endif %}>
                           {% if assoc.skill and assoc.skill.image_url %}
                             <img src="{{ assoc.skill.image_url }}"
                                  alt=""
                                  loading="lazy"
                                  referrerpolicy="no-referrer"
-                                 class="h-4 w-4 rounded" />
+                                 class="h-4 w-4 rounded {% if _doesnt_apply %}grayscale{% endif %}" />
                           {% endif %}
                           {% if assoc.skill %}
-                            <span>{{ assoc.skill.name_en }}</span>
+                            <span class="{% if _doesnt_apply %}line-through decoration-slate-600{% endif %}">{{ assoc.skill.name_en }}</span>
                           {% else %}
                             <span class="text-slate-500" title="raw OCR text — no skill matched">{{ assoc.raw_ocr_text or '?' }}</span>
                           {% endif %}

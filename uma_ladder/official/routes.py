@@ -233,6 +233,16 @@ def detail(race_id: int) -> object:
         if already:
             stmt = stmt.where(~Club.circle_id.in_(already))
         known_clubs = list(db.session.scalars(stmt))
+    # PR-SK4 — pre-compute per-result skill applicability against
+    # the race's static conditions so the template can gray out
+    # green skills that won't fire in this race. Single batched
+    # SkillCondition fetch covers every skill across every result.
+    from ..services.skill_catalog import inapplicable_skill_ids_by_result
+
+    inapplicable_skills_by_result = inapplicable_skill_ids_by_result(
+        results, race
+    )
+
     return render_template(
         "official/detail.html",
         race=race,
@@ -247,6 +257,7 @@ def detail(race_id: int) -> object:
         club_name=club_name,
         allowed_clubs=allowed_clubs,
         known_clubs=known_clubs,
+        inapplicable_skills_by_result=inapplicable_skills_by_result,
     )
 
 
