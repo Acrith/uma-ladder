@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Integer,
@@ -146,6 +147,18 @@ class OfficialRaceResult(db.Model):
     power: Mapped[int | None] = mapped_column(Integer, nullable=True)
     guts: Mapped[int | None] = mapped_column(Integer, nullable=True)
     wisdom: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # PR-A1 — Track / Distance / Style aptitude grades from the
+    # uma profile sheet, parsed by services.ocr_uma_sheet and
+    # persisted via the per-result confirm form. Shape matches the
+    # extractor output 1:1::
+    #   {"track":    {"turf": "A", "dirt": "F"},
+    #    "distance": {"sprint": "G", "mile": "B",
+    #                 "medium": "A", "long": "A"},
+    #    "style":    {"front": "G", "pace": "A",
+    #                 "late": "A", "end": "A"}}
+    # Each grade is one of G F E D C B A S. Nullable so historical
+    # rows (without OCR enrichment) survive the migration.
+    aptitudes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     confirmed_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

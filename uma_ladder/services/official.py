@@ -938,6 +938,12 @@ class ResultDetailsUpdate:
     wisdom: int | None = None
     strategy: str | None = None
     skill_names: tuple[str, ...] = ()
+    # PR-A1 — Track / Distance / Style aptitude grades from the
+    # uma profile sheet. None = leave existing aptitudes untouched
+    # (the form omits the field). Empty dict = explicitly clear.
+    # Populated dict = replace. Shape mirrors the extractor output:
+    # {"track": {...}, "distance": {...}, "style": {...}}.
+    aptitudes: dict | None = None
 
 
 class ResultNotFoundError(OfficialError):
@@ -976,6 +982,11 @@ def submit_result_details(
         result.wisdom = update.wisdom
     if update.strategy is not None:
         result.strategy = update.strategy
+    if update.aptitudes is not None:
+        # Reassigning a plain JSON column requires a fresh dict so
+        # SQLAlchemy's change tracker fires. The form path always
+        # builds a new dict, so this is symmetry rather than a fix.
+        result.aptitudes = dict(update.aptitudes) if update.aptitudes else None
 
     # Replace skill associations atomically. ORM-cascade delete via the
     # `skills` relationship handles the existing rows; we just clear and

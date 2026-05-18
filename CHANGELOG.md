@@ -8,6 +8,33 @@ log for the full history.
 
 ### Official races
 
+- **Track / Distance / Style aptitudes now stored + shown on race
+  results (PR-A1).** The per-result confirm form gains an
+  **Aptitudes** section with grade selectors (G — S) for each of
+  the 10 slots: Turf / Dirt, Sprint / Mile / Medium / Long, and
+  Front / Pace / Late / End. The sheet OCR pre-fills whichever
+  slots it parsed — pick the matching grade if OCR got it wrong,
+  leave blank to skip. Saved aptitudes render on the race detail
+  page's per-result card as compact colour-graded badges (S =
+  gold, A = green, B = blue, descending through to G = gray) so
+  the full slot row is readable at a glance. Schema is a single
+  JSON column on `official_race_results`; pre-deploy snapshot
+  ritual applies.
+
+- **Multi-screenshot upload diagnostics (PR-OCR8).** Two
+  feedback surfaces to debug the "second screenshot got
+  ignored" report: the submit button now shows a live count
+  (e.g. *Add details from screenshot (2 screenshots)*) so you
+  can verify both files are in the queue BEFORE clicking submit,
+  and a flash on the result page now reports how many of your
+  uploads actually parsed (*Received 2 files, parsed 2/2
+  attempts.*). Browser console also gets per-upload diagnostic
+  logs (`[OCR upload] added=… non_image=… duplicate=…`) so
+  the JS-side state is inspectable in DevTools if something
+  drops. Per-file failures during upload no longer cancel the
+  whole batch — surviving uploads now proceed to the confirm
+  page with a per-file error message.
+
 - **Multi-row ult names now resolve via iterative-subtractive
   match (PR-OCR7).** When Vision wraps a long ult name (e.g.
   `White Lightning Comin' Through!`) onto two rows AND another

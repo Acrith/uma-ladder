@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_components.html" import card, chip, official_status_chip %}
+{% from "_components.html" import card, chip, grade_letter_badge, official_status_chip %}
 {% from "_icons.html" import lock as icon_lock, globe as icon_globe, users as icon_users, clock as icon_clock %}
 {% block title %}{{ race.name }} · Uma Ladder{% endblock %}
 {% block content %}
@@ -554,6 +554,32 @@
                       Speed {{ r.speed or '—' }} · Stamina {{ r.stamina or '—' }} · Power {{ r.power or '—' }} · Guts {{ r.guts or '—' }} · Wisdom {{ r.wisdom or '—' }}
                     </p>
                   {% endif %}
+                  {# PR-A1 — Track / Distance / Style aptitudes as
+                     grade-letter badges. Three lines, each with the
+                     category label + slot+badge pairs. Only renders
+                     when the result actually has aptitude data. #}
+                  {% if r.aptitudes %}
+                    <div class="mt-2 space-y-1 text-xs text-slate-400">
+                      {% for cat_key, cat_label, slots in [
+                          ('track', 'Track', ['Turf', 'Dirt']),
+                          ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
+                          ('style', 'Style', ['Front', 'Pace', 'Late', 'End']),
+                        ] %}
+                        {% set cat_data = r.aptitudes.get(cat_key) or {} %}
+                        {% if cat_data %}
+                          <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span class="w-16 text-[10px] uppercase tracking-wider text-slate-500">{{ cat_label }}</span>
+                            {% for slot in slots %}
+                              <span class="inline-flex items-center gap-1">
+                                <span class="text-[10px] text-slate-500">{{ slot }}</span>
+                                {{ grade_letter_badge(cat_data.get(slot|lower)) }}
+                              </span>
+                            {% endfor %}
+                          </div>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
                   {% if r.skills %}
                     <p class="mt-1 flex flex-wrap gap-1.5 text-xs">
                       {% for assoc in r.skills %}
@@ -658,6 +684,12 @@
         var thumbs = form.querySelector('[data-ocr-thumbs]');
         var clearBtn = form.querySelector('[data-ocr-clear]');
         var armBtn = form.querySelector('[data-ocr-arm]');
+        // PR-OCR8 — the submit button text gets a live count so the
+        // user can see how many files are queued BEFORE clicking
+        // "Parse" / "Add details". Captures the original label so
+        // we restore it when the queue empties.
+        var submitBtn = form.querySelector('button:not([type="button"])');
+        var submitOriginalLabel = submitBtn ? submitBtn.textContent : null;
         if (!input || !thumbs) return;
 
         var queue = new DataTransfer();
@@ -672,12 +704,32 @@
 
         function addFiles(files) {
           var added = 0;
+          var rejectedNonImage = 0;
+          var rejectedDuplicate = 0;
           Array.from(files).forEach(function (f) {
-            if (!f || !f.type || !f.type.startsWith('image/')) return;
-            if (isDuplicate(f)) return;
+            if (!f || !f.type || !f.type.startsWith('image/')) {
+              rejectedNonImage += 1;
+              return;
+            }
+            if (isDuplicate(f)) {
+              rejectedDuplicate += 1;
+              return;
+            }
             queue.items.add(f);
             added += 1;
           });
+          // PR-OCR8 — diagnostic log so future regressions are
+          // visible in DevTools without instrumenting the user's
+          // machine remotely. Cheap; only fires on file pick / paste.
+          if (window.console && window.console.log) {
+            console.log(
+              '[OCR upload] added=' + added +
+              ' non_image=' + rejectedNonImage +
+              ' duplicate=' + rejectedDuplicate +
+              ' queue_total=' + (queue.files.length + added) +
+              ' form=' + (form.getAttribute('action') || '?')
+            );
+          }
           if (added > 0) {
             input.files = queue.files;
             render();
@@ -694,7 +746,22 @@
           render();
         }
 
+        function updateSubmitLabel() {
+          // PR-OCR8 — reflect the queue size in the submit button so
+          // it's obvious whether the JS actually accumulated both
+          // files before the user clicks "Parse" / "Add details".
+          if (!submitBtn || submitOriginalLabel === null) return;
+          var n = queue.files.length;
+          if (n <= 1) {
+            submitBtn.textContent = submitOriginalLabel;
+          } else {
+            submitBtn.textContent =
+              submitOriginalLabel + ' (' + n + ' screenshots)';
+          }
+        }
+
         function render() {
+          updateSubmitLabel();
           thumbs.innerHTML = '';
           if (queue.files.length === 0) {
             thumbs.classList.add('hidden');

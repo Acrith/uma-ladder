@@ -70,6 +70,49 @@
           </div>
         </div>
 
+        {# PR-A1 — Track / Distance / Style aptitudes. Three category
+           rows, each with N slots; each slot is a <select> of grade
+           letters G F E D C B A S (aptitudes don't go above S
+           in-game). Pre-fill from the sheet extractor when present;
+           any missing slot falls back to the previously-saved value
+           on the result. Empty string = "not set" (saves as omitted
+           in the stored dict). #}
+        {% set _grades = ['G', 'F', 'E', 'D', 'C', 'B', 'A', 'S'] %}
+        {% set _apt_schema = [
+          ('track', 'Track', ['turf', 'dirt']),
+          ('distance', 'Distance', ['sprint', 'mile', 'medium', 'long']),
+          ('style', 'Style', ['front', 'pace', 'late', 'end']),
+        ] %}
+        <div>
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Aptitudes</h2>
+          <p class="mt-1 text-xs text-slate-500">
+            Pre-filled from the parsed sheet. Pick the matching grade
+            (G — S) for each slot if OCR got it wrong. Leave a slot
+            blank to skip it.
+          </p>
+          <div class="mt-3 space-y-2">
+            {% for cat_key, cat_label, slots in _apt_schema %}
+              {% set saved_cat = parsed_aptitudes.get(cat_key) or {} %}
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="w-20 text-xs uppercase tracking-wider text-slate-400">{{ cat_label }}</span>
+                {% for slot in slots %}
+                  <label class="flex items-center gap-1 text-xs text-slate-300">
+                    <span class="text-slate-500">{{ slot|capitalize }}</span>
+                    <select name="aptitude_{{ cat_key }}_{{ slot }}"
+                            class="input-base w-14 px-1 py-0.5 text-xs">
+                      <option value=""></option>
+                      {% for g in _grades %}
+                        <option value="{{ g }}"
+                                {% if (saved_cat.get(slot) or '').upper() == g %}selected{% endif %}>{{ g }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                {% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
         <div>
           <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Skills</h2>
           <p class="mt-1 text-xs text-slate-500">

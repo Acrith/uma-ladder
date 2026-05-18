@@ -14,6 +14,7 @@ from flask_login import current_user, login_required
 from ..extensions import db, limiter
 from ..models import (
     OcrParseAttempt,
+    OcrParseStatus,
     OfficialRaceRegistration,
     OfficialRaceResult,
     Role,
@@ -540,15 +541,40 @@ def upload_result_screenshot(race_id: int) -> object:
         return redirect(url_for("official.detail", race_id=race_id))
 
     attempts = []
+    save_failures = 0
     for f in files:
         try:
             image = ocr_service.save_uploaded_image(
                 f, uploader_user_id=current_user.id
             )
         except ocr_service.OcrError as exc:
-            flash(str(exc))
-            return redirect(url_for("official.detail", race_id=race_id))
+            # PR-OCR8 — soft-fail per-file. A single bad upload no
+            # longer cancels the whole batch.
+            flash(f"{f.filename}: {exc}")
+            save_failures += 1
+            continue
         attempts.append(ocr_service.run_parse(image))
+
+    if not attempts:
+        return redirect(url_for("official.detail", race_id=race_id))
+
+    # PR-OCR8 — visible parse count.
+    parsed_ok = sum(
+        1 for a in attempts if a.status == OcrParseStatus.PARSED
+    )
+    if len(files) > 1 or save_failures or parsed_ok != len(attempts):
+        flash(
+            f"Received {len(files)} file"
+            + ("s" if len(files) != 1 else "")
+            + f", parsed {parsed_ok}/{len(attempts)} attempt"
+            + ("s" if len(attempts) != 1 else "")
+            + (
+                f" ({save_failures} rejected at upload)"
+                if save_failures
+                else ""
+            )
+            + "."
+        )
 
     # Single screenshot: keep the original behaviour — the attempt's
     # parsed rows already drive the review page.
@@ -692,15 +718,45 @@ def upload_result_details_screenshot(race_id: int, result_id: int) -> object:
         return redirect(url_for("official.detail", race_id=race_id))
 
     attempts = []
+    save_failures = 0
     for f in files:
         try:
             image = ocr_service.save_uploaded_image(
                 f, uploader_user_id=current_user.id
             )
         except ocr_service.OcrError as exc:
-            flash(str(exc))
-            return redirect(url_for("official.detail", race_id=race_id))
+            # PR-OCR8 — soft-fail per-file instead of aborting the
+            # whole batch. Previously a single bad upload (size /
+            # mime issue) cancelled every prior parse. Now we
+            # surface the per-file error + continue with the rest.
+            flash(f"{f.filename}: {exc}")
+            save_failures += 1
+            continue
         attempts.append(ocr_service.run_parse(image))
+
+    if not attempts:
+        return redirect(url_for("official.detail", race_id=race_id))
+
+    # PR-OCR8 — visible parse count so the user knows how many of
+    # their uploads actually reached the server + parsed. Catches
+    # JS-side regressions where only one file got submitted, and
+    # OCR provider errors where a parse status went FAILED.
+    parsed_ok = sum(
+        1 for a in attempts if a.status == OcrParseStatus.PARSED
+    )
+    if len(files) > 1 or save_failures or parsed_ok != len(attempts):
+        flash(
+            f"Received {len(files)} file"
+            + ("s" if len(files) != 1 else "")
+            + f", parsed {parsed_ok}/{len(attempts)} attempt"
+            + ("s" if len(attempts) != 1 else "")
+            + (
+                f" ({save_failures} rejected at upload)"
+                if save_failures
+                else ""
+            )
+            + "."
+        )
 
     if len(attempts) == 1:
         return redirect(
@@ -876,6 +932,14 @@ def result_details_from_ocr(
             .order_by(UmaSkill.name_en.asc())
         )
     )
+    # PR-A1 — aptitude pre-fill. Prefer the freshly-parsed sheet
+    # extract when present; fall back to whatever was previously
+    # saved on the result. Empty dict means we couldn't parse any
+    # row, so the form renders all-empty selects.
+    parsed_aptitudes: dict = (
+        sheet.aptitudes if sheet.aptitudes else (result.aptitudes or {})
+    )
+
     return render_template(
         "official/result_details_from_ocr.html",
         race=race,
@@ -884,6 +948,7 @@ def result_details_from_ocr(
         parsed_stats=parsed_stats,
         parsed_skills=parsed_skills,  # kept for back-compat
         merged_skill_rows=merged_skill_rows,
+        parsed_aptitudes=parsed_aptitudes,
         skill_names=skill_names,
         csrf_form=CsrfOnlyForm(),
     )
@@ -927,6 +992,29 @@ def submit_result_details(race_id: int, result_id: int) -> object:
             skill_names.append(v)
         i += 1
 
+    # PR-A1 — aptitudes are submitted as `aptitude_<category>_<slot>`
+    # fields (e.g. `aptitude_track_turf`, `aptitude_style_front`). We
+    # collect them into the nested dict shape the model stores. Empty
+    # values are skipped so the saved JSON only contains the slots
+    # the organiser actually set; the template renders em-dashes for
+    # any missing slots on the result detail page.
+    _APT_SCHEMA = {
+        "track": ("turf", "dirt"),
+        "distance": ("sprint", "mile", "medium", "long"),
+        "style": ("front", "pace", "late", "end"),
+    }
+    aptitudes: dict[str, dict[str, str]] = {}
+    for cat, slots in _APT_SCHEMA.items():
+        cat_out: dict[str, str] = {}
+        for slot in slots:
+            v = (
+                request.form.get(f"aptitude_{cat}_{slot}") or ""
+            ).strip().upper()
+            if v:
+                cat_out[slot] = v
+        if cat_out:
+            aptitudes[cat] = cat_out
+
     update = official_service.ResultDetailsUpdate(
         speed=_opt_int("speed"),
         stamina=_opt_int("stamina"),
@@ -935,6 +1023,7 @@ def submit_result_details(race_id: int, result_id: int) -> object:
         wisdom=_opt_int("wisdom"),
         strategy=(request.form.get("strategy") or "").strip() or None,
         skill_names=tuple(skill_names),
+        aptitudes=aptitudes,
     )
     try:
         official_service.submit_result_details(

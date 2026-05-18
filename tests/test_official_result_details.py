@@ -432,6 +432,172 @@ def test_match_skill_names_tier_variants_resolve_directly(
         assert matches[1][1] == single_circle.id
 
 
+# ─── PR-A1: aptitudes round-trip ─────────────────────────────────
+
+
+def test_aptitudes_pre_fill_from_sheet_extractor(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-A1 — the confirm page renders aptitude selectors with the
+    values the sheet extractor parsed pre-selected. Driven by the
+    Tamamo fixture which has all three aptitude rows populated."""
+    from uma_ladder.models import OcrParseAttempt, OcrParseStatus, UploadedImage
+    from uma_ladder.models.enums import UploadPurpose
+
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    with app.app_context():
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"apt-test-{result_id}.png",
+            mime_type="image/png",
+            size_bytes=100,
+            purpose=UploadPurpose.OCR_RESULT,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            raw_text="",
+            parsed_json={
+                "rows": _TAMAMO_ROWS,
+                "stats": {},
+                "skills": [],
+            },
+            confidence_json={},
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}"
+        f"/details-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Aptitude selects render with the extractor's values selected.
+    # Tamamo fixture: Turf=A Dirt=F (track), Sprint=G Mile=B
+    # Medium=A Long=A (distance), Front=G Pace=A Late=A End=A (style).
+    import re
+
+    def selected_for(field: str) -> str | None:
+        m = re.search(
+            rf'<select name="aptitude_{field}"[^>]*>.*?<option value="([^"]*)"\s+selected>',
+            body,
+            re.DOTALL,
+        )
+        return m.group(1) if m else None
+
+    assert selected_for("track_turf") == "A"
+    assert selected_for("track_dirt") == "F"
+    assert selected_for("distance_sprint") == "G"
+    assert selected_for("distance_mile") == "B"
+    assert selected_for("distance_medium") == "A"
+    assert selected_for("distance_long") == "A"
+    assert selected_for("style_front") == "G"
+    assert selected_for("style_pace") == "A"
+    assert selected_for("style_late") == "A"
+    assert selected_for("style_end") == "A"
+
+
+def test_aptitudes_save_round_trip(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """POST aptitude_<category>_<slot> fields → persisted on the
+    result row → re-rendered on the race detail page as badge text."""
+    from uma_ladder.models import OfficialRaceResult
+
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details",
+        data={
+            "speed": "1100",
+            "aptitude_track_turf": "A",
+            "aptitude_track_dirt": "F",
+            "aptitude_distance_sprint": "G",
+            "aptitude_distance_mile": "B",
+            "aptitude_distance_medium": "S",
+            "aptitude_distance_long": "A",
+            "aptitude_style_front": "G",
+            "aptitude_style_pace": "A",
+            "aptitude_style_late": "A",
+            "aptitude_style_end": "A",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        row = db.session.get(OfficialRaceResult, result_id)
+        assert row.aptitudes == {
+            "track": {"turf": "A", "dirt": "F"},
+            "distance": {
+                "sprint": "G",
+                "mile": "B",
+                "medium": "S",
+                "long": "A",
+            },
+            "style": {
+                "front": "G",
+                "pace": "A",
+                "late": "A",
+                "end": "A",
+            },
+        }
+
+    # Race detail page renders the aptitudes — verify at least one
+    # badge surface shows up.
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # The "Track" / "Distance" / "Style" category labels appear in
+    # the per-result card now.
+    assert "Track" in body
+    assert "Aptitude grade S" in body  # title attr of the badge macro
+
+
+def test_aptitudes_empty_field_omits_slot(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Submitting a blank value for an aptitude slot leaves it out
+    of the stored dict — partial OCR runs save what they have."""
+    from uma_ladder.models import OfficialRaceResult
+
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    client.post(
+        f"/official/{race_id}/results/{result_id}/details",
+        data={
+            "speed": "1100",
+            "aptitude_track_turf": "A",
+            "aptitude_track_dirt": "",  # blank — should be skipped
+            # distance slots entirely absent
+            "aptitude_style_front": "G",
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        row = db.session.get(OfficialRaceResult, result_id)
+        assert row.aptitudes == {
+            "track": {"turf": "A"},
+            "style": {"front": "G"},
+        }
+
+
 def test_per_result_multi_upload_merges_sheet_extracts(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
