@@ -422,6 +422,26 @@ def close_registration(race_id: int) -> object:
     return redirect(url_for("official.detail", race_id=race_id))
 
 
+@bp.post("/<int:race_id>/reopen-results")
+@min_role_required(Role.ORGANIZER)
+def reopen_results(race_id: int) -> object:
+    """PR-OCR18 — flip a COMPLETED race back to results_pending so
+    a fresh OCR submit can update the saved placements. The
+    organizer-gated form on the race detail page is the only entry
+    point; the existing UPDATE-in-place flow (PR-OCR16) handles
+    the data-side."""
+    try:
+        official_service.reopen_results(race_id, by_user_id=current_user.id)
+        flash("Results unlocked. You can re-submit now.")
+    except official_service.RaceNotFoundError:
+        abort(404)
+    except PermissionDeniedError:
+        abort(403)
+    except official_service.InvalidRaceStateError as exc:
+        flash(str(exc))
+    return redirect(url_for("official.detail", race_id=race_id))
+
+
 @bp.post("/<int:race_id>/register")
 @login_required
 def register(race_id: int) -> object:

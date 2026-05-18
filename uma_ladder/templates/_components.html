@@ -139,10 +139,15 @@
    stat-rank icon set in static/img/statusrank/. Renders nothing
    when score is None / 0. #}
 {% macro rank_score_value(score) %}
+  {# PR-OCR18 — align-middle on the inline-flex wrapper pulls the
+     icon+number pair onto the surrounding text-sm baseline.
+     Without it the h-4 icon sits a few pixels above the trainer /
+     uma name text because the parent line treats the inline-flex
+     as a single inline box at the bottom baseline. #}
   {%- set icon = score | rank_points_icon_filename -%}
   {%- set label = score | rank_points_label -%}
   {% if score %}
-    <span class="inline-flex items-center gap-1 text-slate-200">
+    <span class="inline-flex items-center gap-1 align-middle text-slate-200">
       {% if icon %}
         <img src="{{ url_for('static', filename='img/statusrank/' + icon) }}"
              alt="{{ label }}"
@@ -185,6 +190,10 @@
 {% endmacro %}
 
 {% macro season_chip(season) %}
+  {# PR-OCR18 — pair the Japanese-character Cygames glyph with the
+     English season label, mirroring the weather_chip layout. The
+     glyph alone is too small for non-JP readers; the text keeps
+     the chip legible while preserving game-art parity. #}
   {%- set icon = season | season_icon_filename -%}
   {% if icon %}
     <span class="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-xs font-medium text-slate-300">
@@ -193,6 +202,7 @@
            title="{{ season }}"
            loading="lazy"
            class="h-4 w-auto" />
+      {{ season }}
     </span>
   {% else %}
     {{ chip(season, "slate") }}

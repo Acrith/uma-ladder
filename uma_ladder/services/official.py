@@ -541,6 +541,27 @@ def _notify_race_published(race: OfficialRace) -> None:
         pass
 
 
+def reopen_results(
+    race_id: int, *, by_user_id: int
+) -> OfficialRace:
+    """PR-OCR18 — unlock a COMPLETED race so its results can be
+    re-submitted. Transitions status COMPLETED → RESULTS_PENDING.
+    Existing OfficialRaceResult rows survive (they'll be UPDATEd
+    in place by the next submit_results, per PR-OCR16 idempotent
+    flow). No-op if the race is already in a pre-completed state."""
+    race = _get_race(race_id)
+    from .permissions import assert_can_act_on_race
+
+    assert_can_act_on_race(race, by_user_id=by_user_id)
+    if race.status != OfficialRaceStatus.COMPLETED:
+        raise InvalidRaceStateError(
+            f"can only re-open a completed race (status={race.status})"
+        )
+    race.status = OfficialRaceStatus.RESULTS_PENDING
+    db.session.commit()
+    return race
+
+
 def close_registration(
     race_id: int, *, by_user_id: int | None = None
 ) -> OfficialRace:
@@ -688,6 +709,18 @@ def submit_results(
     from .permissions import assert_can_act_on_race
 
     assert_can_act_on_race(race, by_user_id=confirmed_by_user_id)
+    # PR-OCR18 — lock-once-completed. A COMPLETED race needs an
+    # explicit re-open before a re-submit can land. Prevents an
+    # organizer hitting the OCR submit endpoint a second time
+    # (via stale tab, browser back, bookmarked URL) and silently
+    # overwriting verified results. The idempotency added in
+    # PR-OCR16 still applies AFTER a re-open transitions the race
+    # back to results_pending — that path is the supported way to
+    # correct a saved result.
+    if race.status == OfficialRaceStatus.COMPLETED:
+        raise InvalidRaceStateError(
+            "results are locked — re-open the race to re-submit"
+        )
     if not lines:
         raise OfficialError("no result lines provided")
     placements = [line.placement for line in lines]

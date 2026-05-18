@@ -459,6 +459,29 @@
         </form>
 
         <h2 class="mt-6 text-sm font-semibold uppercase tracking-wider text-slate-300">Submit results</h2>
+        {% if race.status == 'completed' %}
+          {# PR-OCR18 — once a race is completed, results are locked
+             behind an explicit re-open step. Stops a stale tab or
+             bookmarked URL from silently overwriting verified data.
+             The Re-open button transitions status back to
+             results_pending; the upload + manual forms then render
+             on the next render. #}
+          <p class="mt-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-300">
+            Results are locked. The race has been completed — to
+            correct the saved placements, re-open the race first.
+            Existing per-result detail data (stats / skills /
+            aptitudes / uma score) is preserved across re-submits.
+          </p>
+          <form method="post"
+                action="{{ url_for('official.reopen_results', race_id=race.id) }}"
+                class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn-ghost"
+                    onclick="return confirm('Re-open this completed race for re-submission?');">
+              Re-open results
+            </button>
+          </form>
+        {% else %}
         {# PR-OCR5 — parity with Draft's OCR upload UX:
            - multi-file picker (`multiple`)
            - accumulating queue (re-picking doesn't replace prior)
@@ -515,6 +538,7 @@
           </table>
           <button class="btn-primary mt-4">Save results</button>
         </form>
+        {% endif %}
       {% endcall %}
     {% endif %}
   </section>
@@ -601,6 +625,12 @@
                      category label + slot+badge pairs. Only renders
                      when the result actually has aptitude data. #}
                   {% if r.aptitudes %}
+                    {# PR-OCR18 — slot labels (Turf/Dirt/Sprint/etc.)
+                       were `text-slate-500 text-[10px]` and disappeared
+                       next to the colourful grade glyphs. Bumped to
+                       text-xs slate-300 so they actually read; the
+                       category label (Track/Distance/Style) gets a
+                       full-weight slate-200 to anchor each row. #}
                     <div class="mt-3 space-y-1 text-xs text-slate-400">
                       {% for cat_key, cat_label, slots in [
                           ('track', 'Track', ['Turf', 'Dirt']),
@@ -610,10 +640,10 @@
                         {% set cat_data = r.aptitudes.get(cat_key) or {} %}
                         {% if cat_data %}
                           <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span class="w-16 text-[10px] uppercase tracking-wider text-slate-500">{{ cat_label }}</span>
+                            <span class="w-16 text-xs font-semibold uppercase tracking-wider text-slate-200">{{ cat_label }}</span>
                             {% for slot in slots %}
                               <span class="inline-flex items-center gap-1">
-                                <span class="text-[10px] text-slate-500">{{ slot }}</span>
+                                <span class="text-xs text-slate-300">{{ slot }}</span>
                                 {{ grade_letter_badge(cat_data.get(slot|lower)) }}
                               </span>
                             {% endfor %}

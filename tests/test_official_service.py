@@ -211,9 +211,10 @@ def test_submit_results_is_idempotent_on_resubmit(app: Flask) -> None:
         alice_row.uma_score = 17307
         db.session.commit()
 
-        # Re-submit with corrections (swap placements + fix uma name).
-        # Pre-PR-OCR16 this raised IntegrityError on the UNIQUE
-        # constraint. Post-PR-OCR16 it succeeds.
+        # Re-open (PR-OCR18) before re-submit (PR-OCR16's UPDATE-in-place).
+        # Race is COMPLETED after the first submit; submit_results
+        # would refuse without an explicit re-open.
+        official_service.reopen_results(race.id, by_user_id=organizer_id)
         official_service.submit_results(
             race.id,
             [
@@ -270,7 +271,9 @@ def test_submit_results_orphan_user_pruned_on_resubmit(app: Flask) -> None:
             confirmed_by_user_id=organizer_id,
         )
 
-        # Re-submit with only alice — bob's row should go.
+        # Re-open (PR-OCR18) then re-submit with only alice — bob's
+        # row gets pruned by the orphan-cleanup pass.
+        official_service.reopen_results(race.id, by_user_id=organizer_id)
         official_service.submit_results(
             race.id,
             [official_service.ResultLine(user_id=a, placement=1)],
@@ -285,6 +288,90 @@ def test_submit_results_orphan_user_pruned_on_resubmit(app: Flask) -> None:
         assert len(rows) == 1
         assert rows[0].user_id == a
         assert rows[0].placement == 1
+
+
+def test_submit_results_refuses_when_race_already_completed(app: Flask) -> None:
+    """PR-OCR18 — once a race is COMPLETED, re-submitting requires
+    an explicit re-open. Stops a stale tab / bookmarked URL from
+    silently overwriting verified results."""
+    with app.app_context():
+        season = _make_season()
+        organizer_id = _make_user("org", role=Role.ORGANIZER)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="R", organizer_user_id=organizer_id
+            )
+        )
+        official_service.open_registration(race.id)
+        a = _make_user("alice")
+        official_service.register(race.id, a)
+
+        # First submission completes the race.
+        official_service.submit_results(
+            race.id,
+            [official_service.ResultLine(user_id=a, placement=1)],
+            confirmed_by_user_id=organizer_id,
+        )
+
+        # Second submission without re-open: refused.
+        with pytest.raises(official_service.InvalidRaceStateError):
+            official_service.submit_results(
+                race.id,
+                [official_service.ResultLine(user_id=a, placement=2)],
+                confirmed_by_user_id=organizer_id,
+            )
+
+
+def test_reopen_results_unlocks_completed_race(app: Flask) -> None:
+    """PR-OCR18 — `reopen_results` flips a completed race back to
+    results_pending so the idempotent submit_results path (PR-OCR16)
+    can update existing rows in place."""
+    with app.app_context():
+        season = _make_season()
+        organizer_id = _make_user("org", role=Role.ORGANIZER)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="R", organizer_user_id=organizer_id
+            )
+        )
+        official_service.open_registration(race.id)
+        a = _make_user("alice")
+        official_service.register(race.id, a)
+        official_service.submit_results(
+            race.id,
+            [official_service.ResultLine(user_id=a, placement=1)],
+            confirmed_by_user_id=organizer_id,
+        )
+
+        # Re-open transitions COMPLETED → RESULTS_PENDING.
+        official_service.reopen_results(race.id, by_user_id=organizer_id)
+        race_after = official_service.get_race(race.id)
+        assert race_after.status == OfficialRaceStatus.RESULTS_PENDING
+
+        # Now submit again succeeds (PR-OCR16 UPDATEs the existing row).
+        official_service.submit_results(
+            race.id,
+            [official_service.ResultLine(user_id=a, placement=2)],
+            confirmed_by_user_id=organizer_id,
+        )
+        race_done = official_service.get_race(race.id)
+        assert race_done.status == OfficialRaceStatus.COMPLETED
+
+
+def test_reopen_results_refuses_non_completed(app: Flask) -> None:
+    """`reopen_results` is only valid from COMPLETED — anything
+    else is a state error (registration_open, etc.)."""
+    with app.app_context():
+        season = _make_season()
+        organizer_id = _make_user("org", role=Role.ORGANIZER)
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="R", organizer_user_id=organizer_id
+            )
+        )
+        official_service.open_registration(race.id)
+        with pytest.raises(official_service.InvalidRaceStateError):
+            official_service.reopen_results(race.id, by_user_id=organizer_id)
 
 
 def test_duplicate_placements_rejected(app: Flask) -> None:

@@ -8,8 +8,28 @@ log for the full history.
 
 ### Official races
 
-- **Strategy (Front / Pace / Late / End) now visible on the race
-  detail page (PR-OCR17).** The race-result OCR was already
+- **Race-result UI polish + lock-once-completed (PR-OCR18).**
+  Four small fixes from a real submit session:
+  - **Lock.** Once a race is completed, the OCR + manual entry
+    forms hide behind a *Re-open results* button. Stops a stale
+    tab or bookmarked URL from silently overwriting verified
+    placements. Re-opening transitions status back to results
+    pending; existing per-result detail data (stats / skills /
+    aptitudes / uma score) is preserved across the re-submit.
+  - **English season label.** The Spring / Summer / Autumn /
+    Winter chip used to render only the Japanese-character
+    Cygames glyph; now the English label rides alongside it (same
+    pattern as the weather chip).
+  - **Rank-glyph alignment.** The overall rank icon + uma score
+    sat a few pixels above the trainer/uma-name baseline due to
+    inline-flex on the parent line; `align-middle` pulls it onto
+    the text baseline.
+  - **Aptitude slot labels readable.** Turf / Dirt / Sprint /
+    Mile / Medium / Long / Front / Pace / Late / End used to be
+    `text-[10px] text-slate-500` and disappeared next to the
+    colourful grade glyphs; bumped to `text-xs text-slate-300`,
+    with the category label (Track / Distance / Style) at
+    semibold slate-200 to anchor each row. The race-result OCR was already
   saving the parsed position as `result.strategy` (PR-OCR13),
   but the race detail template never rendered it — so post-import
   the field looked "missing" even though it was on the row. It
