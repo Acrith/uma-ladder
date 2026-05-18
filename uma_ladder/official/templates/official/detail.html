@@ -625,13 +625,19 @@
                      category label + slot+badge pairs. Only renders
                      when the result actually has aptitude data. #}
                   {% if r.aptitudes %}
-                    {# PR-OCR18 — slot labels (Turf/Dirt/Sprint/etc.)
-                       were `text-slate-500 text-[10px]` and disappeared
-                       next to the colourful grade glyphs. Bumped to
-                       text-xs slate-300 so they actually read; the
-                       category label (Track/Distance/Style) gets a
-                       full-weight slate-200 to anchor each row. #}
-                    <div class="mt-3 space-y-1 text-xs text-slate-400">
+                    {# PR-OCR19 — five-column grid (category label +
+                       four slot positions) so Turf / Sprint / Front
+                       all line up vertically across the three rows.
+                       Track only has 2 slots (Turf, Dirt) so its
+                       row pads with two empty cells, keeping the
+                       grid alignment. Label palette dialled back
+                       from PR-OCR18: category labels and slot labels
+                       both at slate-400, no bold — the colourful
+                       grade glyphs carry the visual weight, the
+                       labels just identify which slot is which. #}
+                    {% set _slot_cols = 4 %}
+                    <div class="mt-3 grid items-center gap-x-3 gap-y-1 text-xs"
+                         style="grid-template-columns: 5rem repeat({{ _slot_cols }}, minmax(0, max-content));">
                       {% for cat_key, cat_label, slots in [
                           ('track', 'Track', ['Turf', 'Dirt']),
                           ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
@@ -639,15 +645,16 @@
                         ] %}
                         {% set cat_data = r.aptitudes.get(cat_key) or {} %}
                         {% if cat_data %}
-                          <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span class="w-16 text-xs font-semibold uppercase tracking-wider text-slate-200">{{ cat_label }}</span>
-                            {% for slot in slots %}
-                              <span class="inline-flex items-center gap-1">
-                                <span class="text-xs text-slate-300">{{ slot }}</span>
-                                {{ grade_letter_badge(cat_data.get(slot|lower)) }}
-                              </span>
-                            {% endfor %}
-                          </div>
+                          <span class="text-[10px] uppercase tracking-wider text-slate-400">{{ cat_label }}</span>
+                          {% for slot in slots %}
+                            <span class="inline-flex items-center gap-1">
+                              <span class="text-[11px] text-slate-400">{{ slot }}</span>
+                              {{ grade_letter_badge(cat_data.get(slot|lower)) }}
+                            </span>
+                          {% endfor %}
+                          {% for _ in range(_slot_cols - slots|length) %}
+                            <span></span>
+                          {% endfor %}
                         {% endif %}
                       {% endfor %}
                     </div>

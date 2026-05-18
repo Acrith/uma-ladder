@@ -24,12 +24,15 @@ log for the full history.
     sat a few pixels above the trainer/uma-name baseline due to
     inline-flex on the parent line; `align-middle` pulls it onto
     the text baseline.
-  - **Aptitude slot labels readable.** Turf / Dirt / Sprint /
-    Mile / Medium / Long / Front / Pace / Late / End used to be
-    `text-[10px] text-slate-500` and disappeared next to the
-    colourful grade glyphs; bumped to `text-xs text-slate-300`,
-    with the category label (Track / Distance / Style) at
-    semibold slate-200 to anchor each row. The race-result OCR was already
+  - **Aptitude slot labels readable + grid-aligned (PR-OCR19).**
+    Turf / Dirt / Sprint / Mile / Medium / Long / Front / Pace /
+    Late / End used to be invisibly small next to the colourful
+    grade glyphs. A first pass bumped them up too far — they
+    drowned out the rest of the per-result card. Settled at
+    slate-400 labels (no bold, slightly muted) and reorganised
+    into a 5-column grid (category label + four slot positions)
+    so Turf, Sprint, and Front align vertically across the three
+    aptitude rows. The race-result OCR was already
   saving the parsed position as `result.strategy` (PR-OCR13),
   but the race detail template never rendered it — so post-import
   the field looked "missing" even though it was on the row. It
