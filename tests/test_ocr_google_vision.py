@@ -659,6 +659,35 @@ def test_parse_placement_row_recognises_ug_ranks() -> None:
     assert f["uma_name"] == "Mejiro McQueen"
 
 
+def test_parse_placement_row_extracts_position_when_layout_puts_it_last() -> None:
+    """PR-OCR14 — when the result-screen layout puts the position
+    word AFTER the gate digit + uma + player (e.g. "[gate] [uma]
+    [player] [position] [length] [fav]"), the position+gate regex
+    misses because "Pace" sits at the end of `work` with no digit
+    after it. Real-world trigger: a stray pipe prefix on the gate
+    ("|13 Oguri Cap …") shifts the cluster layout enough to
+    produce this shape. The position-only fallback recovers it."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    # Mirrors user-reported Screen 1, Place 3.
+    f = _parse_placement_row_fields(
+        "Ideal Idol | 13 Oguri Cap Kezuke Pace 1 L No. 8 Fav"
+    )
+    assert f["position"] == "Pace"
+    assert f["gate"] == 13
+    assert f["time_or_lengths"] == "1 L"
+    assert f["fav_rank"] == 8
+
+    # Mirrors user-reported Screen 2, Place 5.
+    f2 = _parse_placement_row_fields(
+        "Ideal Idol 5th | 14 Oguri Cap StarlitFire Pace 1 L No. 2 Fav"
+    )
+    assert f2["position"] == "Pace"
+    assert f2["gate"] == 14
+    assert f2["time_or_lengths"] == "1 L"
+    assert f2["fav_rank"] == 2
+
+
 def test_parse_placement_row_handles_multi_word_trainer_after_length() -> None:
     """PR-OCR12 — when the trainer name is multiple words (e.g.
     "Aisha AlSadhazi"), the prior right-anchored single-word player

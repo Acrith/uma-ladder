@@ -234,11 +234,34 @@ def _parse_placement_row_fields(text: str) -> dict[str, Any]:
         if after:
             out["uma_name"] = after
     else:
-        # No position keyword found. Split on the first standalone
-        # digit (the gate column) — anything before it is residual
-        # epithet text, anything after is the uma name. Real Uma
-        # Musume epithets are descriptive English so the first digit
-        # in the row is the gate ~always.
+        # PR-OCR14 — position-only fallback. The position+gate regex
+        # above misses when the row layout is "[gate] [uma] [player]
+        # [position] [length] [fav]" rather than "[position] [gate]
+        # [uma]". After fav + length are stripped, the residual ends
+        # with a stranded position word that has no digit after it.
+        # Real-world trigger: gates rendered with a leading pipe
+        # ("|13", "|14") sometimes shift the cluster layout enough to
+        # produce this shape. Word boundaries on both sides prevent
+        # false-positives on substrings like "Endeavor".
+        pos_only_match = re.search(
+            rf"\b({pos_alt})\b", work, re.IGNORECASE
+        )
+        if pos_only_match:
+            out["position"] = pos_only_match.group(1).capitalize()
+            # Remove the matched position word + collapse the
+            # surrounding whitespace so the embedded-gate pass
+            # below sees a clean residual.
+            work = (
+                work[: pos_only_match.start()].rstrip()
+                + " "
+                + work[pos_only_match.end():].lstrip()
+            ).strip()
+
+        # Split on the first standalone digit (the gate column) —
+        # anything before it is residual epithet text, anything
+        # after is the uma name. Real Uma Musume epithets are
+        # descriptive English so the first digit in the row is the
+        # gate ~always.
         embedded_gate = re.search(r"\b(\d+)\s+(.+)$", work)
         if embedded_gate:
             out["gate"] = int(embedded_gate.group(1))

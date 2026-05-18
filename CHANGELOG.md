@@ -8,6 +8,19 @@ log for the full history.
 
 ### Official races
 
+- **Position keyword now extracted even when it follows the gate
+  digit (PR-OCR14).** The OCR row parser used to extract the
+  position word (Front / Pace / Late / End) only when it was
+  immediately followed by a gate digit (the "End 8 Gold Ship"
+  shape). A few real placements came back with a stray pipe
+  prefix on the gate ("|13 Oguri Cap…") that shifted the
+  cluster layout enough to produce a different shape — "[gate]
+  [uma] [player] [position] [length] [fav]" — where after the
+  length and fav strip, position ends up stranded at the tail
+  of the row with no digit after it. Now there's a position-only
+  fallback regex that fires after the position+gate regex misses,
+  so those placements get their strategy chip pre-filled too.
+
 - **Parsed position auto-fills the result's strategy + all
   screenshots visible on the OCR confirm page (PR-OCR13).** Two
   follow-ups on the race-result OCR confirm flow. (1) The row
