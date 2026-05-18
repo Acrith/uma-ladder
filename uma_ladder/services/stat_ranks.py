@@ -170,3 +170,75 @@ def season_icon_filename(season: str | None) -> str | None:
     except ValueError:
         return None
     return f"utx_txt_season_{idx:02d}.png"
+
+
+# ─── PR-A6: overall uma rank from rank points (uma_score) ────────
+#
+# The in-game uma sheet displays an overall rank glyph (G..SS+..Ug⁶)
+# next to the uma name. Source data is the "uma score" integer also
+# visible on the sheet (e.g. 17,307). Threshold table is the
+# published one (sourced from user-provided Excel formula); ranks
+# G through SS+ reuse the existing stat-rank icon set (00..17),
+# Ug⁰..Ug⁶ map to icon positions 18..24 (also in the downloaded set).
+
+# Strict upper bounds → label. Order matters (ascending).
+_RANK_POINTS_TABLE: tuple[tuple[int, str], ...] = (
+    (300, "G"),
+    (600, "G+"),
+    (900, "F"),
+    (1300, "F+"),
+    (1800, "E"),
+    (2300, "E+"),
+    (2900, "D"),
+    (3500, "D+"),
+    (4900, "C"),
+    (6500, "C+"),
+    (8200, "B"),
+    (10000, "B+"),
+    (12100, "A"),
+    (14500, "A+"),
+    (15900, "S"),
+    (17500, "S+"),
+    (19200, "SS"),
+    (19600, "SS+"),
+    (20000, "Ug⁰"),
+    (20400, "Ug¹"),
+    (20800, "Ug²"),
+    (21200, "Ug³"),
+    (21600, "Ug⁴"),
+    (22100, "Ug⁵"),
+    # Anything ≥ 22100 falls through to the last bucket below.
+)
+_RANK_POINTS_TOP_LABEL = "Ug⁶"
+
+
+def rank_points_index(score: int | None) -> int | None:
+    """0-indexed rank bucket for ``score`` per the published
+    threshold table. None when score is None or non-positive."""
+    if score is None or score <= 0:
+        return None
+    for idx, (upper, _label) in enumerate(_RANK_POINTS_TABLE):
+        if score < upper:
+            return idx
+    return len(_RANK_POINTS_TABLE)  # Ug⁶ = top bucket
+
+
+def rank_points_label(score: int | None) -> str:
+    """Human-readable label ("SS+", "Ug⁴", …) for ``score``."""
+    idx = rank_points_index(score)
+    if idx is None:
+        return ""
+    if idx < len(_RANK_POINTS_TABLE):
+        return _RANK_POINTS_TABLE[idx][1]
+    return _RANK_POINTS_TOP_LABEL
+
+
+def rank_points_icon_filename(score: int | None) -> str | None:
+    """PNG filename in `static/img/statusrank/` for ``score``.
+    Reuses the stat-rank icon set: indices 0-17 are the G..SS+
+    icons; indices 18-24 are the Ug⁰..Ug⁶ icons (kachi-dev's
+    statusrank set ships all 25 used here)."""
+    idx = rank_points_index(score)
+    if idx is None:
+        return None
+    return f"ui_statusrank_{idx:02d}.png"

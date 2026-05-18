@@ -171,6 +171,12 @@ class OfficialRaceResult(db.Model):
     )
     gate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fav_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # PR-A6 — the in-game "uma score" integer (e.g. 17,307). Pulled
+    # from the sheet OCR header parse, persisted via the per-result
+    # confirm form. Rendered next to the uma name on the race detail
+    # card as the overall rank badge (G..SS+..Ug⁶ via
+    # services/stat_ranks.rank_points_index).
+    uma_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confirmed_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

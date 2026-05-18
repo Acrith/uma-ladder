@@ -600,6 +600,117 @@ def test_aptitudes_empty_field_omits_slot(
         }
 
 
+def test_uma_score_pre_fills_from_sheet_header(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-A6 — the per-result confirm page renders the parsed
+    `uma_score` from the sheet header into the Uma score input."""
+    from uma_ladder.models import OcrParseAttempt, OcrParseStatus, UploadedImage
+    from uma_ladder.models.enums import UploadPurpose
+
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    with app.app_context():
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"a6-prefill-{result_id}.png",
+            mime_type="image/png",
+            size_bytes=100,
+            purpose=UploadPurpose.OCR_RESULT,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            raw_text="",
+            parsed_json={
+                "rows": _TAMAMO_ROWS,
+                "stats": {},
+                "skills": [],
+            },
+            confidence_json={},
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}"
+        f"/details-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # The sheet extractor reads "17,307 Trainer Yuuta" → uma_score=17307
+    # and the confirm page renders that into the input.
+    import re
+
+    m = re.search(r'name="uma_score"[^>]*value="(\d+)"', body)
+    assert m and m.group(1) == "17307"
+
+
+def test_uma_score_save_round_trip_renders_rank_glyph(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-A6 — POST uma_score → persisted on the result row →
+    re-rendered on the race detail page with the matching rank
+    icon next to the uma name."""
+    from uma_ladder.models import OfficialRaceResult
+
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details",
+        data={
+            "speed": "1197",
+            "uma_score": "17307",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        row = db.session.get(OfficialRaceResult, result_id)
+        assert row.uma_score == 17307
+
+    # Race detail page renders 17,307 with the S+ rank icon
+    # (idx 15 → ui_statusrank_15.png) next to the uma name.
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "ui_statusrank_15.png" in body
+    assert 'alt="S+"' in body
+    # Score renders with thousands separator.
+    assert "17,307" in body
+
+
+def test_uma_score_zero_or_missing_skips_render(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """When no uma_score is saved on the result, the race detail
+    page should NOT render a rank glyph — keeps older results
+    (no score saved) clean rather than showing a stray G icon."""
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, _result_id = _setup_completed_race(app, host_id=host["id"])
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # No statusrank glyph for the (uma_score=None) result.
+    # We can't blanket-assert no statusrank URLs because stat icons
+    # share the same folder — so check the format-with-comma marker
+    # the rank_score_value macro uses for the numeric score.
+    assert "title=\"Rank " not in body
+
+
 def test_race_detail_renders_stat_rank_icon(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

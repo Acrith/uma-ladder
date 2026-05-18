@@ -955,6 +955,11 @@ class ResultDetailsUpdate:
     # Populated dict = replace. Shape mirrors the extractor output:
     # {"track": {...}, "distance": {...}, "style": {...}}.
     aptitudes: dict | None = None
+    # PR-A6 — overall uma score (e.g. 17307). The race-detail card
+    # renders rank glyph + score next to the uma name. Rank label
+    # is computed at display time from the score via the published
+    # threshold table.
+    uma_score: int | None = None
 
 
 class ResultNotFoundError(OfficialError):
@@ -998,6 +1003,12 @@ def submit_result_details(
         # SQLAlchemy's change tracker fires. The form path always
         # builds a new dict, so this is symmetry rather than a fix.
         result.aptitudes = dict(update.aptitudes) if update.aptitudes else None
+    if update.uma_score:
+        # Non-zero positive int overwrites whatever was saved
+        # before. None / 0 leaves the existing value alone — there's
+        # no clear-via-form path for now, but a non-zero overwrite
+        # is the actual UX need.
+        result.uma_score = update.uma_score
 
     # Replace skill associations atomically. ORM-cascade delete via the
     # `skills` relationship handles the existing rows; we just clear and

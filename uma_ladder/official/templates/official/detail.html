@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_components.html" import card, chip, grade_letter_badge, official_status_chip, season_chip, stat_rank_value, weather_chip %}
+{% from "_components.html" import card, chip, grade_letter_badge, official_status_chip, rank_score_value, season_chip, stat_rank_value, weather_chip %}
 {% from "_icons.html" import lock as icon_lock, globe as icon_globe, users as icon_users, clock as icon_clock %}
 {% block title %}{{ race.name }} · Uma Ladder{% endblock %}
 {% block content %}
@@ -544,6 +544,14 @@
                       <span class="font-medium text-slate-100">@?</span>
                     {% endif %}
                     {% if r.uma_name %}<span class="ml-2 text-slate-400">· {{ r.uma_name }}</span>{% endif %}
+                    {# PR-A6 — overall rank glyph + numeric score
+                       next to the uma name, mirroring the in-game
+                       top-of-sheet rank badge. Rank is computed
+                       from r.uma_score at display time via the
+                       rank_points_index threshold table. #}
+                    {% if r.uma_score %}
+                      <span class="ml-2">{{ rank_score_value(r.uma_score) }}</span>
+                    {% endif %}
                   </p>
                   {# PR-A5 — row-parser fields surfaced as a small
                      pill row under the placement / uma name. Three

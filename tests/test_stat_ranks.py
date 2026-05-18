@@ -11,6 +11,9 @@ import pytest
 
 from uma_ladder.services.stat_ranks import (
     aptitude_grade_icon_filename,
+    rank_points_icon_filename,
+    rank_points_index,
+    rank_points_label,
     season_icon_filename,
     stat_rank_icon_filename,
     stat_rank_index,
@@ -185,3 +188,98 @@ def test_season_icon_filename_invalid(season: str | None) -> None:
 def test_pr_a4_jinja_filters_registered(app) -> None:
     assert "weather_icon_filename" in app.jinja_env.filters
     assert "season_icon_filename" in app.jinja_env.filters
+
+
+# ─── PR-A6: overall uma rank from uma_score ──────────────────────
+
+
+@pytest.mark.parametrize(
+    "score,expected_idx,expected_label",
+    [
+        # Below first threshold (300) → G (idx 0).
+        (1, 0, "G"),
+        (299, 0, "G"),
+        # 300 lands at G+, the start of the next bucket.
+        (300, 1, "G+"),
+        (599, 1, "G+"),
+        (600, 2, "F"),
+        (899, 2, "F"),
+        (900, 3, "F+"),
+        (1299, 3, "F+"),
+        (1300, 4, "E"),
+        (1799, 4, "E"),
+        (1800, 5, "E+"),
+        (2299, 5, "E+"),
+        (2300, 6, "D"),
+        (2899, 6, "D"),
+        (2900, 7, "D+"),
+        (3499, 7, "D+"),
+        (3500, 8, "C"),
+        (4899, 8, "C"),
+        (4900, 9, "C+"),
+        (6499, 9, "C+"),
+        (6500, 10, "B"),
+        (8199, 10, "B"),
+        (8200, 11, "B+"),
+        (9999, 11, "B+"),
+        (10000, 12, "A"),
+        (12099, 12, "A"),
+        (12100, 13, "A+"),
+        (14499, 13, "A+"),
+        (14500, 14, "S"),
+        (15899, 14, "S"),
+        (15900, 15, "S+"),
+        (17306, 15, "S+"),
+        # Real Tamamo Cross uma_score from the user-supplied dump: 17307.
+        (17307, 15, "S+"),
+        (17499, 15, "S+"),
+        (17500, 16, "SS"),
+        (19199, 16, "SS"),
+        (19200, 17, "SS+"),
+        (19599, 17, "SS+"),
+        # Ug bracket — each label increments at the next threshold.
+        (19600, 18, "Ug⁰"),
+        (19999, 18, "Ug⁰"),
+        (20000, 19, "Ug¹"),
+        (20399, 19, "Ug¹"),
+        (20400, 20, "Ug²"),
+        (20799, 20, "Ug²"),
+        (20800, 21, "Ug³"),
+        (21199, 21, "Ug³"),
+        (21200, 22, "Ug⁴"),
+        (21599, 22, "Ug⁴"),
+        (21600, 23, "Ug⁵"),
+        (22099, 23, "Ug⁵"),
+        # 22100 and above all collapse to the Ug⁶ top bucket.
+        (22100, 24, "Ug⁶"),
+        (30000, 24, "Ug⁶"),
+        (99999, 24, "Ug⁶"),
+    ],
+)
+def test_rank_points_index_known_thresholds(
+    score: int, expected_idx: int, expected_label: str
+) -> None:
+    assert rank_points_index(score) == expected_idx
+    assert rank_points_label(score) == expected_label
+
+
+@pytest.mark.parametrize("score", [None, 0, -1, -10_000])
+def test_rank_points_invalid_returns_none(score: int | None) -> None:
+    assert rank_points_index(score) is None
+    assert rank_points_label(score) == ""
+    assert rank_points_icon_filename(score) is None
+
+
+def test_rank_points_icon_filename_format() -> None:
+    """Filename reuses the stat-rank icon set — indices 0-24 map
+    directly onto ui_statusrank_<idx:02d>.png. The published
+    statusrank set ships icons 00..24+, so all 25 buckets resolve."""
+    assert rank_points_icon_filename(1) == "ui_statusrank_00.png"
+    assert rank_points_icon_filename(17307) == "ui_statusrank_15.png"
+    assert rank_points_icon_filename(19600) == "ui_statusrank_18.png"
+    assert rank_points_icon_filename(99999) == "ui_statusrank_24.png"
+
+
+def test_pr_a6_jinja_filters_registered(app) -> None:
+    assert "rank_points_label" in app.jinja_env.filters
+    assert "rank_points_icon_filename" in app.jinja_env.filters

@@ -132,6 +132,30 @@
 {% endmacro %}
 
 
+{# PR-A6 — overall uma rank glyph + numeric score, paired the way
+   the in-game profile sheet shows them. Score is the raw integer
+   (e.g. 17307); rank is computed via the published threshold table
+   in services/stat_ranks.rank_points_index and reuses the
+   stat-rank icon set in static/img/statusrank/. Renders nothing
+   when score is None / 0. #}
+{% macro rank_score_value(score) %}
+  {%- set icon = score | rank_points_icon_filename -%}
+  {%- set label = score | rank_points_label -%}
+  {% if score %}
+    <span class="inline-flex items-center gap-1 text-slate-200">
+      {% if icon %}
+        <img src="{{ url_for('static', filename='img/statusrank/' + icon) }}"
+             alt="{{ label }}"
+             title="Rank {{ label }} (score {{ '{:,}'.format(score) }})"
+             loading="lazy"
+             class="h-4 w-auto" />
+      {% endif %}
+      <span class="text-xs font-mono">{{ '{:,}'.format(score) }}</span>
+    </span>
+  {% endif %}
+{% endmacro %}
+
+
 {# PR-A4 — weather + season glyph chips. Render the in-game art
    (asset attribution in static/img/{weather,season}/CREDITS.md)
    inside a `chip()`-shaped pill so the surrounding chip row layout

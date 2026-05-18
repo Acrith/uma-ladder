@@ -8,6 +8,20 @@ log for the full history.
 
 ### Official races
 
+- **Overall uma rank glyph + score on race results (PR-A6).**
+  Each per-result card now shows the in-game **overall** rank
+  glyph (G / G+ / … / SS+ / Ug⁰..Ug⁶) next to the uma name,
+  paired with the numeric *uma score* (e.g. `[SS+ icon] 17,307`)
+  — the same combo the in-game uma sheet displays at the top.
+  Rank is derived from the score via the published threshold
+  table (25 buckets through Ug⁶) so the organiser only enters
+  the integer; the glyph picks itself. The OCR sheet extractor
+  already reads `uma_score` from the top-right of the sheet, so
+  the confirm form pre-fills it; manual entry is also fine.
+  Older results (no score saved) render unchanged. Schema is a
+  nullable `uma_score INTEGER` column on `official_race_results`;
+  pre-deploy snapshot ritual applies.
+
 - **Result-screen detail: gate, time, fav rank now persisted +
   shown (PR-A5).** The OCR row parser has been pulling these
   off the in-game result screen for a while (Draft already

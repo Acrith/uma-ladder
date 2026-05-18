@@ -73,12 +73,31 @@
               </div>
             {% endfor %}
           </div>
-          <div class="mt-3">
-            <label class="text-xs uppercase tracking-wider text-slate-400">Strategy</label>
-            <input type="text" name="strategy"
-                   value="{{ result.strategy or '' }}"
-                   placeholder="Front / Pace / Late / End"
-                   class="input-base mt-1" />
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs uppercase tracking-wider text-slate-400">Strategy</label>
+              <input type="text" name="strategy"
+                     value="{{ result.strategy or '' }}"
+                     placeholder="Front / Pace / Late / End"
+                     class="input-base mt-1" />
+            </div>
+            {# PR-A6 — uma_score input. Pre-fills from sheet OCR
+               header parse. Rendered next to Strategy because they're
+               both "overall sheet" attributes. The rank glyph
+               (G..SS+..Ug⁶) is computed from this on the race
+               detail page; user just enters the integer here. #}
+            <div>
+              <label class="text-xs uppercase tracking-wider text-slate-400">Uma score</label>
+              <input type="number" min="0" max="99999"
+                     name="uma_score"
+                     value="{{ parsed_uma_score if parsed_uma_score else '' }}"
+                     placeholder="e.g. 17307"
+                     class="input-base mt-1" />
+              <p class="mt-1 text-[10px] text-slate-500">
+                The integer from the top-right of the uma sheet.
+                Rank glyph (SS+, Ug⁰…) is derived automatically.
+              </p>
+            </div>
           </div>
         </div>
 

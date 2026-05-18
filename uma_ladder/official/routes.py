@@ -820,6 +820,11 @@ def upload_result_details_screenshot(race_id: int, result_id: int) -> object:
     # screenshot 1 disappeared whenever a second screenshot was
     # also picked.
     new_parsed["aptitudes"] = merged.aptitudes
+    # PR-A6 — same shape for uma_score: persist into parsed_json
+    # so the confirm route's fallback chain finds it after the
+    # rows get cleared.
+    if merged.header.get("uma_score"):
+        new_parsed["uma_score"] = merged.header["uma_score"]
     # Empty rows so the confirm route's re-extract pass returns empty
     # and the fallback to parsed_json's pre-merged stats/skills wins.
     new_parsed["rows"] = []
@@ -968,6 +973,14 @@ def result_details_from_ocr(
         or (parsed.get("aptitudes") or {})
         or (result.aptitudes or {})
     )
+    # PR-A6 — uma_score pre-fill. Same fallback shape as aptitudes:
+    # fresh sheet extract → parsed_json (multi-upload merge) →
+    # previously-saved value on the result row.
+    parsed_uma_score: int | None = (
+        sheet.header.get("uma_score")
+        or parsed.get("uma_score")
+        or result.uma_score
+    )
 
     # PR-OCR10 — for multi-upload merges, parsed_json carries the
     # list of contributing image ids. The template renders all of
@@ -995,6 +1008,7 @@ def result_details_from_ocr(
         parsed_skills=parsed_skills,  # kept for back-compat
         merged_skill_rows=merged_skill_rows,
         parsed_aptitudes=parsed_aptitudes,
+        parsed_uma_score=parsed_uma_score,
         skill_names=skill_names,
         screenshot_image_ids=extra_image_ids,
         csrf_form=CsrfOnlyForm(),
@@ -1071,6 +1085,7 @@ def submit_result_details(race_id: int, result_id: int) -> object:
         strategy=(request.form.get("strategy") or "").strip() or None,
         skill_names=tuple(skill_names),
         aptitudes=aptitudes,
+        uma_score=_opt_int("uma_score"),
     )
     try:
         official_service.submit_result_details(
