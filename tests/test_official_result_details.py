@@ -785,6 +785,57 @@ def test_race_detail_no_effective_line_without_aptitudes(
     assert not re.search(r"eff \d+", body)
 
 
+def test_race_detail_renders_when_no_skills_are_inapplicable(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-SK5 hotfix regression test. The previous template used
+    `inapplicable_skills_by_result.get(r.id) or set()` — fine in
+    Python, but Jinja has no `set()` builtin. The `or` fallback
+    fired ONLY when the dict value was an empty set (falsy), so
+    the integration test with one non-applying skill passed locally
+    while every "all skills apply" page 500'd in prod. This test
+    drives the exact branch the prod log hit: every skill on the
+    result has a matching catalog entry, so the inapplicable set
+    is empty + the fallback path executes."""
+    from uma_ladder.models import (
+        OfficialRaceResult,
+        OfficialRaceResultSkill,
+        SkillCondition,
+        UmaSkill,
+    )
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        # _setup_completed_race uses preset.direction=Left.
+        # Pair a Left-Handed skill so it APPLIES on this race —
+        # forces the empty-inapplicable code path.
+        skill = UmaSkill(
+            gametora_id=200021, name_en="Left-Handed Test ◎",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        db.session.add(skill)
+        db.session.commit()
+        db.session.add(
+            SkillCondition(skill_id=skill.id, direction="Left", buff_speed=60)
+        )
+        result = db.session.get(OfficialRaceResult, result_id)
+        db.session.add(OfficialRaceResultSkill(
+            official_race_result_id=result.id,
+            skill_id=skill.id,
+            position=0,
+        ))
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Left-Handed Test ◎" in body
+    # The applying chip stays cyan — no gray styling on this page.
+    assert "Doesn't apply to this race" not in body
+
+
 def test_race_detail_grays_out_non_applicable_skill(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

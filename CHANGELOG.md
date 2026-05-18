@@ -22,7 +22,11 @@ log for the full history.
   PR-SK5 fixed a too-aggressive first cut that grayed every
   skill with any runtime sub-condition — "could fire" and "will
   definitely fire" are different questions; the gray-out only
-  fires on definite "can't fire."
+  fires on definite "can't fire." PR-SK6 hotfix: race detail
+  page 500'd in prod when no skills on a result were
+  inapplicable because the template used Jinja `or set()`, which
+  blew up because Jinja has no `set()` builtin. Swapped to a
+  list default; regression test pins it.
 
 ## 2026-05-18
 
