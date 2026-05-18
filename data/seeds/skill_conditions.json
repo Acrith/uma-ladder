@@ -1,7 +1,7 @@
 {
   "source": "gametora_v1",
   "attribution": "Skill condition data sourced from GameTora (https://gametora.com/umamusume/skills); not affiliated with Cygames. Maintain attribution when redistributing.",
-  "fetched_at": "2026-05-18T18:55:48.902955+00:00",
+  "fetched_at": "2026-05-18T20:23:06.175415+00:00",
   "conditions": [
     {
       "gametora_id": 10071,
@@ -1798,25 +1798,29 @@
     },
     {
       "gametora_id": 200151,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition": "Firm",
       "buff_power": 60,
       "notes": "Your Power stat is increased by 60 in races with Firm track condition"
     },
     {
       "gametora_id": 200152,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition": "Firm",
       "buff_power": 40,
       "notes": "Your Power stat is increased by 40 in races with Firm track condition"
     },
     {
       "gametora_id": 200153,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition": "Firm",
       "buff_power": -40,
       "notes": "Your Power stat is decreased by 40 in races with Firm track condition"
     },
     {
       "gametora_id": 200154,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition": "Firm",
       "buff_speed": 60,
       "buff_power": 60,
       "notes": "Your Power and Speed stats are increased by 60 in races with Good track condition"
@@ -3693,7 +3697,8 @@
     },
     {
       "gametora_id": 201801,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition": "Firm",
       "buff_speed": -40,
       "notes": "Your Speed stat is decreased by 40 in races with Good track condition"
     },
@@ -8164,14 +8169,16 @@
     },
     {
       "gametora_id": 1300021,
-      "is_dynamic": true,
+      "is_dynamic": false,
       "weather": "Sunny",
+      "ground_condition": "Firm",
       "notes": "If it's sunny and the track condition is good, your acceleration will permanently marginally increase, and you will get a bonus of 80 to all base stats"
     },
     {
       "gametora_id": 1300031,
-      "is_dynamic": true,
+      "is_dynamic": false,
       "weather": "Rainy",
+      "ground_condition": "Heavy",
       "buff_speed": 100,
       "buff_stamina": 100,
       "notes": "If it's raining and the track condition is bad, your acceleration will permanently slightly increase, and you will get a bonus of 100 to Speed and Stamina stats"
@@ -10063,6 +10070,7 @@
     {
       "gametora_id": 105502211,
       "is_dynamic": true,
+      "ground_condition": "Firm",
       "buff_speed": 100,
       "buff_wisdom": 100,
       "notes": "Medium/Long・If your base Wisdom is at least 1200, your Wisdom and Speed stats are increased by 60; if the ground condition is Firm, they are increased by 100 instead"
@@ -10674,6 +10682,7 @@
       "gametora_id": 107701111,
       "is_dynamic": true,
       "surface": "Turf",
+      "ground_condition": "Firm",
       "buff_speed": 80,
       "buff_power": 80,
       "notes": "On Turf tracks in Good condition, your Speed and Power stats are increased by 80; on Turf tracks in other conditions, they're increased by 40"

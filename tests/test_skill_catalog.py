@@ -206,6 +206,36 @@ def test_applies_passively_stricter_than_condition_matches(
 # ─── is_standard_distance ────────────────────────────────────────
 
 
+def test_ground_condition_predicate_matches(app: Flask) -> None:
+    """PR-SK7 — a SkillCondition with ground_condition="Firm"
+    matches only on a Firm track. Firm Conditions / Firm Course
+    Menace go gray on Good/Soft/Heavy via this predicate."""
+    skill_id = _seed_skill(
+        app,
+        "Firm Conditions ◎ Test",
+        ground_condition="Firm",
+        buff_power=60,
+    )
+    with app.app_context():
+        cond = db.session.scalars(
+            db.select(SkillCondition).where(
+                SkillCondition.skill_id == skill_id
+            )
+        ).one()
+        assert condition_matches(
+            cond, RaceContext(ground_condition="Firm")
+        ) is True
+        for non_firm in ("Good", "Soft", "Heavy"):
+            assert condition_matches(
+                cond, RaceContext(ground_condition=non_firm)
+            ) is False, f"matched on {non_firm}"
+        # Context unknown (race didn't record a ground condition)
+        # → don't pretend the predicate matches.
+        assert condition_matches(
+            cond, RaceContext(ground_condition=None)
+        ) is False
+
+
 def test_is_standard_distance_true_predicate(app: Flask) -> None:
     """`is_standard_distance=True` matches races at 1600/2000/2400/3200m
     and nothing else."""

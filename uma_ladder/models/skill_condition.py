@@ -54,6 +54,9 @@ class SkillCondition(db.Model):
     )
     strategy: Mapped[str | None] = mapped_column(String(8), nullable=True)
     venue: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # PR-SK7 — "Firm" / "Good" / "Soft" / "Heavy". Matched against
+    # `OfficialRace.ground_condition`. NULL = skill doesn't care.
+    ground_condition: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # `True` = "applies at standard distances only" (1600/2000/2400/3200),
     # `False` = "applies at NON-standard distances only" (mirrors the
     # in-game "Non-Standard Distance" skill), `None` = doesn't care.

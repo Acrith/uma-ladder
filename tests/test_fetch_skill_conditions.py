@@ -104,6 +104,36 @@ def test_is_basis_distance_maps_to_is_standard() -> None:
     assert cond_f.is_standard_distance is False
 
 
+def test_ground_condition_maps_to_typed_value() -> None:
+    """PR-SK7 — `ground_condition==N` maps to the corresponding
+    track condition name. 1=Firm, 2=Good, 3=Soft, 4=Heavy."""
+    cases = {1: "Firm", 2: "Good", 3: "Soft", 4: "Heavy"}
+    for code, expected in cases.items():
+        cond = _coerce_skill_condition(
+            _skill(code, f"ground_condition=={code}")
+        )
+        assert cond.ground_condition == expected, f"code={code}"
+        assert cond.is_dynamic is False
+
+
+def test_wet_conditions_or_falls_back_to_dynamic() -> None:
+    """`ground_condition==2@ground_condition==3@ground_condition==4`
+    (Wet Conditions skill family) ORs over three distinct mapped
+    values — schema can only carry one, so the parser flips to
+    dynamic. The skill stays bright on every track for now; a
+    future PR could add a negation column to recover this case."""
+    cond = _coerce_skill_condition(
+        _skill(
+            1,
+            "ground_condition==2@ground_condition==3@ground_condition==4",
+            (3, 600000),  # +60 Power
+        )
+    )
+    assert cond is not None
+    assert cond.is_dynamic is True
+    assert cond.ground_condition is None
+
+
 def test_track_id_maps_to_venue() -> None:
     """track_id reuses the G1_TRACK_ID_TO_VENUE map. 10006 = Tokyo."""
     cond = _coerce_skill_condition(_skill(1, "track_id==10006"))

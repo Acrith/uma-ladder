@@ -8,6 +8,17 @@ log for the full history.
 
 ### Official races
 
+- **Firm Conditions / Firm Course Menace now gray out on
+  non-Firm tracks (PR-SK7).** The race already had a
+  `ground_condition` field (Firm / Good / Soft / Heavy); now the
+  skill catalog knows about it too. Skills that need a Firm
+  track (gametora predicate `ground_condition==1`) gray out
+  correctly on Good / Soft / Heavy races. Wet Conditions skills
+  (which OR over the three non-Firm values) still stay bright
+  on Firm tracks for now — schema carries a single value per
+  axis, so genuine multi-OR cases fall back to "we can't say"
+  and don't gray.
+
 - **Skills that definitely won't fire for the race are now
   grayed out (PR-SK4 + PR-SK5).** Each green skill on a
   per-result card reads cyan when it could fire and grayed +

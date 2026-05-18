@@ -801,6 +801,14 @@ _DISTANCE_FROM_CODE: dict[int, str] = {
 _STRATEGY_FROM_CODE: dict[int, str] = {
     1: "Front", 2: "Pace", 3: "Late", 4: "End",
 }
+# PR-SK7 — ground_condition codes. Firm = dry; Good / Soft /
+# Heavy = progressively wetter. Wet Conditions skills (which OR
+# over {2, 3, 4}) still fall back to dynamic because the schema
+# carries a single value per axis — the parser sees three
+# distinct mapped values and gives up on the static slot.
+_GROUND_CONDITION_FROM_CODE: dict[int, str] = {
+    1: "Firm", 2: "Good", 3: "Soft", 4: "Heavy",
+}
 
 # `is_basis_distance` is the "standard distance" flag (1600 / 2000 /
 # 2400 / 3200 are the Core/standard distances). The 0/1 here maps
@@ -817,6 +825,7 @@ _EFFECT_TYPE_TO_STAT: dict[int, str] = {
 _STATIC_PREDICATE_KEYS: frozenset[str] = frozenset({
     "rotation", "ground_type", "weather", "season", "distance_type",
     "running_style", "is_basis_distance", "track_id",
+    "ground_condition",
     # `always` is technically just an unconditional truth value, but
     # we treat it as a no-op when parsing — appearing in a condition
     # alongside no other predicates means "applies in every race".
@@ -841,6 +850,7 @@ class FetchedSkillCondition:
     strategy: str | None = None
     venue: str | None = None
     is_standard_distance: bool | None = None
+    ground_condition: str | None = None  # PR-SK7
     buff_speed: int = 0
     buff_stamina: int = 0
     buff_power: int = 0
@@ -857,7 +867,7 @@ class FetchedSkillCondition:
         for key in (
             "direction", "surface", "weather", "season",
             "distance_category", "strategy", "venue",
-            "is_standard_distance",
+            "is_standard_distance", "ground_condition",
         ):
             val = getattr(self, key)
             if val is not None:
@@ -946,6 +956,8 @@ def _resolve_predicate_value(
         mapped = {_BASIS_FROM_CODE.get(v) for v in values}
     elif key == "track_id":
         mapped = {G1_TRACK_ID_TO_VENUE.get(v) for v in values}
+    elif key == "ground_condition":
+        mapped = {_GROUND_CONDITION_FROM_CODE.get(v) for v in values}
     else:
         return None, True
 
@@ -990,7 +1002,7 @@ def _coerce_skill_condition(
     for key in (
         "rotation", "ground_type", "weather", "season",
         "distance_type", "running_style", "is_basis_distance",
-        "track_id",
+        "track_id", "ground_condition",
     ):
         if key not in predicates:
             continue
@@ -1008,6 +1020,7 @@ def _coerce_skill_condition(
             "running_style": "strategy",
             "is_basis_distance": "is_standard_distance",
             "track_id": "venue",
+            "ground_condition": "ground_condition",
         }[key]
         resolved[col] = value
 

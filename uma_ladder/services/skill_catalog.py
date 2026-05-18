@@ -47,6 +47,9 @@ class RaceContext:
     distance_meters: int | None = None
     strategy: str | None = None          # "Front" / "Pace" / "Late" / "End"
     venue: str | None = None             # "Nakayama" / "Tokyo" / ...
+    # PR-SK7 — "Firm" / "Good" / "Soft" / "Heavy". Drives the
+    # Firm Conditions / Firm Course Menace gray-out.
+    ground_condition: str | None = None
 
     @property
     def is_standard_distance(self) -> bool | None:
@@ -126,6 +129,8 @@ def condition_matches(
         return False
     if not _matches(condition.venue, context.venue):
         return False
+    if not _matches(condition.ground_condition, context.ground_condition):
+        return False
     return _matches(
         condition.is_standard_distance, context.is_standard_distance
     )
@@ -194,6 +199,9 @@ def race_context_for(race, result=None) -> RaceContext:
             getattr(result, "strategy", None) if result is not None else None
         ),
         venue=getattr(preset, "venue", None),
+        ground_condition=(
+            getattr(race, "ground_condition", None) if race is not None else None
+        ),
     )
 
 
