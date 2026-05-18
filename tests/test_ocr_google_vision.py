@@ -659,6 +659,45 @@ def test_parse_placement_row_recognises_ug_ranks() -> None:
     assert f["uma_name"] == "Mejiro McQueen"
 
 
+def test_parse_placement_row_handles_multi_word_trainer_after_length() -> None:
+    """PR-OCR12 — when the trainer name is multiple words (e.g.
+    "Aisha AlSadhazi"), the prior right-anchored single-word player
+    capture took only the LAST word ("AlSadhazi") and left the
+    first word ("Aisha") wedged between the length and the trailing
+    fav chunk. The leftover then prevented the length-at-end regex
+    from finding "3/4 L". Real user-reported row:
+        "Leading the Charge 15 Narita Taishin 3/4 L Aisha AlSadhazi No. 4 Fav"
+    Expected post-PR-OCR12: clean uma_name, full multi-word player,
+    length captured, gate extracted, epithet recovered."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    f = _parse_placement_row_fields(
+        "Leading the Charge 15 Narita Taishin 3/4 L Aisha AlSadhazi No. 4 Fav"
+    )
+    assert f["uma_name"] == "Narita Taishin"
+    assert f["player_name"] == "Aisha AlSadhazi"
+    assert f["time_or_lengths"] == "3/4 L"
+    assert f["gate"] == 15
+    assert f["fav_rank"] == 4
+    assert f["epithet"] == "Leading the Charge"
+
+
+def test_parse_placement_row_multi_word_trainer_with_time() -> None:
+    """Same multi-word player handling for the 1st-place row shape
+    where the anchor is a finishing time rather than a length."""
+    from uma_ladder.services.ocr_google_vision import _parse_placement_row_fields
+
+    f = _parse_placement_row_fields(
+        "SS Unpredictable End 8 Gold Ship 3:43.8 Aisha AlSadhazi No. 1 Fav"
+    )
+    assert f["uma_name"] == "Gold Ship"
+    assert f["time_or_lengths"] == "3:43.8"
+    assert f["player_name"] == "Aisha AlSadhazi"
+    assert f["fav_rank"] == 1
+    assert f["position"] == "End"
+    assert f["gate"] == 8
+
+
 def test_parse_placement_row_does_not_capture_keyword_as_player() -> None:
     """A bot row has no player. The word before "No. X Fav" should
     only be claimed as player_name when it ISN'T a known keyword."""

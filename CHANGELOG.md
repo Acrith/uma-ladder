@@ -8,6 +8,20 @@ log for the full history.
 
 ### Official races
 
+- **Multi-word trainer names no longer butcher the result row (PR-OCR12).**
+  When a trainer name is more than one word (e.g. "Aisha
+  AlSadhazi"), the OCR row parser used to capture only the LAST
+  word as the trainer and leave the first word stuck in front of
+  "No. X Fav". That stranded word then prevented the length
+  regex (which was anchored to end-of-string) from finding the
+  preceding gap like `3/4 L`, so the merged uma_name ended up as
+  `Narita Taishin 3/4 L Aisha` instead of just `Narita Taishin`.
+  The parser now anchors player extraction on the length/time
+  pattern in the row: whatever sits between the length and `No.
+  X Fav` is the trainer, multi-word or single-word — and the
+  length is extracted cleanly. Single-word trainers and bot
+  rows (no real trainer, no length) behave exactly as before.
+
 - **OCR auto-assigns to the trainer, not the horse (PR-OCR11).**
   The "Confirm parsed results" page used to leave every dropdown
   on *— skip this row —* because it was matching the parsed

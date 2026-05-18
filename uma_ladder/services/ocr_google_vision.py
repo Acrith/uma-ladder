@@ -146,53 +146,62 @@ def _parse_placement_row_fields(text: str) -> dict[str, Any]:
         return out
     work = text.strip()
 
-    # 1. Player + fav at the end ("<word> No. X Fav"). Stripped first
-    #    because it's the LAST segment in the merged row — distance
-    #    and time live just before it. The candidate word
-    #    immediately preceding "No." is rejected if it's one of the
-    #    keyword vocabularies — bot rows have no real player and
-    #    we'd otherwise capture words like "Distance" or "End".
-    fav_match = re.search(
-        r"(\w+)\s+No\.\s*(\d+)\s+Fav\s*$",
-        work,
-        re.IGNORECASE,
+    # 1. Strip "No. X Fav" first — it's always the trailing chunk of
+    #    a placement row. We keep what's before it ("pre_fav") and
+    #    decide how to split player / length / uma_name next.
+    fav_only_match = re.search(
+        r"No\.\s*(\d+)\s+Fav\s*$", work, re.IGNORECASE
     )
-    if fav_match:
-        candidate = fav_match.group(1)
-        out["fav_rank"] = int(fav_match.group(2))
-        if candidate.lower() in _NON_PLAYER_KEYWORDS or candidate.isdigit():
-            # Bot row — preserve the keyword in `work` (it's
-            # actually a position/distance/rank word, not a player)
-            # so the next stage can claim it. Drop only " No. X Fav".
-            work = work[: fav_match.end(1)].strip()
-        else:
-            out["player_name"] = candidate.strip()
-            work = work[: fav_match.start()].strip()
-    else:
-        # Some bot rows are even sparser: "No. 7 Fav" with nothing
-        # before. Strip the suffix and capture fav_rank only.
-        sparse_match = re.search(
-            r"No\.\s*(\d+)\s+Fav\s*$", work, re.IGNORECASE
-        )
-        if sparse_match:
-            out["fav_rank"] = int(sparse_match.group(1))
-            work = work[: sparse_match.start()].strip()
+    if fav_only_match:
+        out["fav_rank"] = int(fav_only_match.group(1))
+        work = work[: fav_only_match.start()].strip()
 
-    # 2. Distance / time at the new end (after player segment removed).
-    finish_time_match = re.search(r"\b(\d+:\d+\.\d+)\s*$", work)
-    if finish_time_match:
-        out["time_or_lengths"] = finish_time_match.group(1)
-        work = work[: finish_time_match.start()].strip()
-    else:
-        kw_alt = "|".join(re.escape(k) for k in _DISTANCE_KEYWORDS)
-        length_match = re.search(
-            rf"(\d+(?:\s+\d+/\d+)?\s*L|\d+/\d+\s*L|(?:{kw_alt})(?:\s*L)?)\s*$",
-            work,
-            re.IGNORECASE,
-        )
-        if length_match:
-            out["time_or_lengths"] = length_match.group(1).strip()
-            work = work[: length_match.start()].strip()
+    # 2. Length / time anywhere in `work`. The user-reported #9 bug
+    #    was a multi-word trainer ("Aisha AlSadhazi") sandwiched
+    #    between the length and "No. X Fav" — the prior right-anchored
+    #    single-word capture took only "AlSadhazi" as player_name and
+    #    left "3/4 L Aisha" stranded in uma_name. With the length
+    #    found anywhere in `work`, everything AFTER it (multi-word
+    #    OK) becomes the player_name in one shot.
+    kw_alt = "|".join(re.escape(k) for k in _DISTANCE_KEYWORDS)
+    length_pattern = (
+        rf"\b(\d+(?:\s+\d+/\d+)?\s*L|\d+/\d+\s*L|(?:{kw_alt})(?:\s*L)?)\b"
+    )
+    # Pick the LAST occurrence — epithets occasionally contain
+    # digit-like fragments, the trailing length is the real one.
+    finish_time_match = None
+    for m in re.finditer(r"\b(\d+:\d+\.\d+)\b", work):
+        finish_time_match = m
+    length_match = None
+    for m in re.finditer(length_pattern, work, re.IGNORECASE):
+        length_match = m
+    anchor = finish_time_match or length_match
+
+    if anchor:
+        out["time_or_lengths"] = anchor.group(1).strip()
+        after = work[anchor.end():].strip()
+        if after:
+            last_word = after.split()[-1].lower()
+            if last_word not in _NON_PLAYER_KEYWORDS:
+                out["player_name"] = after
+        work = work[: anchor.start()].strip()
+    elif "fav_rank" in out:
+        # No length / time anchor — fall back to single-word player
+        # capture at the right end of `work`. We can't safely
+        # multi-word here ("Special Week Yuuta" would be wrongly
+        # claimed wholesale); for the rare ambiguous "Aisha
+        # AlSadhazi No. 4 Fav" alone shape we lose the first word
+        # but that case is virtually nonexistent — real rows always
+        # carry a length or time before the trainer.
+        player_match = re.search(r"(\w+)\s*$", work)
+        if player_match:
+            candidate = player_match.group(1)
+            if (
+                candidate.lower() not in _NON_PLAYER_KEYWORDS
+                and not candidate.isdigit()
+            ):
+                out["player_name"] = candidate
+                work = work[: player_match.start()].strip()
 
     # 3. Skill rank at the start ("SS", "S+", "A+", "UG3"...).
     rank_match = re.match(
