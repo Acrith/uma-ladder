@@ -206,6 +206,121 @@ def test_applies_passively_stricter_than_condition_matches(
 # ─── is_standard_distance ────────────────────────────────────────
 
 
+def test_ground_condition_exclude_grays_on_excluded_value(app: Flask) -> None:
+    """PR-SK8 — `ground_condition_exclude="Firm"` is the Wet
+    Conditions shape: skill applies UNLESS race ground is Firm.
+    Verified against the four enum values."""
+    skill_id = _seed_skill(
+        app,
+        "Wet Conditions ◎ Test",
+        ground_condition_exclude="Firm",
+        buff_power=60,
+    )
+    with app.app_context():
+        cond = db.session.scalars(
+            db.select(SkillCondition).where(
+                SkillCondition.skill_id == skill_id
+            )
+        ).one()
+        # Firm → excluded → doesn't apply.
+        assert condition_matches(
+            cond, RaceContext(ground_condition="Firm")
+        ) is False
+        # Anything else → applies.
+        for non_firm in ("Good", "Soft", "Heavy"):
+            assert condition_matches(
+                cond, RaceContext(ground_condition=non_firm)
+            ) is True, f"falsely grayed on {non_firm}"
+        # Context unknown → can't confirm exclusion, default
+        # permissive (don't gray the chip when data's missing).
+        assert condition_matches(
+            cond, RaceContext(ground_condition=None)
+        ) is True
+
+
+def test_inapplicable_sympathy_grays_below_threshold(app: Flask) -> None:
+    """PR-SK8 — Sympathy needs ≥5 holders. With only 3 results
+    having it, all 3 chips gray. Add a 4th, still gray. Add a 5th,
+    all 5 light up."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    sympathy_id = _seed_skill(
+        app, "Sympathy Test", min_holders=5, buff_speed=40,
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+    )
+
+    def _build(n: int) -> list:
+        return [
+            SimpleNamespace(
+                id=i, strategy=None,
+                skills=[SimpleNamespace(skill_id=sympathy_id)],
+            )
+            for i in range(n)
+        ]
+
+    with app.app_context():
+        for n in (1, 2, 3, 4):
+            out = inapplicable_skill_ids_by_result(_build(n), race)
+            # Every result should have Sympathy in its inapplicable
+            # set (count < 5).
+            assert all(sympathy_id in v for v in out.values()), \
+                f"sympathy should gray at count={n}"
+        # At 5 holders, threshold met → no one grays.
+        out = inapplicable_skill_ids_by_result(_build(5), race)
+        assert all(sympathy_id not in v for v in out.values())
+
+
+def test_inapplicable_lone_wolf_grays_when_company_arrives(
+    app: Flask,
+) -> None:
+    """PR-SK8 — Lone Wolf needs exactly 1 holder (just the uma
+    itself). With one uma having it, no gray. The moment a second
+    uma also has it, both gray."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    wolf_id = _seed_skill(
+        app, "Lone Wolf Test",
+        min_holders=1, max_holders=1, buff_speed=40,
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+    )
+
+    def _build(n: int) -> list:
+        return [
+            SimpleNamespace(
+                id=i, strategy=None,
+                skills=[SimpleNamespace(skill_id=wolf_id)],
+            )
+            for i in range(n)
+        ]
+
+    with app.app_context():
+        # One holder → applies (no gray).
+        out = inapplicable_skill_ids_by_result(_build(1), race)
+        assert wolf_id not in out[0]
+        # Two holders → both gray (count=2 > max_holders=1).
+        out = inapplicable_skill_ids_by_result(_build(2), race)
+        assert wolf_id in out[0]
+        assert wolf_id in out[1]
+
+
 def test_ground_condition_predicate_matches(app: Flask) -> None:
     """PR-SK7 — a SkillCondition with ground_condition="Firm"
     matches only on a Firm track. Firm Conditions / Firm Course

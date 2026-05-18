@@ -1,7 +1,7 @@
 {
   "source": "gametora_v1",
   "attribution": "Skill condition data sourced from GameTora (https://gametora.com/umamusume/skills); not affiliated with Cygames. Maintain attribution when redistributing.",
-  "fetched_at": "2026-05-18T20:23:06.175415+00:00",
+  "fetched_at": "2026-05-18T21:10:09.872179+00:00",
   "conditions": [
     {
       "gametora_id": 10071,
@@ -1827,25 +1827,29 @@
     },
     {
       "gametora_id": 200161,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition_exclude": "Firm",
       "buff_power": 60,
       "notes": "Your Power stat is increased by 60 in races with non-Firm track conditions"
     },
     {
       "gametora_id": 200162,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition_exclude": "Firm",
       "buff_power": 40,
       "notes": "Your Power stat is increased by 40 in races with non-Firm track conditions"
     },
     {
       "gametora_id": 200163,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition_exclude": "Firm",
       "buff_power": -40,
       "notes": "Your Power stat is decreased by 40 in races with non-Firm track conditions"
     },
     {
       "gametora_id": 200164,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition_exclude": "Firm",
       "buff_speed": 60,
       "buff_power": 60,
       "notes": "Your Power and Speed stats are increased by 60 in races with Slightly Heavy, Heavy, or Bad track condition"
@@ -3610,7 +3614,8 @@
     },
     {
       "gametora_id": 201631,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "min_holders": 5,
       "buff_speed": 40,
       "notes": "Your Speed stat is increased by 40 if there are at least 4 other girls with the Sympathy skill in the race"
     },
@@ -3623,7 +3628,9 @@
     },
     {
       "gametora_id": 201641,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "min_holders": 1,
+      "max_holders": 1,
       "buff_speed": 40,
       "notes": "Your Speed stat is increased by 40 if there are no other girls with the Lone Wolf skill in the race"
     },
@@ -6320,6 +6327,7 @@
     {
       "gametora_id": 204322,
       "is_dynamic": true,
+      "min_holders": 2,
       "notes": "Mile/Medium・At a random point during the Middle Leg, your speed will slightly increase; the effect is stronger if there's another girl with the same skill"
     },
     {
@@ -8521,7 +8529,8 @@
     },
     {
       "gametora_id": 100703211,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "ground_condition_exclude": "Firm",
       "buff_speed": 80,
       "buff_power": 80,
       "notes": "On tracks in Slightly Heavy, Heavy, or Bad condition, your Speed and Power stats are increased by 80, but your race start will be slower"
@@ -10548,6 +10557,7 @@
       "gametora_id": 107002111,
       "is_dynamic": true,
       "surface": "Turf",
+      "ground_condition_exclude": "Firm",
       "buff_speed": 80,
       "buff_power": 80,
       "notes": "Turf・Your Power and Speed stats are increased by 80 in races with Slightly Heavy, Heavy, or Bad track condition; they are increased by 60 in Good condition races"

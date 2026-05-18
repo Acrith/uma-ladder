@@ -62,7 +62,8 @@ def _load_seed(path: Path) -> list[dict]:
 _WRITABLE_COLUMNS: tuple[str, ...] = (
     "direction", "surface", "weather", "season",
     "distance_category", "strategy", "venue", "is_standard_distance",
-    "ground_condition",
+    "ground_condition", "ground_condition_exclude",
+    "min_holders", "max_holders",
     "buff_speed", "buff_stamina", "buff_power", "buff_guts", "buff_wisdom",
     "is_dynamic", "notes",
 )

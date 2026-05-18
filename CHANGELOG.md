@@ -8,6 +8,22 @@ log for the full history.
 
 ### Official races
 
+- **Wet Conditions + Sympathy + Lone Wolf now gray out
+  correctly (PR-SK8).** Three skill families that the prior
+  catalog couldn't model:
+  - **Wet Conditions ◎/○/×** (and similar "anything but Firm"
+    skills) now gray on Firm tracks. The catalog's
+    single-value-per-axis schema gained a `ground_condition_exclude`
+    column so the OR-over-three-values shape from GameTora can
+    project cleanly.
+  - **Sympathy** grays out when fewer than 5 umas in the race
+    have it (its activation threshold).
+  - **Lone Wolf** grays out when more than one uma in the race
+    has it (it requires solitude).
+  Catalog gained `min_holders` / `max_holders` columns for the
+  cross-result count check; the renderer batches the count per
+  skill_id across all results in the race.
+
 - **Firm Conditions / Firm Course Menace now gray out on
   non-Firm tracks (PR-SK7).** The race already had a
   `ground_condition` field (Firm / Good / Soft / Heavy); now the

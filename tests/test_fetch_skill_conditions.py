@@ -116,12 +116,12 @@ def test_ground_condition_maps_to_typed_value() -> None:
         assert cond.is_dynamic is False
 
 
-def test_wet_conditions_or_falls_back_to_dynamic() -> None:
-    """`ground_condition==2@ground_condition==3@ground_condition==4`
-    (Wet Conditions skill family) ORs over three distinct mapped
-    values — schema can only carry one, so the parser flips to
-    dynamic. The skill stays bright on every track for now; a
-    future PR could add a negation column to recover this case."""
+def test_wet_conditions_or_collapses_to_exclude_firm() -> None:
+    """PR-SK8 — `ground_condition==2@==3@==4` (Wet Conditions
+    skill family, "anything but Firm") now resolves to
+    `ground_condition_exclude="Firm"` instead of falling back to
+    dynamic. The OR-over-(n-1)-codes shape leaves exactly one of
+    the four enum values missing; that's the excluded value."""
     cond = _coerce_skill_condition(
         _skill(
             1,
@@ -130,8 +130,73 @@ def test_wet_conditions_or_falls_back_to_dynamic() -> None:
         )
     )
     assert cond is not None
+    assert cond.is_dynamic is False
+    assert cond.ground_condition is None
+    assert cond.ground_condition_exclude == "Firm"
+    assert cond.buff_power == 60
+
+
+def test_ground_condition_ne_operator_maps_to_exclude() -> None:
+    """PR-SK8 — `ground_condition!=N` (explicit negation, seen in
+    a handful of skills) maps to `ground_condition_exclude=N`
+    directly. Same semantic as the OR-over-(n-1)-codes shape,
+    just terser source data."""
+    cond = _coerce_skill_condition(_skill(1, "ground_condition!=1"))
+    assert cond is not None
+    assert cond.is_dynamic is False
+    assert cond.ground_condition_exclude == "Firm"
+    assert cond.ground_condition is None
+
+
+def test_ground_condition_partial_or_still_dynamic() -> None:
+    """`ground_condition==2@==3` (two of four codes, leaving two
+    missing) can't collapse to a single exclude value. Stays
+    dynamic — the skill chip won't gray out aggressively."""
+    cond = _coerce_skill_condition(_skill(1, "ground_condition==2@ground_condition==3"))
     assert cond.is_dynamic is True
     assert cond.ground_condition is None
+    assert cond.ground_condition_exclude is None
+
+
+def test_same_skill_horse_count_ge_maps_to_min_holders() -> None:
+    """PR-SK8 — Sympathy (`same_skill_horse_count>=5`) projects to
+    `min_holders=5`. Display-time check compares to the count of
+    results in the race carrying the same skill_id."""
+    cond = _coerce_skill_condition(
+        _skill(1, "same_skill_horse_count>=5", (1, 400000))
+    )
+    assert cond is not None
+    assert cond.is_dynamic is False
+    assert cond.min_holders == 5
+    assert cond.max_holders is None
+    assert cond.buff_speed == 40
+
+
+def test_same_skill_horse_count_eq_maps_to_min_and_max() -> None:
+    """Lone Wolf (`same_skill_horse_count==1`) needs `min_holders=
+    max_holders=1` — exactly one holder, which is the uma itself."""
+    cond = _coerce_skill_condition(
+        _skill(1, "same_skill_horse_count==1", (1, 400000))
+    )
+    assert cond is not None
+    assert cond.is_dynamic is False
+    assert cond.min_holders == 1
+    assert cond.max_holders == 1
+
+
+def test_same_skill_horse_count_with_dynamic_companion_stays_dynamic() -> None:
+    """When `same_skill_horse_count` ANDs with a dynamic predicate
+    (e.g. `phase_random==1&same_skill_horse_count>=2`), the
+    dynamic companion forces the whole condition to dynamic; the
+    holder bound still records on the row so item 6 has the data
+    if it ever decides to apply buffs to dynamic-but-bounded
+    skills."""
+    cond = _coerce_skill_condition(
+        _skill(1, "phase_random==1&same_skill_horse_count>=2", (1, 200000))
+    )
+    assert cond is not None
+    assert cond.is_dynamic is True
+    assert cond.min_holders == 2
 
 
 def test_track_id_maps_to_venue() -> None:

@@ -57,6 +57,20 @@ class SkillCondition(db.Model):
     # PR-SK7 — "Firm" / "Good" / "Soft" / "Heavy". Matched against
     # `OfficialRace.ground_condition`. NULL = skill doesn't care.
     ground_condition: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # PR-SK8 — Wet Conditions ◎/○/× use `==2@==3@==4` ("anything
+    # but Firm"). Schema carries one positive value per axis, so
+    # the OR-over-(n-1)-values shape gets stored as the SINGLE
+    # excluded value here. Skill applies UNLESS context matches.
+    ground_condition_exclude: Mapped[str | None] = mapped_column(
+        String(8), nullable=True,
+    )
+    # PR-SK8 — Sympathy (`same_skill_horse_count>=5`) + Lone Wolf
+    # (`same_skill_horse_count==1`). At display time the consumer
+    # counts how many other umas in this race have this exact
+    # skill (skill_id match) and checks against these bounds.
+    # NULL = skill doesn't constrain the holder count.
+    min_holders: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_holders: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # `True` = "applies at standard distances only" (1600/2000/2400/3200),
     # `False` = "applies at NON-standard distances only" (mirrors the
     # in-game "Non-Standard Distance" skill), `None` = doesn't care.

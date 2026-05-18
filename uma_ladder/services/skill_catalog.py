@@ -131,9 +131,21 @@ def condition_matches(
         return False
     if not _matches(condition.ground_condition, context.ground_condition):
         return False
-    return _matches(
+    if not _matches(
         condition.is_standard_distance, context.is_standard_distance
-    )
+    ):
+        return False
+    # PR-SK8 — `ground_condition_exclude` is the inverse of a
+    # positive predicate. Skill applies UNLESS context matches.
+    # NULL exclude = no constraint; NULL context with non-NULL
+    # exclude = can't confirm (skill stays brightened, callers
+    # decide if they want stricter behavior).
+    if condition.ground_condition_exclude is not None:
+        if context.ground_condition is None:
+            return True
+        if context.ground_condition == condition.ground_condition_exclude:
+            return False
+    return True
 
 
 def applies_passively(
@@ -216,15 +228,22 @@ def inapplicable_skill_ids_by_result(
 
     Single batched fetch of `SkillCondition` across all skills
     on all results — avoids N+1 lookups when the page renders
-    a 9-uma race with ~16 skills each."""
+    a 9-uma race with ~16 skills each.
+
+    PR-SK8 — also evaluates the cross-result holder count for
+    Sympathy / Lone Wolf class skills. holder_count[skill_id] is
+    the number of results carrying that exact skill_id; we gray
+    when count falls outside [min_holders, max_holders]."""
     if not results:
         return {}
     all_skill_ids: set[int] = set()
+    holder_counts: dict[int, int] = {}
     for r in results:
         for assoc in getattr(r, "skills", []) or []:
             sid = getattr(assoc, "skill_id", None)
             if sid is not None:
                 all_skill_ids.add(sid)
+                holder_counts[sid] = holder_counts.get(sid, 0) + 1
     catalog = conditions_for(list(all_skill_ids))
 
     out: dict[int, set[int]] = {}
@@ -241,5 +260,13 @@ def inapplicable_skill_ids_by_result(
                 continue
             if not condition_matches(cond, ctx):
                 inapp.add(sid)
+                continue
+            count = holder_counts.get(sid, 0)
+            if cond.min_holders is not None and count < cond.min_holders:
+                inapp.add(sid)
+                continue
+            if cond.max_holders is not None and count > cond.max_holders:
+                inapp.add(sid)
+                continue
         out[r.id] = inapp
     return out

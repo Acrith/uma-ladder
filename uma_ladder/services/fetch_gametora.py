@@ -826,11 +826,22 @@ _STATIC_PREDICATE_KEYS: frozenset[str] = frozenset({
     "rotation", "ground_type", "weather", "season", "distance_type",
     "running_style", "is_basis_distance", "track_id",
     "ground_condition",
+    # PR-SK8 — Sympathy / Lone Wolf use `same_skill_horse_count`
+    # which evaluates against a cross-result count we compute at
+    # display time. Static in the sense that the count is knowable
+    # without runtime race-state.
+    "same_skill_horse_count",
     # `always` is technically just an unconditional truth value, but
     # we treat it as a no-op when parsing — appearing in a condition
     # alongside no other predicates means "applies in every race".
     "always",
 })
+
+# PR-SK8 — `ground_condition` supports the inverse pattern: a skill
+# can "apply except on Firm tracks" either via `!=1` or via the
+# OR-over-(n-1)-codes shape `==2@==3@==4`. Codes here let the
+# parser detect either shape and project to `ground_condition_exclude`.
+_GROUND_CONDITION_ALL_CODES: frozenset[int] = frozenset({1, 2, 3, 4})
 
 _ATOMIC_RE = _re.compile(r"^([a-z_]+)(==|!=|>=|<=|>|<)(-?\d+)$")
 
@@ -851,6 +862,13 @@ class FetchedSkillCondition:
     venue: str | None = None
     is_standard_distance: bool | None = None
     ground_condition: str | None = None  # PR-SK7
+    # PR-SK8 — Wet Conditions (`==2@==3@==4`) + `!=1` patterns.
+    ground_condition_exclude: str | None = None
+    # PR-SK8 — Sympathy (>=5) + Lone Wolf (==1). The catalog
+    # carries the bounds; consumers count actual holders at
+    # render time.
+    min_holders: int | None = None
+    max_holders: int | None = None
     buff_speed: int = 0
     buff_stamina: int = 0
     buff_power: int = 0
@@ -868,6 +886,8 @@ class FetchedSkillCondition:
             "direction", "surface", "weather", "season",
             "distance_category", "strategy", "venue",
             "is_standard_distance", "ground_condition",
+            "ground_condition_exclude",
+            "min_holders", "max_holders",
         ):
             val = getattr(self, key)
             if val is not None:
@@ -893,19 +913,28 @@ def _parse_atomic(atom: str) -> tuple[str, str, int] | None:
 
 def _parse_condition_group(
     group: dict[str, Any]
-) -> tuple[dict[str, list[int]], bool]:
-    """Extract per-key predicate values from one condition_group.
+) -> tuple[dict[str, list[tuple[str, int]]], bool]:
+    """Extract per-key predicate atoms from one condition_group.
     Returns (predicates, is_dynamic). `predicates` maps
-    static-predicate keys to the list of RHS values seen across
-    OR alternatives. `is_dynamic=True` means at least one atom
+    static-predicate keys to the list of (op, rhs) tuples seen
+    across atoms. `is_dynamic=True` means at least one atom
     references a race-state predicate we can't evaluate from
-    static race context."""
+    static race context.
+
+    PR-SK8 — operator-aware: we now keep the original op so
+    downstream resolvers can distinguish `==` from `!=` /
+    `>=` / `<=`. Each key supports a different operator set:
+
+    - Enum keys (rotation, surface, weather, ...) accept `==`
+      and (for ground_condition) `!=`.
+    - `same_skill_horse_count` accepts `==`, `>=`, `<=`.
+    - Anything else with a non-`==` op falls back to dynamic."""
     cond_str = group.get("condition") or ""
     if not cond_str:
         # Empty condition = "always" in upstream parlance.
         return {}, False
 
-    predicates: dict[str, list[int]] = {}
+    predicates: dict[str, list[tuple[str, int]]] = {}
     is_dynamic = False
 
     for atom in _re.split(r"[@&]", cond_str):
@@ -921,22 +950,37 @@ def _parse_condition_group(
         if lhs == "always":
             # No constraint; ignore.
             continue
-        if lhs not in _STATIC_PREDICATE_KEYS or op != "==":
+        if lhs not in _STATIC_PREDICATE_KEYS:
             is_dynamic = True
             continue
-        predicates.setdefault(lhs, []).append(rhs)
+        # Per-key operator support. Mixed-operator atoms on the
+        # same key are conservative-dynamic (we can't combine
+        # `==2` and `!=4` into a single column value safely).
+        allowed_ops = _ALLOWED_OPS_BY_KEY.get(lhs, frozenset({"=="}))
+        if op not in allowed_ops:
+            is_dynamic = True
+            continue
+        predicates.setdefault(lhs, []).append((op, rhs))
 
     return predicates, is_dynamic
+
+
+# PR-SK8 — operators each static key is willing to consume.
+# Keys not listed default to {"=="}.
+_ALLOWED_OPS_BY_KEY: dict[str, frozenset[str]] = {
+    "ground_condition": frozenset({"==", "!="}),
+    "same_skill_horse_count": frozenset({"==", ">=", "<="}),
+}
 
 
 def _resolve_predicate_value(
     key: str, values: list[int]
 ) -> tuple[Any, bool]:
-    """Map a list of raw upstream codes to a single schema value
-    + a dynamic-fallback flag. Multiple values in an OR alternative
-    collapse to one when our enum can drop a redundant code (e.g.
-    season==1@season==5 → Spring, since season==5 is the game's
-    Sakura that we don't model)."""
+    """Map a list of raw upstream codes (== op only) to a single
+    schema value + a dynamic-fallback flag. Multiple values in an
+    OR alternative collapse to one when our enum can drop a
+    redundant code (e.g. season==1@season==5 → Spring, since
+    season==5 is the game's Sakura that we don't model)."""
     if not values:
         return None, False
 
@@ -972,6 +1016,77 @@ def _resolve_predicate_value(
     return None, True
 
 
+def _resolve_ground_condition(
+    atoms: list[tuple[str, int]],
+) -> tuple[str | None, str | None, bool]:
+    """PR-SK8 — special-case resolver for `ground_condition`,
+    which uniquely supports both positive (`==N`) and inverse
+    (`==X@==Y@==Z` n-1-OR, or explicit `!=N`) shapes.
+
+    Returns (positive, excluded, is_dynamic).
+    - positive: column `ground_condition` value, e.g. "Firm".
+    - excluded: column `ground_condition_exclude` value, e.g. "Firm".
+    - is_dynamic: True if we couldn't reduce to one or the other."""
+    eq_codes = {rhs for op, rhs in atoms if op == "=="}
+    ne_codes = {rhs for op, rhs in atoms if op == "!="}
+
+    if eq_codes and ne_codes:
+        # Mixed predicates on the same key — too complex to express.
+        return None, None, True
+
+    if ne_codes:
+        # `!=X` form — single excluded value supported.
+        if len(ne_codes) != 1:
+            return None, None, True
+        code = next(iter(ne_codes))
+        excluded = _GROUND_CONDITION_FROM_CODE.get(code)
+        return None, excluded, excluded is None
+
+    # Only `==` atoms remain.
+    if len(eq_codes) == 1:
+        code = next(iter(eq_codes))
+        positive = _GROUND_CONDITION_FROM_CODE.get(code)
+        return positive, None, positive is None
+
+    # Multi-value OR. If exactly one valid code is MISSING from
+    # the full enum, treat as the inverse shape:
+    # `==Good@==Soft@==Heavy` → exclude=Firm.
+    missing = _GROUND_CONDITION_ALL_CODES - eq_codes
+    if len(missing) == 1:
+        code = next(iter(missing))
+        excluded = _GROUND_CONDITION_FROM_CODE.get(code)
+        return None, excluded, excluded is None
+
+    # Anything else (2-of-4, 0-of-4) is too complex for one
+    # column — fall back to dynamic.
+    return None, None, True
+
+
+def _resolve_holder_count(
+    atoms: list[tuple[str, int]],
+) -> tuple[int | None, int | None, bool]:
+    """PR-SK8 — resolver for `same_skill_horse_count`. Returns
+    (min_holders, max_holders, is_dynamic). Supports the two
+    operator shapes upstream actually uses:
+
+    - `>=N` → min_holders=N (Sympathy: at least 5 holders).
+    - `==N` → min=max=N (Lone Wolf: exactly 1 holder = uma alone).
+    - `<=N` → max_holders=N (defensive; not seen in current data).
+
+    Multiple atoms on the same key are dynamic — we don't combine
+    `>=3` AND `<=7` into a range here."""
+    if len(atoms) != 1:
+        return None, None, True
+    op, n = atoms[0]
+    if op == "==":
+        return n, n, False
+    if op == ">=":
+        return n, None, False
+    if op == "<=":
+        return None, n, False
+    return None, None, True
+
+
 def _coerce_skill_condition(
     skill_row: dict[str, Any],
 ) -> FetchedSkillCondition | None:
@@ -999,14 +1114,49 @@ def _coerce_skill_condition(
         is_dynamic = True
 
     resolved: dict[str, Any] = {}
+
+    # PR-SK8 — ground_condition handles its own resolver because
+    # it's the only axis with both `==` and `!=` shapes plus the
+    # n-1-OR-collapses-to-exclude pattern.
+    if "ground_condition" in predicates:
+        positive, excluded, force_dynamic = _resolve_ground_condition(
+            predicates.pop("ground_condition")
+        )
+        if force_dynamic:
+            is_dynamic = True
+        else:
+            if positive is not None:
+                resolved["ground_condition"] = positive
+            if excluded is not None:
+                resolved["ground_condition_exclude"] = excluded
+
+    # PR-SK8 — same_skill_horse_count (Sympathy / Lone Wolf)
+    # projects to min/max holder bounds.
+    if "same_skill_horse_count" in predicates:
+        mn, mx, force_dynamic = _resolve_holder_count(
+            predicates.pop("same_skill_horse_count")
+        )
+        if force_dynamic:
+            is_dynamic = True
+        else:
+            if mn is not None:
+                resolved["min_holders"] = mn
+            if mx is not None:
+                resolved["max_holders"] = mx
+
+    # Remaining keys use the legacy `==`-only resolver.
     for key in (
         "rotation", "ground_type", "weather", "season",
         "distance_type", "running_style", "is_basis_distance",
-        "track_id", "ground_condition",
+        "track_id",
     ):
         if key not in predicates:
             continue
-        value, force_dynamic = _resolve_predicate_value(key, predicates[key])
+        # The legacy resolver expects a list of raw ints, not
+        # (op, rhs) tuples — strip ops (all `==` here per the
+        # ALLOWED_OPS_BY_KEY default).
+        codes = [rhs for op, rhs in predicates[key] if op == "=="]
+        value, force_dynamic = _resolve_predicate_value(key, codes)
         if force_dynamic:
             is_dynamic = True
             continue
@@ -1020,7 +1170,6 @@ def _coerce_skill_condition(
             "running_style": "strategy",
             "is_basis_distance": "is_standard_distance",
             "track_id": "venue",
-            "ground_condition": "ground_condition",
         }[key]
         resolved[col] = value
 
