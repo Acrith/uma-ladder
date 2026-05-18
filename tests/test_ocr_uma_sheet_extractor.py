@@ -681,6 +681,54 @@ def test_inherited_variant_dropped_when_original_present(
         assert survivor.is_inherited is False
 
 
+def test_merge_sorts_full_screenshot_before_continuation(
+    app: Flask,
+) -> None:
+    """PR-OCR10 — upload order shouldn't decide skill list order.
+    A "full" extract (header + stats + aptitudes populated) sorts
+    ahead of a "continuation" extract (skill-only) so the merged
+    skills always read in canonical in-game slot order."""
+    full = UmaSheetExtract(
+        header={"uma_name": "Tamamo Cross"},
+        stats={"speed": 1100},
+        aptitudes={"track": {"turf": "A"}},
+        skills=[
+            {"id": 1, "name_en": "Anchors Aweigh!", "raw_pos": 0},
+            {"id": 2, "name_en": "Barcarole", "raw_pos": 10},
+        ],
+    )
+    continuation = UmaSheetExtract(
+        skills=[
+            {"id": 3, "name_en": "Tail Nine", "raw_pos": 0},
+            {"id": 4, "name_en": "Radiant Star", "raw_pos": 10},
+        ],
+    )
+    # Continuation listed FIRST in the input — verify the sort
+    # reorders so the full extract's skills come first.
+    with app.app_context():
+        m = merge_extracts([continuation, full])
+    ids = [s["id"] for s in m.skills]
+    assert ids == [1, 2, 3, 4]
+
+
+def test_merge_sort_opt_out_preserves_input_order(app: Flask) -> None:
+    """`sort_by_fullness=False` keeps the original list order — a
+    caller can opt out if they want literal input order."""
+    full = UmaSheetExtract(
+        stats={"speed": 1100},
+        skills=[{"id": 1, "name_en": "First", "raw_pos": 0}],
+    )
+    continuation = UmaSheetExtract(
+        skills=[{"id": 2, "name_en": "Second", "raw_pos": 0}],
+    )
+    with app.app_context():
+        m = merge_extracts(
+            [continuation, full], sort_by_fullness=False
+        )
+    ids = [s["id"] for s in m.skills]
+    assert ids == [2, 1]
+
+
 def test_merge_debug_block_concatenates(app: Flask) -> None:
     a = UmaSheetExtract(skills_block_debug="anchors aweigh")
     b = UmaSheetExtract(skills_block_debug="long corners")

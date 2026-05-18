@@ -571,7 +571,32 @@ def extract_uma_sheet(line_texts: Sequence[str]) -> UmaSheetExtract:
 # ─── Merging extracts from multiple screenshots ──────────────────
 
 
-def merge_extracts(extracts: Sequence[UmaSheetExtract]) -> UmaSheetExtract:
+def _fullness_score(extract: UmaSheetExtract) -> int:
+    """How "full" a sheet extract is — used by `merge_extracts` to
+    sort full screenshots ahead of continuation screenshots so
+    skills always accumulate in canonical slot order.
+
+    A full screenshot has visible header / stats / aptitudes rows.
+    A continuation screenshot has only skill content (no header,
+    no marker — slots 8-15 of a wrap'd skill list, typically). The
+    in-game ordering puts the innate ult at slot 0; if a user
+    happens to upload the continuation first, we still want the
+    full sheet's skills to appear first in the merged result."""
+    score = 0
+    if extract.header:
+        score += 1
+    if extract.stats:
+        score += 1
+    if extract.aptitudes:
+        score += 1
+    return score
+
+
+def merge_extracts(
+    extracts: Sequence[UmaSheetExtract],
+    *,
+    sort_by_fullness: bool = True,
+) -> UmaSheetExtract:
     """Combine N extracts (one per screenshot) into a single view.
 
     Strategy:
@@ -584,9 +609,24 @@ def merge_extracts(extracts: Sequence[UmaSheetExtract]) -> UmaSheetExtract:
     - skills_block_debug: concatenate the per-screenshot blocks with
       `\n--- screenshot N ---\n` separators so the debug pane shows
       everything that contributed.
-    """
+
+    PR-OCR10 — `sort_by_fullness` (default True) stable-sorts
+    extracts so screenshots with header/stats/aptitudes data come
+    first. Continuation screenshots (no header / no marker) come
+    after. This makes the merged skill order independent of upload
+    order: the organiser can pick the screenshots in any sequence
+    and the merged list still reads in canonical in-game slot
+    order (slot 0 first, slot N last)."""
     if not extracts:
         return UmaSheetExtract()
+
+    # Stable-sort so equal-fullness extracts keep their upload-order
+    # relative position. Python's sorted is stable.
+    iter_extracts = (
+        sorted(extracts, key=lambda e: -_fullness_score(e))
+        if sort_by_fullness
+        else list(extracts)
+    )
 
     header: dict[str, object] = {}
     stats: dict[str, int] = {}
@@ -595,7 +635,7 @@ def merge_extracts(extracts: Sequence[UmaSheetExtract]) -> UmaSheetExtract:
     skills: list[dict[str, object]] = []
     debug_chunks: list[str] = []
 
-    for i, e in enumerate(extracts, start=1):
+    for i, e in enumerate(iter_extracts, start=1):
         for k, v in e.header.items():
             header.setdefault(k, v)
         for k, v in e.stats.items():

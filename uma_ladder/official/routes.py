@@ -951,6 +951,23 @@ def result_details_from_ocr(
         or (result.aptitudes or {})
     )
 
+    # PR-OCR10 — for multi-upload merges, parsed_json carries the
+    # list of contributing image ids. The template renders all of
+    # them in a strip so the organiser sees every screenshot they
+    # actually uploaded, not just the primary one. Falls back to
+    # just the primary attempt's image for single uploads.
+    extra_image_ids: list[int] = list(
+        parsed.get("screenshot_image_ids") or []
+    )
+    # Make sure the primary attempt's image is in the list and
+    # comes first (it's the merge target).
+    if attempt.image and attempt.image.id not in extra_image_ids:
+        extra_image_ids.insert(0, attempt.image.id)
+    elif attempt.image and extra_image_ids and extra_image_ids[0] != attempt.image.id:
+        extra_image_ids = [attempt.image.id] + [
+            i for i in extra_image_ids if i != attempt.image.id
+        ]
+
     return render_template(
         "official/result_details_from_ocr.html",
         race=race,
@@ -961,6 +978,7 @@ def result_details_from_ocr(
         merged_skill_rows=merged_skill_rows,
         parsed_aptitudes=parsed_aptitudes,
         skill_names=skill_names,
+        screenshot_image_ids=extra_image_ids,
         csrf_form=CsrfOnlyForm(),
     )
 

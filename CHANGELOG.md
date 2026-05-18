@@ -8,6 +8,20 @@ log for the full history.
 
 ### Official races
 
+- **Multi-screenshot polish: upload-order-independent + all
+  screenshots visible on the confirm page (PR-OCR10).** Two
+  follow-up papercuts from the multi-upload uma-sheet flow: the
+  confirm-page preview only ever showed the primary attempt's
+  image even when the organiser had uploaded two (so the second
+  screenshot was invisible after submit), and the merged skill
+  order depended on the order in which the screenshots were
+  picked (continuation-first uploads put slots 9-16 before slots
+  0-7). Both fixed: the confirm page now renders a vertical strip
+  of every screenshot that contributed, and the merge stable-sorts
+  extracts with header/stats/aptitudes ahead of bare
+  skill-content ones so the resulting list always reads in
+  canonical in-game slot order regardless of upload order.
+
 - **Continuation-screenshot skills now resolve (PR-OCR9).** Two
   related bugs surfaced from the first multi-screenshot uma-sheet
   upload after PR-A1: (1) when both screenshots were merged,

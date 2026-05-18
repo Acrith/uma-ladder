@@ -598,6 +598,58 @@ def test_aptitudes_empty_field_omits_slot(
         }
 
 
+def test_confirm_page_renders_all_screenshots_after_multi_upload(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR10 — when 2 screenshots are uploaded, the confirm page
+    renders BOTH images in the source-screenshot strip, not just
+    the primary attempt's. The user reported "preview shows only
+    one thumbnail after uploading" which was this gap."""
+    from uma_ladder.models import OcrParseAttempt, UploadedImage
+
+    app.config["OCR_PROVIDER"] = "mock"
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={
+            "image": [
+                (io.BytesIO(_png_bytes()), "first.png"),
+                (io.BytesIO(_png_bytes()), "second.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    confirm_path = resp.headers["Location"]
+
+    with app.app_context():
+        image_ids = sorted(
+            i.id for i in db.session.query(UploadedImage).all()
+        )
+        # Sanity: two images were saved.
+        assert len(image_ids) == 2
+        attempts = (
+            db.session.query(OcrParseAttempt)
+            .order_by(OcrParseAttempt.id)
+            .all()
+        )
+        assert len(attempts) == 2
+
+    resp = client.get(confirm_path)
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Both image-serve URLs should appear on the confirm page.
+    for img_id in image_ids:
+        assert f"/ocr/uploads/{img_id}" in body
+    # And the strip header reflects the count.
+    assert "Source screenshots" in body
+
+
 def test_multi_upload_persists_aptitudes_to_parsed_json(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
