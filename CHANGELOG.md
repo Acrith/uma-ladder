@@ -8,6 +8,18 @@ log for the full history.
 
 ### Official races
 
+- **"Enter at least one placement" on Save Results — fixed
+  (PR-OCR15).** Submitting OCR-parsed results returned a flash
+  saying no placements were entered, even when the dropdowns
+  clearly showed paired players. Root cause was an orphan
+  non-placement row in the parsed data (header chrome like
+  "SS RANK", stray epithets) that made Jinja render a bare
+  Python `None` into the inline JavaScript, throwing a
+  ReferenceError mid-init and dead-stranding the form's hidden
+  carrier fields. The route now drops non-placement rows before
+  rendering, and the template uses `| tojson` on the placement
+  literal so future row shapes can't reproduce the crash.
+
 - **Position keyword now extracted even when it follows the gate
   digit (PR-OCR14).** The OCR row parser used to extract the
   position word (Front / Pace / Late / End) only when it was

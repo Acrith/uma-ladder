@@ -407,6 +407,85 @@ def test_strategy_carries_through_to_result_strategy(
         assert result.strategy == "End"
 
 
+def test_confirm_page_drops_orphan_non_placement_rows(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR15 — orphan rows with placement=None (header chrome,
+    stray epithets that didn't route forward) used to slip through
+    to the template's JS init loop. `dict.get('placement', i+1)`
+    returns the actual None when the key exists, not the default,
+    so Jinja rendered the bare word "None" into the JS — invalid,
+    ReferenceError, entire IIFE dies, submit handler never wires,
+    every `placement_<reg.id>` posts empty, the route flashes
+    "Enter at least one placement", and the organiser's whole OCR
+    entry is silently swallowed. The route now filters those rows
+    before the template ever sees them."""
+    from uma_ladder.models import OcrParseStatus, UploadedImage
+    from uma_ladder.models.enums import UploadPurpose
+
+    sid, pid = _setup(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+
+    with app.app_context():
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"a-orphan-{race_id}.png",
+            mime_type="image/png",
+            size_bytes=100,
+            purpose=UploadPurpose.OCR_RESULT,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            raw_text="",
+            parsed_json={
+                "rows": [
+                    # Real placement.
+                    {"placement": 1, "uma_name": "Gold Ship"},
+                    # Orphan epithet — placement=None.
+                    {"placement": None, "uma_name": None, "raw_line": "SS RANK"},
+                    # Another real placement.
+                    {"placement": 2, "uma_name": "Special Week"},
+                    # Another orphan.
+                    {"placement": None, "uma_name": None, "raw_line": "Ideal Idol"},
+                ],
+            },
+            confidence_json={},
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Real placement rows survived.
+    assert "Gold Ship" in body
+    assert "Special Week" in body
+    # The orphan raw_line values shouldn't render — they're filtered
+    # before the template loop ever sees them.
+    assert "SS RANK" not in body
+    # And the JS-killing bare-word "None" must NOT appear in any
+    # `ocrRowPlacements[i] = ...` assignment.
+    import re
+
+    for line in re.findall(r"ocrRowPlacements\[\d+\]\s*=\s*[^;]+;", body):
+        assert "None" not in line, f"bare None leaked into JS: {line!r}"
+
+
 def test_confirm_template_renders_position_chip(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

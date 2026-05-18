@@ -201,7 +201,14 @@
       const ocrRowStrategies = {};    // ocr row index → strategy string
       {% for i in range(parsed_rows|length) %}
       assignments[{{ i }}] = document.querySelector('[name="ocr_assign_{{ i }}"]').value || null;
-      ocrRowPlacements[{{ i }}] = {{ parsed_rows[i].get('placement', i + 1) }};
+      {# PR-OCR15 — `| tojson` is load-bearing: without it a Python
+         `None` slips through as the bare word "None" in JS context
+         and throws ReferenceError, killing the entire IIFE. tojson
+         converts None to `null` so the loop can finish + the submit
+         handler can wire up. The route also pre-filters non-
+         placement rows, so this should never see None in practice
+         — defense in depth for future row shapes. #}
+      ocrRowPlacements[{{ i }}] = {{ parsed_rows[i].get('placement', i + 1) | tojson }};
       ocrRowNames[{{ i }}] = {{ parsed_rows[i].get('uma_name', '') | tojson }};
       ocrRowFinishTimes[{{ i }}] = {{ parsed_rows[i].get('time_or_lengths', '') | tojson }};
       ocrRowGates[{{ i }}] = {{ parsed_rows[i].get('gate', '') | tojson }};

@@ -665,6 +665,15 @@ def results_from_ocr(race_id: int, attempt_id: int) -> object:
     registrations = official_service.list_registrations(race_id)
 
     parsed_rows = (attempt.parsed_json or {}).get("rows", []) or []
+    # PR-OCR15 — drop orphan non-placement rows (header chrome like
+    # "SS RANK", stray epithets that didn't route forward) before
+    # rendering. The template's JS reads each row's `placement` into
+    # a JS literal, and a Python `None` renders as the bare word
+    # "None" in the JS context → ReferenceError → entire IIFE dies
+    # mid-loop → no submit handler registered → on submit every
+    # `placement_<reg.id>` is empty and the route flashes "Enter at
+    # least one placement", swallowing the organiser's whole entry.
+    parsed_rows = [r for r in parsed_rows if r.get("placement") is not None]
     # Best-effort pre-match: case-insensitive substring match between the
     # OCR uma_name and registered usernames. Falls through cleanly when
     # there's no signal — organiser picks from the dropdown.
