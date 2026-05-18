@@ -48,6 +48,7 @@ from .presets import RacePreset
 from .profiles import UserProfile
 from .reports import Report, ReportStatus
 from .seasons import Season
+from .skill_condition import SkillCondition
 from .uma_character import UmaCharacter
 from .uma_moe_cache import UmaMoeCache
 from .uma_outfit import UmaOutfit
@@ -99,6 +100,7 @@ __all__ = [
     "Role",
     "Season",
     "SeasonStatus",
+    "SkillCondition",
     "Surface",
     "UmaCharacter",
     "UmaMoeCache",

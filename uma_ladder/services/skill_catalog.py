@@ -1,0 +1,147 @@
+"""PR-SK1 — skill catalog query helpers.
+
+Consumed by items 5 (gray-out skills that don't apply to a race's
+conditions) and 6 (apply green-skill stat buffs to the displayed
+result). Both consumers operate over the *uma's actual skills* +
+the *race context*; this module exposes the primitives they need
+without baking in the display-side decisions.
+
+The catalog itself is `SkillCondition` rows. Each row has nullable
+predicate columns (direction, surface, weather, season,
+distance_category, strategy, venue, is_standard_distance) and
+signed buff columns (buff_speed, ..., buff_wisdom). A predicate
+that is NULL means "skill doesn't care about this axis"; for the
+skill to apply, every non-NULL predicate must match the race
+context.
+
+`is_dynamic` skills don't apply for display purposes — their
+trigger is runtime-only. Items 5/6 treat them as "always grayed,
+never buff".
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ..extensions import db
+from ..models import SkillCondition
+
+# In-game "standard distances" — the four canonical race lengths
+# the "Standard Distance" skill family matches. Anything else is
+# "non-standard" for the inverse skill.
+_STANDARD_DISTANCES: frozenset[int] = frozenset({1600, 2000, 2400, 3200})
+
+
+@dataclass(frozen=True)
+class RaceContext:
+    """Static race conditions a SkillCondition's predicate can be
+    matched against. None for any field means "context unknown" —
+    a predicate that constrains that axis won't match (we can't
+    confirm a match when we don't know the value)."""
+
+    direction: str | None = None         # "Left" / "Right"
+    surface: str | None = None           # "Turf" / "Dirt"
+    weather: str | None = None           # "Sunny" / "Cloudy" / "Rainy" / "Snowy"
+    season: str | None = None            # "Spring" / "Summer" / "Autumn" / "Winter"
+    distance_category: str | None = None  # "Sprint" / "Mile" / "Medium" / "Long"
+    distance_meters: int | None = None
+    strategy: str | None = None          # "Front" / "Pace" / "Late" / "End"
+    venue: str | None = None             # "Nakayama" / "Tokyo" / ...
+
+    @property
+    def is_standard_distance(self) -> bool | None:
+        if self.distance_meters is None:
+            return None
+        return self.distance_meters in _STANDARD_DISTANCES
+
+
+@dataclass(frozen=True)
+class Buff:
+    """Per-stat buff a matching SkillCondition contributes. All
+    fields default to 0; consumers sum across multiple matching
+    skills."""
+
+    speed: int = 0
+    stamina: int = 0
+    power: int = 0
+    guts: int = 0
+    wisdom: int = 0
+
+    @property
+    def any_nonzero(self) -> bool:
+        return any(
+            (self.speed, self.stamina, self.power, self.guts, self.wisdom)
+        )
+
+    def __add__(self, other: Buff) -> Buff:
+        return Buff(
+            speed=self.speed + other.speed,
+            stamina=self.stamina + other.stamina,
+            power=self.power + other.power,
+            guts=self.guts + other.guts,
+            wisdom=self.wisdom + other.wisdom,
+        )
+
+
+def condition_matches(
+    condition: SkillCondition, context: RaceContext
+) -> bool:
+    """True iff every non-NULL predicate on the condition row
+    matches the corresponding axis of the race context. `is_dynamic`
+    skills NEVER match — their trigger is runtime-only and the
+    display layer can't know whether they'll fire."""
+    if condition.is_dynamic:
+        return False
+
+    def _matches(predicate, context_value) -> bool:
+        # NULL predicate = "skill doesn't care".
+        if predicate is None:
+            return True
+        # Context unknown but predicate set = can't confirm match.
+        if context_value is None:
+            return False
+        return predicate == context_value
+
+    if not _matches(condition.direction, context.direction):
+        return False
+    if not _matches(condition.surface, context.surface):
+        return False
+    if not _matches(condition.weather, context.weather):
+        return False
+    if not _matches(condition.season, context.season):
+        return False
+    if not _matches(condition.distance_category, context.distance_category):
+        return False
+    if not _matches(condition.strategy, context.strategy):
+        return False
+    if not _matches(condition.venue, context.venue):
+        return False
+    return _matches(
+        condition.is_standard_distance, context.is_standard_distance
+    )
+
+
+def buff_for(condition: SkillCondition) -> Buff:
+    """Extract the catalog row's stat-buff fields as a Buff."""
+    return Buff(
+        speed=condition.buff_speed,
+        stamina=condition.buff_stamina,
+        power=condition.buff_power,
+        guts=condition.buff_guts,
+        wisdom=condition.buff_wisdom,
+    )
+
+
+def conditions_for(skill_ids: list[int]) -> dict[int, SkillCondition]:
+    """Fetch SkillCondition rows for the given skill ids, keyed by
+    skill_id. Missing entries simply absent from the result —
+    caller decides what "no catalog entry" means (item 5 likely
+    "don't gray out", item 6 "no buff")."""
+    if not skill_ids:
+        return {}
+    rows = db.session.scalars(
+        db.select(SkillCondition).where(
+            SkillCondition.skill_id.in_(skill_ids)
+        )
+    ).all()
+    return {row.skill_id: row for row in rows}
