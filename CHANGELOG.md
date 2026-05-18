@@ -8,6 +8,32 @@ log for the full history.
 
 ### Official races
 
+- **Multi-screenshot OCR upload, with clipboard paste (PR-OCR5).**
+  The Official race-result screenshot upload now matches Draft's
+  flow: pick multiple screenshots in one go (or paste sequentially
+  from clipboard), see a thumbnail preview strip with per-file
+  remove buttons, parse them all together. The merge keeps the
+  highest-confidence parse for each placement when several
+  screenshots overlap. Same upgrade applies to the per-result
+  "Add details from screenshot" uploads on the Race Results card
+  — pick both sheets for an uma in one submit and the extractor
+  unions the skills + first-non-empty stats. Clipboard paste uses
+  an arm button (📋) because the page has many forms; click to
+  arm a specific form, then Ctrl+V (or paste multiple times to
+  accumulate). The Clear button empties the queue.
+
+- **Relative time + live room-code countdown (PR-T2).** The
+  dashboard "Upcoming Official Races" tile and the `/official/`
+  list now render scheduled time in your browser's local timezone
+  with a relative tail (e.g. `starts in 5d 14h`) — same pattern
+  the race detail page already had. And when a race is in the
+  `Room code available` state, a new green chip on the race
+  detail page surfaces a live `Room code expires in 12m 34s`
+  countdown that ticks every second — visible to anyone viewing
+  the race so registered players no longer have to chase the
+  Discord webhook to see how long they have to join. The chip
+  flips to a red `Room code expired` after expiry.
+
 - **Uma sheet OCR available on race-result detail uploads
   (PR-OCR4).** When an organiser hits "Add details from
   screenshot" on a race result, the upload now runs through the

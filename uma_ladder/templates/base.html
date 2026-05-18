@@ -205,5 +205,10 @@
       not affiliated with Cygames.
     </footer>
     {% endblock %}
+    {# PR-T2 — shared countdown renderer used by race detail
+       (Scheduled + Room code), dashboard race tile, and
+       /official/ list. Idempotent + no-op when no
+       [data-countdown] elements exist on the page. #}
+    <script src="{{ url_for('static', filename='js/countdown.js') }}" defer></script>
   </body>
 </html>

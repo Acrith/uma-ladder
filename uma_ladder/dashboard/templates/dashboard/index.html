@@ -178,7 +178,15 @@
                   </span>
                   {% if race.scheduled_at %}
                     <span class="text-slate-700">·</span>
-                    <span class="inline-flex items-center gap-1 text-amber-300">{{ icon_clock(class="h-3 w-3") }} {{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+                    {# PR-T2 — relative time replaces absolute UTC.
+                       Same shared [data-countdown] handler used on
+                       the race detail Scheduled block. #}
+                    <span class="inline-flex items-center gap-1 text-amber-300"
+                          data-countdown
+                          data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+                      {{ icon_clock(class="h-3 w-3") }}
+                      <span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+                    </span>
                   {% endif %}
                 </p>
               </a>

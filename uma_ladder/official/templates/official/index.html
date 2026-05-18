@@ -53,7 +53,15 @@
                   <p class="truncate text-base font-semibold text-slate-100">{{ race.name }}</p>
                   <p class="mt-1 text-xs text-slate-400">
                     {% if race.season %}{{ race.season.name }}{% endif %}
-                    {% if race.scheduled_at %} · {{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}
+                    {% if race.scheduled_at %}
+                      ·
+                      {# PR-T2 — relative time replaces absolute UTC.
+                         Pre-JS fallback keeps the UTC string visible. #}
+                      <span data-countdown
+                            data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+                        <span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+                      </span>
+                    {% endif %}
                   </p>
                 </div>
                 {{ official_status_chip(race.status) }}
