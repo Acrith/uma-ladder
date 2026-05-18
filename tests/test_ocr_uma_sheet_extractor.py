@@ -252,11 +252,36 @@ def test_skills_strips_level_indicator(
 def test_skills_empty_when_no_marker(
     app: Flask, seeded_skills: list[UmaSkill]
 ) -> None:
-    """Without a `Skills … Career Info` marker the post-block search
-    can't start — extractor returns []."""
+    """PR-OCR9 — without a `Skills … Career Info` marker the
+    extractor now falls back to scanning the WHOLE block (handles
+    continuation screenshots that just show slots 9-16 with no
+    section header). So if a catalog skill name IS in the text, it
+    still resolves; only TRULY non-skill text returns []. This
+    test uses text with no catalogue match → still []."""
     with app.app_context():
-        result = extract_uma_sheet(["random text", "Anchors Aweigh!"])
+        result = extract_uma_sheet(["random text", "no catalog match here"])
     assert result.skills == []
+
+
+def test_skills_no_marker_fallback_finds_catalogue_names(
+    app: Flask, seeded_skills: list[UmaSkill]
+) -> None:
+    """PR-OCR9 — continuation screenshot path. No marker, no
+    header text, just skill names → the whole-block fallback
+    catches them so multi-screenshot merge doesn't lose slots
+    9-16."""
+    with app.app_context():
+        result = extract_uma_sheet(
+            [
+                # No marker. Pure skill content as Vision would
+                # produce for screenshot 2 of a 2-shot upload.
+                "Anchors Aweigh!",
+                "Barcarole of Blessings",
+            ]
+        )
+    names = [s["name_en"] for s in result.skills]
+    assert "Anchors Aweigh!" in names
+    assert "Barcarole of Blessings" in names
 
 
 # ─── Header: best-effort fields ──────────────────────────────────
@@ -435,12 +460,18 @@ def test_skills_block_debug_exposed(
     assert "Anchors Aweigh!" in result.skills_block_debug
 
 
-def test_skills_block_debug_empty_when_no_marker(
+def test_skills_block_debug_reflects_whole_block_fallback(
     app: Flask, seeded_skills: list[UmaSkill]
 ) -> None:
+    """PR-OCR9 — when no marker, the debug block is now the WHOLE
+    scanned text rather than empty (since the fallback scans the
+    whole block looking for catalogue names)."""
     with app.app_context():
         result = extract_uma_sheet(["just some text"])
-    assert result.skills_block_debug == ""
+    # The block IS populated; it's just that no catalogue name
+    # matched inside it, so `skills` is still empty.
+    assert "just some text" in result.skills_block_debug
+    assert result.skills == []
 
 
 # ─── PR-OCR3: merge_extracts ─────────────────────────────────────

@@ -220,10 +220,22 @@ def _find_skills_marker(line_texts: Sequence[str]) -> int | None:
 def _extract_skills_section_text(
     line_texts: Sequence[str],
 ) -> str:
-    """Return the joined post-Skills, pre-Close text block."""
+    """Return the joined post-Skills, pre-Close text block.
+
+    PR-OCR9 — marker fallback for continuation screenshots. When the
+    organiser uploads a SECOND screenshot showing only the bottom
+    half of an uma's skill list (slots 9-16 say), the in-game
+    `Skills` tab marker has scrolled off the top and the OCR text
+    contains only skill names. Previously we'd return "" and skip
+    every skill on the continuation. Now we treat the whole block
+    as skill-content when there's no marker — header / stats /
+    aptitudes from screenshot 1 still extract correctly because
+    THOSE extractors don't depend on this marker, and the catalogue
+    scan is anchored on full skill names, so non-skill text in a
+    no-marker screenshot just produces no false matches."""
     start_idx = _find_skills_marker(line_texts)
     if start_idx is None:
-        return ""
+        start_idx = 0
     end_idx = len(line_texts)
     for i in range(start_idx, len(line_texts)):
         # Stop at the first line that's ONLY an end token.

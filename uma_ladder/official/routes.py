@@ -794,6 +794,14 @@ def upload_result_details_screenshot(race_id: int, result_id: int) -> object:
     new_parsed = dict(primary.parsed_json or {})
     new_parsed["stats"] = merged.stats
     new_parsed["skills"] = [s["name_en"] for s in merged.skills]
+    # PR-OCR9 — also persist aptitudes from the merge. Previously
+    # the merge wrote stats + skills only; the confirm route would
+    # then re-extract from cleared rows (returning empty
+    # aptitudes) and fall back to result.aptitudes which is
+    # similarly empty on first upload. Net effect: aptitudes from
+    # screenshot 1 disappeared whenever a second screenshot was
+    # also picked.
+    new_parsed["aptitudes"] = merged.aptitudes
     # Empty rows so the confirm route's re-extract pass returns empty
     # and the fallback to parsed_json's pre-merged stats/skills wins.
     new_parsed["rows"] = []
@@ -932,12 +940,15 @@ def result_details_from_ocr(
             .order_by(UmaSkill.name_en.asc())
         )
     )
-    # PR-A1 — aptitude pre-fill. Prefer the freshly-parsed sheet
-    # extract when present; fall back to whatever was previously
-    # saved on the result. Empty dict means we couldn't parse any
-    # row, so the form renders all-empty selects.
+    # PR-A1 — aptitude pre-fill. PR-OCR9: three-tier fallback —
+    # fresh extractor pass first (single-upload normal path);
+    # parsed_json["aptitudes"] second (multi-upload merge pre-stored
+    # them there); previously-saved result.aptitudes last (re-visiting
+    # the form after an earlier save).
     parsed_aptitudes: dict = (
-        sheet.aptitudes if sheet.aptitudes else (result.aptitudes or {})
+        sheet.aptitudes
+        or (parsed.get("aptitudes") or {})
+        or (result.aptitudes or {})
     )
 
     return render_template(

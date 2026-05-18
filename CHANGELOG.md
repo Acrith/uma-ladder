@@ -8,6 +8,20 @@ log for the full history.
 
 ### Official races
 
+- **Continuation-screenshot skills now resolve (PR-OCR9).** Two
+  related bugs surfaced from the first multi-screenshot uma-sheet
+  upload after PR-A1: (1) when both screenshots were merged,
+  aptitudes from screenshot 1 disappeared from the confirm form
+  — the multi-upload merge stored stats + skills but forgot
+  aptitudes; (2) skills from screenshot 2 (showing only slots
+  9-16, no header / no `Skills` tab marker visible) didn't show
+  up because the extractor required the marker to find the
+  skills block. Both fixed: the merge now persists aptitudes
+  too, and the extractor falls back to scanning the whole text
+  block when no marker is found. Continuation screenshots (and
+  any screenshot where the marker scrolled off-screen) now
+  contribute their skills to the merged result.
+
 - **Track / Distance / Style aptitudes now stored + shown on race
   results (PR-A1).** The per-result confirm form gains an
   **Aptitudes** section with grade selectors (G — S) for each of

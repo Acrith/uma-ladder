@@ -598,6 +598,52 @@ def test_aptitudes_empty_field_omits_slot(
         }
 
 
+def test_multi_upload_persists_aptitudes_to_parsed_json(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR9 — fixes the silent-aptitudes-loss bug: when an
+    organiser uploads 2 screenshots together, the merged parsed_json
+    must carry aptitudes so the confirm-route fallback finds them.
+
+    Previously: route stored stats + skills only → confirm route
+    re-extracted from cleared rows → empty aptitudes → form blank.
+    """
+    from uma_ladder.models import OcrParseAttempt
+
+    app.config["OCR_PROVIDER"] = "mock"
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    # Two uploads — first carries Tamamo's full sheet (with
+    # aptitudes), second is a stub. The merged primary attempt's
+    # parsed_json must include the aptitudes dict so the confirm
+    # page renders the dropdowns pre-selected.
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={
+            "image": [
+                (io.BytesIO(_png_bytes()), "a.png"),
+                (io.BytesIO(_png_bytes()), "b.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        primary = (
+            db.session.query(OcrParseAttempt)
+            .order_by(OcrParseAttempt.id)
+            .first()
+        )
+        # Even with empty mock-OCR aptitudes (no real sheet),
+        # the key MUST be present in parsed_json post-merge — the
+        # confirm route's fallback relies on it.
+        assert "aptitudes" in (primary.parsed_json or {})
+
+
 def test_per_result_multi_upload_merges_sheet_extracts(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

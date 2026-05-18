@@ -722,11 +722,13 @@
           // visible in DevTools without instrumenting the user's
           // machine remotely. Cheap; only fires on file pick / paste.
           if (window.console && window.console.log) {
+            // queue.files.length already reflects items just added via
+            // queue.items.add() — don't double-count.
             console.log(
               '[OCR upload] added=' + added +
               ' non_image=' + rejectedNonImage +
               ' duplicate=' + rejectedDuplicate +
-              ' queue_total=' + (queue.files.length + added) +
+              ' queue_total=' + queue.files.length +
               ' form=' + (form.getAttribute('action') || '?')
             );
           }
