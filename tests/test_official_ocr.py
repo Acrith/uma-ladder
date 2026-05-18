@@ -172,6 +172,53 @@ def test_substring_match_assigns_registration(
     assert "selected>\n                        @mockuma" in body or 'selected>' in body and '@mockuma' in body
 
 
+def test_match_uses_player_name_when_uma_name_does_not_match(app: Flask) -> None:
+    """PR-OCR11 — the trainer name lives on `player_name` (set by the
+    PR-I3 row parser); usernames almost never match the uma_name
+    (horse name). Pre-PR-OCR11 the matcher only looked at uma_name,
+    so a row like {uma_name: 'Nice Nature', player_name: 'Acrith'}
+    never auto-assigned to the registered @acrith. This regression
+    test pins the new behaviour."""
+    from collections import namedtuple
+
+    from uma_ladder.official.routes import _match_ocr_to_registrations
+
+    FakeUser = namedtuple("FakeUser", ["username"])
+    FakeReg = namedtuple("FakeReg", ["id", "user"])
+    registrations = [
+        FakeReg(id=101, user=FakeUser(username="acrith")),
+        FakeReg(id=102, user=FakeUser(username="renn")),
+    ]
+    parsed_rows = [
+        # uma_name has no relation to usernames; player_name carries them.
+        {"placement": 7, "uma_name": "Nice Nature", "player_name": "Acrith"},
+        {"placement": 8, "uma_name": "Mejiro Ardan", "player_name": "Renn"},
+    ]
+    suggestions = _match_ocr_to_registrations(parsed_rows, registrations)
+    assert suggestions == {0: 101, 1: 102}
+
+
+def test_match_falls_back_to_uma_name_when_player_name_missing(app: Flask) -> None:
+    """When PR-I3 didn't extract a player_name (e.g. a sparse row or
+    a pre-PR-I3 row), the matcher should still fall back to matching
+    uma_name against the username. Keeps the legacy mock-provider
+    suite + any odd OCR row that captured the trainer text into
+    uma_name working."""
+    from collections import namedtuple
+
+    from uma_ladder.official.routes import _match_ocr_to_registrations
+
+    FakeUser = namedtuple("FakeUser", ["username"])
+    FakeReg = namedtuple("FakeReg", ["id", "user"])
+    registrations = [FakeReg(id=200, user=FakeUser(username="mockuma"))]
+    parsed_rows = [
+        # No player_name — substring match on uma_name fires.
+        {"placement": 1, "uma_name": "MockUma A"},
+    ]
+    suggestions = _match_ocr_to_registrations(parsed_rows, registrations)
+    assert suggestions == {0: 200}
+
+
 def test_full_ocr_to_results_round_trip(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

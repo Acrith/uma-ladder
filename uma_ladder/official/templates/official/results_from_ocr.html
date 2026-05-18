@@ -64,6 +64,7 @@
               {% set row = parsed_rows[i] %}
               {% set placement = row.get('placement', i + 1) %}
               {% set ocr_uma = row.get('uma_name', '') %}
+              {% set ocr_player = row.get('player_name', '') %}
               {% set ocr_time = row.get('time_or_lengths', '') %}
               {% set ocr_gate = row.get('gate', '') %}
               {% set ocr_fav = row.get('fav_rank', '') %}
@@ -79,6 +80,11 @@
                 </td>
                 <td class="pr-3 py-2 text-slate-400">
                   <p>{{ ocr_uma or '—' }}</p>
+                  {% if ocr_player %}
+                    <p class="mt-0.5 text-xs text-slate-500">
+                      trainer <span class="text-slate-300">{{ ocr_player }}</span>
+                    </p>
+                  {% endif %}
                   {# PR-A5 — surface the row-parser fields the OCR
                      pipeline pulls off the result screen. Hidden
                      value carriers below mirror these into the

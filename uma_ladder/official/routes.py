@@ -678,27 +678,46 @@ def results_from_ocr(race_id: int, attempt_id: int) -> object:
 def _match_ocr_to_registrations(
     parsed_rows: list[dict], registrations
 ) -> dict[int, int]:
-    """Return {parsed_row_index: registration_id} for confident matches."""
+    """Return {parsed_row_index: registration_id} for confident matches.
+
+    The PR-I3 row parser splits each placement row into an `uma_name`
+    (the in-game horse name, e.g. "Nice Nature") and a `player_name`
+    (the trainer name shown on the result screen, e.g. "Acrith"). The
+    trainer name is what matches a registered user's `username` — the
+    uma name almost never will. Match priority:
+
+    1. player_name exact match against username
+    2. player_name substring match (either direction)
+    3. uma_name fallback (kept for the case where someone registers
+       under their uma's name, or where OCR lost the player line and
+       the uma_name accidentally captured the trainer text)
+    """
     by_username = {r.user.username.lower(): r.id for r in registrations}
     suggestions: dict[int, int] = {}
     used: set[int] = set()
-    for i, row in enumerate(parsed_rows):
-        name = (row.get("uma_name") or "").strip().lower()
-        if not name:
-            continue
-        # exact match first
-        if name in by_username and by_username[name] not in used:
-            suggestions[i] = by_username[name]
-            used.add(by_username[name])
-            continue
-        # substring fallback
+
+    def _try_match(candidate: str) -> int | None:
+        cand = candidate.strip().lower()
+        if not cand:
+            return None
+        if cand in by_username and by_username[cand] not in used:
+            return by_username[cand]
         for uname, rid in by_username.items():
             if rid in used:
                 continue
-            if name in uname or uname in name:
-                suggestions[i] = rid
-                used.add(rid)
-                break
+            if cand in uname or uname in cand:
+                return rid
+        return None
+
+    for i, row in enumerate(parsed_rows):
+        # player_name first — trainer-name field from PR-I3 row parser.
+        rid = _try_match(row.get("player_name") or "")
+        if rid is None:
+            # uma_name fallback — pre-PR-I3 rows + accidental captures.
+            rid = _try_match(row.get("uma_name") or "")
+        if rid is not None:
+            suggestions[i] = rid
+            used.add(rid)
     return suggestions
 
 

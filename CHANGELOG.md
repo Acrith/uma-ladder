@@ -8,6 +8,28 @@ log for the full history.
 
 ### Official races
 
+- **OCR auto-assigns to the trainer, not the horse (PR-OCR11).**
+  The "Confirm parsed results" page used to leave every dropdown
+  on *— skip this row —* because it was matching the parsed
+  *uma name* (horse, e.g. "Nice Nature") against registered
+  usernames — those almost never line up. It now matches the
+  parsed *trainer name* (e.g. "Acrith") against usernames
+  exactly the way the OCR row already shows it, and falls back
+  to the uma name for older rows that didn't capture a trainer.
+  The "Detected" column now also displays the parsed trainer name
+  under the uma name so it's obvious what the OCR saw.
+
+### OCR sandbox
+
+- **Parse-review page is readable on the dark theme (PR-OCR11).**
+  The `/ocr/attempts/<id>` review page was unstyled legacy and
+  rendered as white-on-white inputs + raw-text blocks — the
+  contents were only visible by selecting them. Migrated to the
+  shared design system (`input-base`, `surface-card`, slate-950
+  pre blocks); same layout, now legible.
+
+### Official races
+
 - **Overall uma rank glyph + score on race results (PR-A6).**
   Each per-result card now shows the in-game **overall** rank
   glyph (G / G+ / … / SS+ / Ug⁰..Ug⁶) next to the uma name,
