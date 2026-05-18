@@ -519,6 +519,17 @@
         <p class="mt-4 text-xs text-slate-500">…or enter manually:</p>
         <form method="post" action="{{ url_for('official.submit_results', race_id=race.id) }}" class="mt-2">
           {{ results_form.hidden_tag() }}
+          {# PR-SK9 — participant_count drives the gate-bracket math
+             used by Inner / Outer Post Proficiency. Optional but
+             encouraged; leaving blank means post-number-conditional
+             skills stay cyan (we can't compute brackets without
+             total uma count). #}
+          <div class="mb-3 flex items-center gap-2 text-xs">
+            <label class="text-slate-400">Total participants (players + CPU)</label>
+            <input type="number" min="1" max="18" name="participant_count"
+                   value="{{ race.participant_count or '' }}"
+                   class="input-base w-20" />
+          </div>
           <table class="w-full text-sm">
             <thead class="text-xs uppercase tracking-wider text-slate-500">
               <tr><th class="pr-3 py-1 text-left">Player</th><th class="pr-3 py-1 text-left">Place</th><th class="text-left">Uma</th></tr>

@@ -206,6 +206,159 @@ def test_applies_passively_stricter_than_condition_matches(
 # ─── is_standard_distance ────────────────────────────────────────
 
 
+def test_gate_bracket_one_to_one_at_eight_participants() -> None:
+    """PR-SK9 — with exactly 8 participants, gate G maps to
+    bracket G. Baseline of the bracket algorithm."""
+    from uma_ladder.services.skill_catalog import gate_bracket
+
+    for g in range(1, 9):
+        assert gate_bracket(g, 8) == g, f"gate {g} in 8-uma race"
+
+
+def test_gate_bracket_extras_fill_from_bracket_8_backward() -> None:
+    """PR-SK9 — community wiki rule: with > 8 participants,
+    extras land in the LAST brackets first. The algorithm: first
+    (8 - N % 8) brackets get N // 8 gates each (filled from
+    gate 1 going up); last (N % 8) brackets each get one
+    additional gate (so N // 8 + 1 apiece)."""
+    from uma_ladder.services.skill_catalog import gate_bracket
+
+    # N=9 → brackets 1..7 hold one gate each (1..7); bracket 8
+    # holds gates 8 and 9.
+    assert gate_bracket(7, 9) == 7
+    assert gate_bracket(8, 9) == 8
+    assert gate_bracket(9, 9) == 8
+
+    # N=10 → brackets 1..6 hold one gate each (1..6); brackets
+    # 7 and 8 hold two gates each (7-8 and 9-10).
+    assert gate_bracket(6, 10) == 6
+    assert gate_bracket(7, 10) == 7
+    assert gate_bracket(8, 10) == 7
+    assert gate_bracket(9, 10) == 8
+    assert gate_bracket(10, 10) == 8
+
+    # N=16 → 2 gates per bracket all the way.
+    for g in range(1, 17):
+        assert gate_bracket(g, 16) == ((g - 1) // 2) + 1, f"gate {g}"
+
+    # N=18 → first 6 brackets get 2 gates, last 2 get 3.
+    # gates 1..12 in brackets 1..6 (2 each), 13..15 in bracket 7,
+    # 16..18 in bracket 8.
+    assert gate_bracket(12, 18) == 6
+    assert gate_bracket(13, 18) == 7
+    assert gate_bracket(15, 18) == 7
+    assert gate_bracket(16, 18) == 8
+    assert gate_bracket(18, 18) == 8
+
+
+def test_gate_bracket_returns_none_for_missing_or_invalid() -> None:
+    """When gate or participant_count is missing / out-of-range,
+    the bracket is None — callers default to permissive (don't
+    gray a post-number-conditional skill)."""
+    from uma_ladder.services.skill_catalog import gate_bracket
+
+    assert gate_bracket(None, 12) is None
+    assert gate_bracket(5, None) is None
+    assert gate_bracket(0, 12) is None
+    assert gate_bracket(13, 12) is None  # gate exceeds participants
+    assert gate_bracket(5, 0) is None
+    assert gate_bracket(5, 19) is None   # too many participants
+
+
+def test_inapplicable_inner_post_grays_on_outer_brackets(app: Flask) -> None:
+    """PR-SK9 — Inner Post Proficiency (`max_post_number=3`)
+    grays on bracket 4 or higher. Driven against a 12-uma race
+    where gate 1 maps to bracket 1 (inner, stays bright) and gate
+    11 maps to bracket 7 (outer, grays)."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    inner_id = _seed_skill(
+        app, "Inner Post Proficiency Test",
+        max_post_number=3, buff_wisdom=60,
+    )
+
+    # 12-uma race: brackets 1-4 hold 1 gate each (1..4), brackets
+    # 5-8 hold 2 each (5-6, 7-8, 9-10, 11-12).
+    inner_uma = SimpleNamespace(
+        id=1, strategy=None, gate=1,
+        skills=[SimpleNamespace(skill_id=inner_id)],
+    )
+    outer_uma = SimpleNamespace(
+        id=2, strategy=None, gate=11,
+        skills=[SimpleNamespace(skill_id=inner_id)],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=12,
+    )
+
+    with app.app_context():
+        out = inapplicable_skill_ids_by_result([inner_uma, outer_uma], race)
+    # Inner uma (bracket 1) keeps the skill bright.
+    assert inner_id not in out[1]
+    # Outer uma (bracket 7) grays — 7 > max_post_number=3.
+    assert inner_id in out[2]
+
+
+def test_inapplicable_post_skill_stays_bright_when_data_missing(
+    app: Flask,
+) -> None:
+    """PR-SK9 — if `result.gate` is None (OCR didn't catch it) or
+    `race.participant_count` is None (organizer didn't fill it
+    in), the bracket can't be computed and post-number skills
+    stay bright. Defensive default per the user's requirement
+    ('If race wasn't parsed correctly, inner post/outer post
+    must be disabled by default')."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    inner_id = _seed_skill(
+        app, "Inner Post No-Data Test",
+        max_post_number=3, buff_wisdom=60,
+    )
+    # Scenario A: result has no gate.
+    no_gate = SimpleNamespace(
+        id=1, strategy=None, gate=None,
+        skills=[SimpleNamespace(skill_id=inner_id)],
+    )
+    race_full = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=12,
+    )
+    with app.app_context():
+        out = inapplicable_skill_ids_by_result([no_gate], race_full)
+    assert inner_id not in out[1]
+
+    # Scenario B: race has no participant_count.
+    has_gate = SimpleNamespace(
+        id=2, strategy=None, gate=15,  # would be outer in 18-uma race
+        skills=[SimpleNamespace(skill_id=inner_id)],
+    )
+    race_no_pc = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=None,
+    )
+    with app.app_context():
+        out = inapplicable_skill_ids_by_result([has_gate], race_no_pc)
+    assert inner_id not in out[2]
+
+
 def test_ground_condition_exclude_grays_on_excluded_value(app: Flask) -> None:
     """PR-SK8 — `ground_condition_exclude="Firm"` is the Wet
     Conditions shape: skill applies UNLESS race ground is Firm.

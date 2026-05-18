@@ -32,6 +32,48 @@ from ..models import SkillCondition
 _STANDARD_DISTANCES: frozenset[int] = frozenset({1600, 2000, 2400, 3200})
 
 
+def gate_bracket(gate: int | None, participants: int | None) -> int | None:
+    """PR-SK9 — compute the post-number / gate bracket (1..8)
+    from a 1-indexed `gate` and the total `participants` count.
+
+    Rule (from the community wiki user supplied): there are
+    always 8 brackets. With N participants:
+
+    - First `(8 - N % 8)` brackets get `N // 8` gates each
+      (filled left-to-right from gate 1).
+    - Last `N % 8` brackets each get one additional gate (so
+      `N // 8 + 1` gates apiece).
+
+    Examples:
+      N=8  → 1:1 (gate G → bracket G)
+      N=9  → gates 1..7 in brackets 1..7, gates 8 and 9 share bracket 8
+      N=10 → gates 7-8 in bracket 7, gates 9-10 in bracket 8
+      N=16 → every bracket has 2 consecutive gates
+      N=18 → first 6 brackets get 2 gates, last 2 get 3
+
+    Returns None when either input is missing or out-of-range
+    (gate must be 1..participants, participants must be 1..18).
+    Callers default to "skill applies" when this returns None
+    so we don't gray-out skills on partially-OCR'd rows."""
+    if gate is None or participants is None:
+        return None
+    if participants < 1 or participants > 18:
+        return None
+    if gate < 1 or gate > participants:
+        return None
+    base = participants // 8
+    remainder = participants % 8
+    # Number of brackets in the "left, smaller" section.
+    full_bracket_count = 8 - remainder
+    # Last gate that falls into a smaller-sized bracket.
+    full_gates = base * full_bracket_count
+    if gate <= full_gates:
+        # 1-indexed bracket within the smaller section.
+        return (gate - 1) // base + 1 if base > 0 else gate
+    extra_offset = gate - full_gates - 1
+    return full_bracket_count + extra_offset // (base + 1) + 1
+
+
 @dataclass(frozen=True)
 class RaceContext:
     """Static race conditions a SkillCondition's predicate can be
@@ -246,9 +288,18 @@ def inapplicable_skill_ids_by_result(
                 holder_counts[sid] = holder_counts.get(sid, 0) + 1
     catalog = conditions_for(list(all_skill_ids))
 
+    participant_count = getattr(race, "participant_count", None)
+
     out: dict[int, set[int]] = {}
     for r in results:
         ctx = race_context_for(race, r)
+        # PR-SK9 — compute the result's gate bracket once per
+        # result; reused across every post_number check below.
+        # None when gate or participant_count is missing —
+        # callers treat that as "skill applies" (defensive).
+        bracket = gate_bracket(
+            getattr(r, "gate", None), participant_count
+        )
         inapp: set[int] = set()
         for assoc in getattr(r, "skills", []) or []:
             sid = getattr(assoc, "skill_id", None)
@@ -268,5 +319,24 @@ def inapplicable_skill_ids_by_result(
             if cond.max_holders is not None and count > cond.max_holders:
                 inapp.add(sid)
                 continue
+            # PR-SK9 — post_number / gate bracket bounds. Skip
+            # entirely when we couldn't compute a bracket (missing
+            # gate or missing participant_count): defaulting to
+            # "applies" matches the user's requirement that
+            # gate-conditional skills not gray when the race
+            # wasn't parsed.
+            if bracket is not None:
+                if (
+                    cond.min_post_number is not None
+                    and bracket < cond.min_post_number
+                ):
+                    inapp.add(sid)
+                    continue
+                if (
+                    cond.max_post_number is not None
+                    and bracket > cond.max_post_number
+                ):
+                    inapp.add(sid)
+                    continue
         out[r.id] = inapp
     return out

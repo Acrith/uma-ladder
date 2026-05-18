@@ -68,6 +68,14 @@ class OfficialRace(db.Model):
     race_season: Mapped[str | None] = mapped_column(String(8), nullable=True)
     weather: Mapped[str | None] = mapped_column(String(8), nullable=True)
     ground_condition: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # PR-SK9 — actual count of uma at the start (players + CPU).
+    # Drives the gate-bracket calculation that gates Inner / Outer
+    # Post Proficiency. Null until the organizer enters it via
+    # the results submission form, in which case post-number
+    # skills stay bright (we can't compute brackets without it).
+    participant_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     cancelled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

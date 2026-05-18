@@ -184,6 +184,41 @@ def test_same_skill_horse_count_eq_maps_to_min_and_max() -> None:
     assert cond.max_holders == 1
 
 
+def test_post_number_le_maps_to_max_post_number() -> None:
+    """PR-SK9 — Inner Post Proficiency (`post_number<=3`) projects
+    to `max_post_number=3`. Bracket bounds are checked at display
+    time against the bracket computed from gate + participant
+    count."""
+    cond = _coerce_skill_condition(
+        _skill(1, "post_number<=3", (5, 600000))
+    )
+    assert cond is not None
+    assert cond.is_dynamic is False
+    assert cond.max_post_number == 3
+    assert cond.min_post_number is None
+
+
+def test_post_number_ge_maps_to_min_post_number() -> None:
+    """Outer Post Proficiency (`post_number>=6`) → min_post=6."""
+    cond = _coerce_skill_condition(
+        _skill(1, "post_number>=6", (1, 600000))
+    )
+    assert cond is not None
+    assert cond.min_post_number == 6
+    assert cond.max_post_number is None
+
+
+def test_post_number_eq_maps_to_min_and_max() -> None:
+    """Lucky Seven (`==7`) → min=max=7 (only bracket 7 applies).
+    The skill also has a `random_lot==50` dynamic atom in
+    practice, but on its own `==7` projects cleanly."""
+    cond = _coerce_skill_condition(_skill(1, "post_number==7"))
+    assert cond is not None
+    assert cond.min_post_number == 7
+    assert cond.max_post_number == 7
+    assert cond.is_dynamic is False
+
+
 def test_same_skill_horse_count_with_dynamic_companion_stays_dynamic() -> None:
     """When `same_skill_horse_count` ANDs with a dynamic predicate
     (e.g. `phase_random==1&same_skill_horse_count>=2`), the

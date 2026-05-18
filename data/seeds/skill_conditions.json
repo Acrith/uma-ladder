@@ -1,7 +1,7 @@
 {
   "source": "gametora_v1",
   "attribution": "Skill condition data sourced from GameTora (https://gametora.com/umamusume/skills); not affiliated with Cygames. Maintain attribution when redistributing.",
-  "fetched_at": "2026-05-18T21:10:09.872179+00:00",
+  "fetched_at": "2026-05-18T21:34:28.596659+00:00",
   "conditions": [
     {
       "gametora_id": 10071,
@@ -2035,37 +2035,43 @@
     },
     {
       "gametora_id": 200251,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "max_post_number": 3,
       "buff_wisdom": 60,
       "notes": "Your Wisdom stat is increased by 60 when starting at gate block 1-3"
     },
     {
       "gametora_id": 200252,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "max_post_number": 3,
       "buff_wisdom": 40,
       "notes": "Your Wisdom stat is increased by 40 when starting at gate block 1-3"
     },
     {
       "gametora_id": 200253,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "max_post_number": 3,
       "buff_wisdom": -40,
       "notes": "Your Wisdom stat is decreased by 40 when starting at gate block 1-3"
     },
     {
       "gametora_id": 200261,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "min_post_number": 6,
       "buff_speed": 60,
       "notes": "Your Speed stat is increased by 60 when starting at gate block 6-8"
     },
     {
       "gametora_id": 200262,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "min_post_number": 6,
       "buff_speed": 40,
       "notes": "Your Speed stat is increased by 40 when starting at gate block 6-8"
     },
     {
       "gametora_id": 200263,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "min_post_number": 6,
       "buff_speed": -40,
       "notes": "Your Speed stat is decreased by 40 when starting at gate block 6-8"
     },
@@ -3549,6 +3555,8 @@
     {
       "gametora_id": 201561,
       "is_dynamic": true,
+      "min_post_number": 7,
+      "max_post_number": 7,
       "buff_speed": 60,
       "buff_stamina": 60,
       "buff_power": 60,
@@ -3557,6 +3565,8 @@
     {
       "gametora_id": 201562,
       "is_dynamic": true,
+      "min_post_number": 7,
+      "max_post_number": 7,
       "buff_speed": 40,
       "buff_stamina": 40,
       "buff_power": 40,
@@ -8194,11 +8204,13 @@
     {
       "gametora_id": 1300041,
       "is_dynamic": true,
+      "max_post_number": 3,
       "notes": "If you've started the race in gate block 1, 2, or 3, your speed and acceleration will slightly increase at the start, and then during the Final Leg, your acceleration will slightly increase and your stamina will recover"
     },
     {
       "gametora_id": 1300051,
       "is_dynamic": true,
+      "min_post_number": 6,
       "buff_speed": 100,
       "buff_stamina": 100,
       "buff_power": 100,
@@ -10092,7 +10104,9 @@
     },
     {
       "gametora_id": 105601211,
-      "is_dynamic": true,
+      "is_dynamic": false,
+      "min_post_number": 7,
+      "max_post_number": 7,
       "buff_speed": 80,
       "buff_stamina": 80,
       "buff_power": 80,

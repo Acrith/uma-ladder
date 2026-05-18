@@ -71,6 +71,12 @@ class SkillCondition(db.Model):
     # NULL = skill doesn't constrain the holder count.
     min_holders: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_holders: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # PR-SK9 — Inner / Outer Post Proficiency + Lucky Seven use
+    # `post_number<=N` / `>=N` / `==N` (gate bracket bounds).
+    # The bracket is computed from `result.gate` +
+    # `race.participant_count` at display time.
+    min_post_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_post_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # `True` = "applies at standard distances only" (1600/2000/2400/3200),
     # `False` = "applies at NON-standard distances only" (mirrors the
     # in-game "Non-Standard Distance" skill), `None` = doesn't care.

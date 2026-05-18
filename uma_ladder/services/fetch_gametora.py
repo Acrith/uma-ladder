@@ -831,6 +831,10 @@ _STATIC_PREDICATE_KEYS: frozenset[str] = frozenset({
     # display time. Static in the sense that the count is knowable
     # without runtime race-state.
     "same_skill_horse_count",
+    # PR-SK9 — Inner / Outer Post Proficiency + Lucky Seven use
+    # `post_number` (gate bracket 1..8). Computed at display time
+    # from result.gate + race.participant_count.
+    "post_number",
     # `always` is technically just an unconditional truth value, but
     # we treat it as a no-op when parsing — appearing in a condition
     # alongside no other predicates means "applies in every race".
@@ -869,6 +873,12 @@ class FetchedSkillCondition:
     # render time.
     min_holders: int | None = None
     max_holders: int | None = None
+    # PR-SK9 — Inner Post Proficiency (`post_number<=3`) +
+    # Outer Post (`>=6`) + Lucky Seven (`==7`). Bracket bounds;
+    # bracket per result is computed at render time from gate +
+    # race.participant_count.
+    min_post_number: int | None = None
+    max_post_number: int | None = None
     buff_speed: int = 0
     buff_stamina: int = 0
     buff_power: int = 0
@@ -888,6 +898,7 @@ class FetchedSkillCondition:
             "is_standard_distance", "ground_condition",
             "ground_condition_exclude",
             "min_holders", "max_holders",
+            "min_post_number", "max_post_number",
         ):
             val = getattr(self, key)
             if val is not None:
@@ -970,6 +981,7 @@ def _parse_condition_group(
 _ALLOWED_OPS_BY_KEY: dict[str, frozenset[str]] = {
     "ground_condition": frozenset({"==", "!="}),
     "same_skill_horse_count": frozenset({"==", ">=", "<="}),
+    "post_number": frozenset({"==", ">=", "<="}),
 }
 
 
@@ -1087,6 +1099,25 @@ def _resolve_holder_count(
     return None, None, True
 
 
+def _resolve_post_number(
+    atoms: list[tuple[str, int]],
+) -> tuple[int | None, int | None, bool]:
+    """PR-SK9 — resolver for `post_number` (gate bracket). Same
+    shape as `_resolve_holder_count` but distinct because the
+    column names differ and the render-time computation differs
+    (bracket is computed from gate + participants, not counted)."""
+    if len(atoms) != 1:
+        return None, None, True
+    op, n = atoms[0]
+    if op == "==":
+        return n, n, False
+    if op == ">=":
+        return n, None, False
+    if op == "<=":
+        return None, n, False
+    return None, None, True
+
+
 def _coerce_skill_condition(
     skill_row: dict[str, Any],
 ) -> FetchedSkillCondition | None:
@@ -1143,6 +1174,22 @@ def _coerce_skill_condition(
                 resolved["min_holders"] = mn
             if mx is not None:
                 resolved["max_holders"] = mx
+
+    # PR-SK9 — post_number (gate bracket) projects to min/max
+    # post-number bounds. Inner Post Proficiency = <=3, Outer
+    # = >=6, Lucky Seven = ==7. Bracket itself is computed at
+    # render time from result.gate + race.participant_count.
+    if "post_number" in predicates:
+        mn, mx, force_dynamic = _resolve_post_number(
+            predicates.pop("post_number")
+        )
+        if force_dynamic:
+            is_dynamic = True
+        else:
+            if mn is not None:
+                resolved["min_post_number"] = mn
+            if mx is not None:
+                resolved["max_post_number"] = mx
 
     # Remaining keys use the legacy `==`-only resolver.
     for key in (

@@ -64,6 +64,7 @@ _WRITABLE_COLUMNS: tuple[str, ...] = (
     "distance_category", "strategy", "venue", "is_standard_distance",
     "ground_condition", "ground_condition_exclude",
     "min_holders", "max_holders",
+    "min_post_number", "max_post_number",
     "buff_speed", "buff_stamina", "buff_power", "buff_guts", "buff_wisdom",
     "is_dynamic", "notes",
 )

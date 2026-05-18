@@ -60,6 +60,17 @@
             action="{{ url_for('official.submit_results', race_id=race.id) }}"
             class="mt-4">
         {{ results_form.hidden_tag() }}
+        {# PR-SK9 — participant_count drives the gate→bracket math
+           used by Inner / Outer Post Proficiency. The screenshot
+           rarely shows this number directly; the organizer fills
+           it in based on the room they hosted. Optional — leaving
+           blank just means those skills stay cyan. #}
+        <div class="mb-3 flex items-center gap-2 text-xs">
+          <label class="text-slate-400">Total participants (players + CPU)</label>
+          <input type="number" min="1" max="18" name="participant_count"
+                 value="{{ race.participant_count or '' }}"
+                 class="input-base w-20" />
+        </div>
         <table class="w-full text-sm">
           <thead class="text-xs uppercase tracking-wider text-slate-500">
             <tr>

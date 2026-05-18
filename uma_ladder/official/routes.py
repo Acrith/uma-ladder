@@ -505,6 +505,23 @@ def submit_results(race_id: int) -> object:
     if not form.validate_on_submit():
         return redirect(url_for("official.detail", race_id=race.id))
 
+    # PR-SK9 — `participant_count` on the race controls the
+    # gate→bracket math used to gate Inner / Outer Post Proficiency.
+    # Read from the form; ignore non-numeric input (the field is
+    # optional). Keep race.participant_count NULL on blank input so
+    # the gate-bracket consumers default to "don't gray".
+    participant_count_raw = (
+        request.form.get("participant_count") or ""
+    ).strip()
+    if participant_count_raw:
+        try:
+            pc = int(participant_count_raw)
+        except ValueError:
+            pc = None
+        if pc is not None and 1 <= pc <= 18:
+            race.participant_count = pc
+            db.session.commit()
+
     lines: list[official_service.ResultLine] = []
 
     def _opt_int_field(name: str) -> int | None:

@@ -8,6 +8,18 @@ log for the full history.
 
 ### Official races
 
+- **Inner / Outer Post Proficiency + Lucky Seven now gray out
+  by gate bracket (PR-SK9).** Skills that activate based on
+  starting gate bracket (Inner Post = brackets 1-3, Outer Post
+  = 6-8, Lucky Seven = bracket 7) now correctly gray when the
+  uma's gate is in the wrong bracket. Bracket is computed at
+  display time from each result's `gate` and a new
+  `participant_count` on the race (players + CPU total) — set
+  via a new input on both the OCR confirm + manual entry forms.
+  When the gate wasn't OCR'd or the organizer hasn't filled in
+  the participant count yet, post-number skills stay bright
+  conservatively (no false gray-out from missing data).
+
 - **Wet Conditions + Sympathy + Lone Wolf now gray out
   correctly (PR-SK8).** Three skill families that the prior
   catalog couldn't model:
