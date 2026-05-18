@@ -21,12 +21,16 @@ can't know if it'll fire), and item 6 ignores it.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..extensions import db
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class SkillCondition(db.Model):
@@ -73,13 +77,11 @@ class SkillCondition(db.Model):
     notes: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, default=_utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=True), nullable=False,
+        default=_utcnow, onupdate=_utcnow,
     )
 
     skill = relationship("UmaSkill", lazy="joined")

@@ -280,6 +280,124 @@ def test_race_context_is_standard_distance_property() -> None:
 # ─── Model defaults pinned ───────────────────────────────────────
 
 
+def test_seed_skill_conditions_round_trips_via_json(app: Flask, tmp_path) -> None:
+    """End-to-end: write a synthetic snapshot, run the seeder,
+    assert the SkillCondition rows are present + correct + idempotent
+    on re-run."""
+    import json
+
+    from uma_ladder.services.seed_skill_conditions import seed_skill_conditions
+
+    with app.app_context():
+        # Seed a couple of UmaSkills so the seeder has targets to bind to.
+        s1 = UmaSkill(
+            gametora_id=200011, name_en="Right-Handed Test ◎",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        s2 = UmaSkill(
+            gametora_id=200012, name_en="Right-Handed Test ○",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        # Third gametora_id deliberately missing — seeder should
+        # skip rows whose UmaSkill doesn't exist (yet) rather than
+        # 500 on FK failure.
+        db.session.add_all([s1, s2])
+        db.session.commit()
+
+    snapshot = tmp_path / "skill_conditions.json"
+    snapshot.write_text(json.dumps({
+        "source": "test",
+        "conditions": [
+            {
+                "gametora_id": 200011,
+                "is_dynamic": False,
+                "direction": "Right",
+                "buff_speed": 60,
+            },
+            {
+                "gametora_id": 200012,
+                "is_dynamic": False,
+                "direction": "Right",
+                "buff_speed": 40,
+            },
+            {
+                "gametora_id": 999999,  # no matching UmaSkill
+                "is_dynamic": False,
+                "direction": "Left",
+            },
+        ],
+    }))
+
+    with app.app_context():
+        report = seed_skill_conditions(snapshot)
+        assert report.inserted == 2
+        assert report.updated == 0
+        assert report.skipped_no_skill == 1
+
+        # Pin the data.
+        rows = db.session.scalars(db.select(SkillCondition)).all()
+        rows.sort(key=lambda r: r.skill_id)
+        # Use a lookup since other tests in this module create rows.
+        by_gid = {
+            db.session.get(UmaSkill, r.skill_id).gametora_id: r
+            for r in rows
+        }
+        assert by_gid[200011].direction == "Right"
+        assert by_gid[200011].buff_speed == 60
+        assert by_gid[200012].buff_speed == 40
+
+        # Idempotency: re-running with the same snapshot is a no-op.
+        report2 = seed_skill_conditions(snapshot)
+        assert report2.inserted == 0
+        assert report2.updated == 0
+        assert report2.skipped_no_skill == 1
+
+
+def test_seed_skill_conditions_updates_changed_fields(
+    app: Flask, tmp_path
+) -> None:
+    """When the upstream snapshot changes (e.g. a balance patch
+    adjusts the buff amount), the seeder updates the row in place
+    rather than inserting a duplicate."""
+    import json
+
+    from uma_ladder.services.seed_skill_conditions import seed_skill_conditions
+
+    with app.app_context():
+        s = UmaSkill(
+            gametora_id=200011, name_en="Right-Handed Patch Test",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        db.session.add(s)
+        db.session.commit()
+
+    snapshot = tmp_path / "v1.json"
+    snapshot.write_text(json.dumps({
+        "conditions": [{
+            "gametora_id": 200011, "direction": "Right", "buff_speed": 60,
+        }],
+    }))
+    with app.app_context():
+        seed_skill_conditions(snapshot)
+
+    # Re-write the snapshot with a buff change.
+    snapshot.write_text(json.dumps({
+        "conditions": [{
+            "gametora_id": 200011, "direction": "Right", "buff_speed": 80,
+        }],
+    }))
+    with app.app_context():
+        report = seed_skill_conditions(snapshot)
+        assert report.inserted == 0
+        assert report.updated == 1
+        cond = db.session.scalars(
+            db.select(SkillCondition).join(
+                UmaSkill, UmaSkill.id == SkillCondition.skill_id
+            ).where(UmaSkill.gametora_id == 200011)
+        ).one()
+        assert cond.buff_speed == 80
+
+
 def test_model_buff_columns_default_to_zero(app: Flask) -> None:
     """A SkillCondition row inserted with only the predicate fields
     set must come back with all five buff columns at 0 — items 5/6

@@ -10,10 +10,12 @@ from .services.fetch_gametora import (
     fetch_characters,
     fetch_g1_races,
     fetch_outfits,
+    fetch_skill_conditions,
     fetch_skills,
     write_characters_snapshot,
     write_g1_races_snapshot,
     write_outfits_snapshot,
+    write_skill_conditions_snapshot,
     write_skills_snapshot,
 )
 from .services.seed_characters import DEFAULT_SEED_PATH as DEFAULT_CHARACTER_SEED_PATH
@@ -22,6 +24,10 @@ from .services.seed_g1 import import_g1_races
 from .services.seed_outfits import DEFAULT_SEED_PATH as DEFAULT_OUTFIT_SEED_PATH
 from .services.seed_outfits import seed_outfits
 from .services.seed_presets import seed_custom_presets
+from .services.seed_skill_conditions import (
+    DEFAULT_SEED_PATH as DEFAULT_SKILL_CONDITIONS_SEED_PATH,
+)
+from .services.seed_skill_conditions import seed_skill_conditions
 from .services.seed_skills import DEFAULT_SEED_PATH as DEFAULT_SKILL_SEED_PATH
 from .services.seed_skills import seed_skills
 
@@ -267,6 +273,63 @@ def cmd_seed_skills(file_path: Path | None, prune_missing: bool) -> None:
         f"seed-skills: inserted={report.inserted} "
         f"updated={report.updated} skipped={report.skipped} "
         f"pruned={report.pruned} total={report.total}"
+    )
+
+
+# PR-SK2 — populate the skill_conditions catalog from GameTora.
+# Two-step refresh: fetch JSON to disk, commit, run seed. Same
+# pattern as fetch-gametora-skills + seed-skills.
+
+
+@uma_cli.command("fetch-gametora-skill-conditions")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output JSON path. Defaults to data/seeds/skill_conditions.json.",
+)
+def cmd_fetch_gametora_skill_conditions(out_path: Path | None) -> None:
+    """One-off: fetch the skill-condition catalog from GameTora.
+
+    Reads the same upstream skills payload `fetch-gametora-skills`
+    uses; projects each row's ``condition_groups`` to our static-
+    only schema. Skills with dynamic (runtime-only) conditions are
+    written with `is_dynamic=true` so item 5 still recognises them.
+    """
+    target = out_path or DEFAULT_SKILL_CONDITIONS_SEED_PATH
+    click.echo(f"fetch-gametora-skill-conditions: writing to {target}")
+    rows = fetch_skill_conditions()
+    write_skill_conditions_snapshot(rows, target)
+    dynamic = sum(1 for r in rows if r.is_dynamic)
+    click.echo(
+        f"fetch-gametora-skill-conditions: wrote {len(rows)} entries "
+        f"({dynamic} dynamic, {len(rows) - dynamic} static)"
+    )
+
+
+@uma_cli.command("seed-skill-conditions")
+@click.option(
+    "--file",
+    "file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the default seed JSON path.",
+)
+def cmd_seed_skill_conditions(file_path: Path | None) -> None:
+    """Idempotent upsert of SkillCondition rows.
+
+    Skips entries whose `gametora_id` doesn't match an existing
+    `UmaSkill` — run `seed-skills` first when adding entries for
+    newly-released skills.
+    """
+    report = seed_skill_conditions(file_path)
+    click.echo(
+        f"seed-skill-conditions: inserted={report.inserted} "
+        f"updated={report.updated} "
+        f"skipped_no_skill={report.skipped_no_skill} "
+        f"skipped_invalid={report.skipped_invalid} "
+        f"total={report.total}"
     )
 
 

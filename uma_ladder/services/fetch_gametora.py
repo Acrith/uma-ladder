@@ -33,6 +33,7 @@ The output JSON is written in the same shape that
 from __future__ import annotations
 
 import json
+import re as _re
 import time
 import urllib.error
 import urllib.request
@@ -761,6 +762,353 @@ def fetch_skills(
 
     skills.sort(key=lambda s: s.gametora_id)
     return skills
+
+
+# ---------- Skill condition fetcher (PR-SK2) -----------------------
+#
+# GameTora encodes each skill's activation rules in
+# ``condition_groups[].condition``, a DSL with `&` (AND) and `@` (OR)
+# operators over atomic predicates like ``rotation==1`` or
+# ``ground_type==2``. Effects are listed as ``effects[]`` with a
+# ``type`` (1=Speed, 2=Stamina, 3=Power, 4=Guts, 5=Wisdom; other
+# types are race-state modifiers we don't track) and a ``value``
+# in 10000ths (600000 → +60).
+#
+# Static-condition skills (predicates that depend only on race
+# context — surface, weather, season, direction, distance band,
+# strategy, venue, standard-distance-ness) map cleanly to our
+# `SkillCondition` schema. Anything with race-state predicates
+# (race phase, current placement, accumulated time, random
+# triggers, etc.) is marked `is_dynamic=True` so items 5/6 know
+# they can't predict whether the skill will fire.
+
+_DIRECTION_FROM_CODE: dict[int, str] = {1: "Right", 2: "Left"}
+_SURFACE_FROM_CODE: dict[int, str] = {1: "Turf", 2: "Dirt"}
+_WEATHER_FROM_CODE: dict[int, str] = {
+    1: "Sunny", 2: "Cloudy", 3: "Rainy", 4: "Snowy",
+}
+_SEASON_FROM_CODE: dict[int, str | None] = {
+    1: "Spring", 2: "Summer", 3: "Autumn", 4: "Winter",
+    # 5 = Sakura — game-internal sub-season, not in our RaceSeason enum.
+    # Treated as "no season constraint" upstream when it appears alongside
+    # season==1 in an OR (e.g. Spring Runner), so we map it to None here
+    # and let the OR collapser handle the rest.
+    5: None,
+}
+_DISTANCE_FROM_CODE: dict[int, str] = {
+    1: "Sprint", 2: "Mile", 3: "Medium", 4: "Long",
+}
+_STRATEGY_FROM_CODE: dict[int, str] = {
+    1: "Front", 2: "Pace", 3: "Late", 4: "End",
+}
+
+# `is_basis_distance` is the "standard distance" flag (1600 / 2000 /
+# 2400 / 3200 are the Core/standard distances). The 0/1 here maps
+# directly to our SkillCondition.is_standard_distance bool.
+_BASIS_FROM_CODE: dict[int, bool] = {0: False, 1: True}
+
+# Effect type code → SkillCondition column suffix.
+_EFFECT_TYPE_TO_STAT: dict[int, str] = {
+    1: "speed", 2: "stamina", 3: "power", 4: "guts", 5: "wisdom",
+}
+
+# Atomic predicates that map cleanly to our static schema. Anything
+# else in the condition string forces is_dynamic=True.
+_STATIC_PREDICATE_KEYS: frozenset[str] = frozenset({
+    "rotation", "ground_type", "weather", "season", "distance_type",
+    "running_style", "is_basis_distance", "track_id",
+    # `always` is technically just an unconditional truth value, but
+    # we treat it as a no-op when parsing — appearing in a condition
+    # alongside no other predicates means "applies in every race".
+    "always",
+})
+
+_ATOMIC_RE = _re.compile(r"^([a-z_]+)(==|!=|>=|<=|>|<)(-?\d+)$")
+
+
+@dataclass(frozen=True)
+class FetchedSkillCondition:
+    gametora_id: int
+    # All predicate fields default to None = "skill doesn't care
+    # about this axis". For the catalog row to apply at all, the
+    # SkillCondition needs a matching UmaSkill row already in
+    # `uma_skills` (seeder skips entries without one).
+    direction: str | None = None
+    surface: str | None = None
+    weather: str | None = None
+    season: str | None = None
+    distance_category: str | None = None
+    strategy: str | None = None
+    venue: str | None = None
+    is_standard_distance: bool | None = None
+    buff_speed: int = 0
+    buff_stamina: int = 0
+    buff_power: int = 0
+    buff_guts: int = 0
+    buff_wisdom: int = 0
+    is_dynamic: bool = False
+    notes: str | None = None
+
+    def to_seed_row(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "gametora_id": self.gametora_id,
+            "is_dynamic": self.is_dynamic,
+        }
+        for key in (
+            "direction", "surface", "weather", "season",
+            "distance_category", "strategy", "venue",
+            "is_standard_distance",
+        ):
+            val = getattr(self, key)
+            if val is not None:
+                out[key] = val
+        for stat in ("speed", "stamina", "power", "guts", "wisdom"):
+            val = getattr(self, f"buff_{stat}")
+            if val != 0:
+                out[f"buff_{stat}"] = val
+        if self.notes:
+            out["notes"] = self.notes
+        return out
+
+
+def _parse_atomic(atom: str) -> tuple[str, str, int] | None:
+    """Parse `lhs<op>rhs` into a 3-tuple. None if malformed.
+    Only integer right-hand sides are supported — that's all
+    the upstream DSL uses."""
+    m = _ATOMIC_RE.match(atom)
+    if m is None:
+        return None
+    return m.group(1), m.group(2), int(m.group(3))
+
+
+def _parse_condition_group(
+    group: dict[str, Any]
+) -> tuple[dict[str, list[int]], bool]:
+    """Extract per-key predicate values from one condition_group.
+    Returns (predicates, is_dynamic). `predicates` maps
+    static-predicate keys to the list of RHS values seen across
+    OR alternatives. `is_dynamic=True` means at least one atom
+    references a race-state predicate we can't evaluate from
+    static race context."""
+    cond_str = group.get("condition") or ""
+    if not cond_str:
+        # Empty condition = "always" in upstream parlance.
+        return {}, False
+
+    predicates: dict[str, list[int]] = {}
+    is_dynamic = False
+
+    for atom in _re.split(r"[@&]", cond_str):
+        atom = atom.strip()
+        if not atom:
+            continue
+        parsed = _parse_atomic(atom)
+        if parsed is None:
+            # Couldn't parse — treat conservatively as dynamic.
+            is_dynamic = True
+            continue
+        lhs, op, rhs = parsed
+        if lhs == "always":
+            # No constraint; ignore.
+            continue
+        if lhs not in _STATIC_PREDICATE_KEYS or op != "==":
+            is_dynamic = True
+            continue
+        predicates.setdefault(lhs, []).append(rhs)
+
+    return predicates, is_dynamic
+
+
+def _resolve_predicate_value(
+    key: str, values: list[int]
+) -> tuple[Any, bool]:
+    """Map a list of raw upstream codes to a single schema value
+    + a dynamic-fallback flag. Multiple values in an OR alternative
+    collapse to one when our enum can drop a redundant code (e.g.
+    season==1@season==5 → Spring, since season==5 is the game's
+    Sakura that we don't model)."""
+    if not values:
+        return None, False
+
+    if key == "rotation":
+        mapped = {_DIRECTION_FROM_CODE.get(v) for v in values}
+    elif key == "ground_type":
+        mapped = {_SURFACE_FROM_CODE.get(v) for v in values}
+    elif key == "weather":
+        mapped = {_WEATHER_FROM_CODE.get(v) for v in values}
+    elif key == "season":
+        mapped = {_SEASON_FROM_CODE.get(v) for v in values}
+    elif key == "distance_type":
+        mapped = {_DISTANCE_FROM_CODE.get(v) for v in values}
+    elif key == "running_style":
+        mapped = {_STRATEGY_FROM_CODE.get(v) for v in values}
+    elif key == "is_basis_distance":
+        mapped = {_BASIS_FROM_CODE.get(v) for v in values}
+    elif key == "track_id":
+        mapped = {G1_TRACK_ID_TO_VENUE.get(v) for v in values}
+    else:
+        return None, True
+
+    # Drop unmapped codes (e.g. Sakura's season==5 collapses to None).
+    mapped.discard(None)
+    if not mapped:
+        return None, True
+    if len(mapped) == 1:
+        return mapped.pop(), False
+    # Genuinely OR'd over distinct meaningful values — schema can
+    # only carry one. Fall back to dynamic.
+    return None, True
+
+
+def _coerce_skill_condition(
+    skill_row: dict[str, Any],
+) -> FetchedSkillCondition | None:
+    """Map a single GameTora skill row to a `FetchedSkillCondition`
+    if there's enough signal. Skills with no condition_groups
+    return None (we don't track always-on no-effect entries)."""
+    gid = skill_row.get("id")
+    if not isinstance(gid, int):
+        return None
+    groups = skill_row.get("condition_groups") or []
+    if not isinstance(groups, list) or not groups:
+        return None
+
+    if len(groups) > 1:
+        # Multiple OR'd condition groups — schema can't express
+        # alternative predicate sets, fall back to dynamic.
+        is_dynamic = True
+        primary_group = groups[0]
+    else:
+        is_dynamic = False
+        primary_group = groups[0]
+
+    predicates, group_dynamic = _parse_condition_group(primary_group)
+    if group_dynamic:
+        is_dynamic = True
+
+    resolved: dict[str, Any] = {}
+    for key in (
+        "rotation", "ground_type", "weather", "season",
+        "distance_type", "running_style", "is_basis_distance",
+        "track_id",
+    ):
+        if key not in predicates:
+            continue
+        value, force_dynamic = _resolve_predicate_value(key, predicates[key])
+        if force_dynamic:
+            is_dynamic = True
+            continue
+        # Schema column name differs from upstream predicate key.
+        col = {
+            "rotation": "direction",
+            "ground_type": "surface",
+            "weather": "weather",
+            "season": "season",
+            "distance_type": "distance_category",
+            "running_style": "strategy",
+            "is_basis_distance": "is_standard_distance",
+            "track_id": "venue",
+        }[key]
+        resolved[col] = value
+
+    buffs = {f"buff_{s}": 0 for s in ("speed", "stamina", "power", "guts", "wisdom")}
+    for eff in primary_group.get("effects") or []:
+        if not isinstance(eff, dict):
+            continue
+        t = eff.get("type")
+        v = eff.get("value")
+        if not isinstance(t, int) or not isinstance(v, int):
+            continue
+        stat = _EFFECT_TYPE_TO_STAT.get(t)
+        if stat is None:
+            continue
+        # value is in 10000ths of a stat point.
+        buffs[f"buff_{stat}"] += v // 10000
+
+    notes = skill_row.get("endesc") or skill_row.get("desc_en") or None
+    if notes:
+        notes = notes[:256]
+
+    return FetchedSkillCondition(
+        gametora_id=gid,
+        is_dynamic=is_dynamic,
+        notes=notes,
+        **resolved,
+        **buffs,
+    )
+
+
+def fetch_skill_conditions(
+    transport: GameToraTransport | None = None,
+    *,
+    delay_seconds: float = DELAY_SECONDS,
+) -> list[FetchedSkillCondition]:
+    """Fetch the upstream skills payload and project each row to
+    a `FetchedSkillCondition`. Skipped rows (no condition_groups,
+    no id) are silently dropped — `seed-skill-conditions` only
+    needs the rows that have something to say.
+
+    Reuses the same single-skills-request the existing
+    `fetch_skills` does, so this adds one network round-trip
+    (manifest+skills) regardless of catalog size."""
+    t = transport or UrllibGameToraTransport()
+    manifest = _get_json(t, f"{GAMETORA_BASE}/data/manifests/umamusume.json")
+    version = manifest.get("skills")
+    if not isinstance(version, str) or not version:
+        raise GameToraError(
+            "manifest missing 'skills' key — upstream layout may have changed"
+        )
+    if delay_seconds:
+        time.sleep(delay_seconds)
+    raw = _get_json(t, f"{GAMETORA_BASE}/data/umamusume/skills.{version}.json")
+    if not isinstance(raw, list):
+        raise GameToraError("skills payload is not a list")
+
+    conditions: list[FetchedSkillCondition] = []
+    seen: set[int] = set()
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        coerced = _coerce_skill_condition(row)
+        if coerced is None or coerced.gametora_id in seen:
+            continue
+        conditions.append(coerced)
+        seen.add(coerced.gametora_id)
+        # The gene_version (inherited) variant of each skill carries
+        # the same condition_groups as the main row, so we re-coerce
+        # under the inherited id too.
+        gene = row.get("gene_version")
+        if isinstance(gene, dict):
+            inherited = _coerce_skill_condition(gene)
+            if inherited and inherited.gametora_id not in seen:
+                conditions.append(inherited)
+                seen.add(inherited.gametora_id)
+
+    conditions.sort(key=lambda c: c.gametora_id)
+    return conditions
+
+
+def write_skill_conditions_snapshot(
+    conditions: Sequence[FetchedSkillCondition],
+    out_path: Path,
+    *,
+    source_label: str = "gametora_v1",
+) -> None:
+    payload: dict[str, Any] = {
+        "source": source_label,
+        "attribution": (
+            "Skill condition data sourced from GameTora "
+            "(https://gametora.com/umamusume/skills); not affiliated "
+            "with Cygames. Maintain attribution when redistributing."
+        ),
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "conditions": [c.to_seed_row() for c in conditions],
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def write_skills_snapshot(
