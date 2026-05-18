@@ -37,3 +37,9 @@ node_modules/
 
 # Windows NTFS alternate-data-stream sidecars from cross-OS file copies.
 *:Zone.Identifier
+
+# Local-only living state snapshot — the dev / maintainer view
+# (implemented, active, planned, deferred). CHANGELOG.md is the
+# user-facing "what's new". PROJECT_STATE.md is the internal
+# inventory; both are maintained per PR.
+PROJECT_STATE.md
