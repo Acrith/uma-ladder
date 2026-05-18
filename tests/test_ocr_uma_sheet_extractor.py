@@ -194,18 +194,41 @@ def test_skills_resolve_against_catalogue(
         assert expected in names, f"{expected!r} should resolve from the fixture"
 
 
-def test_skills_known_wrap_limitation(
+def test_skills_multirow_wrap_resolves_via_iterative_subtractive(
     app: Flask, seeded_skills: list[UmaSkill]
 ) -> None:
-    """White Lightning Comin' Through! is split across rows 15-16
-    with Anchors Aweigh! interleaved between the halves. The
-    contiguous-substring matcher can't recover it. Documenting the
-    failure mode here so a fix lands with an assertion change, not
-    a silent improvement that goes unnoticed."""
+    """PR-OCR7 — White Lightning Comin' Through! is split across
+    rows 15-16 of the Tamamo dump with Anchors Aweigh! sandwiched
+    between the halves. The pass-1 contiguous matcher can't recover
+    this (asserted as the known limitation pre-PR-OCR7). After
+    PR-OCR7, the iterative-subtractive pass-2 removes the
+    consumed Anchors Aweigh! span, rescans the remaining text, and
+    finds the wrap'd ult name."""
     with app.app_context():
         result = extract_uma_sheet(_TAMAMO_FIXTURE)
     names = [s["name_en"] for s in result.skills]
-    assert "White Lightning Comin' Through!" not in names
+    assert "White Lightning Comin' Through!" in names
+    # And the previously-found Anchors Aweigh! also survives —
+    # subtractive matching doesn't drop the pass-1 match.
+    assert "Anchors Aweigh!" in names
+
+
+def test_skills_subtractive_screen_order(
+    app: Flask, seeded_skills: list[UmaSkill]
+) -> None:
+    """Wrapped ult name should sort before the skill it was
+    interrupted by — raw_pos for the subtractive match is the
+    original position of the head, not the rescan position."""
+    with app.app_context():
+        result = extract_uma_sheet(_TAMAMO_FIXTURE)
+    by_name = {s["name_en"]: s for s in result.skills}
+    wln = by_name.get("White Lightning Comin' Through!")
+    aa = by_name.get("Anchors Aweigh!")
+    assert wln is not None
+    assert aa is not None
+    # White Lightning's head was earlier in the OCR text than
+    # Anchors Aweigh! — the screen-order sort should reflect that.
+    assert wln["raw_pos"] < aa["raw_pos"]
 
 
 def test_skills_strips_level_indicator(

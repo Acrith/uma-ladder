@@ -309,7 +309,7 @@ def _extract_skills(
         groups.keys(),
         key=lambda n: (-len(n), n),
     )
-    # First pass — find every (position, norm_name) pair in the block,
+    # Pass 1 — find every (position, norm_name) pair in the block,
     # marking spans consumed so a shorter prefix can't double-match.
     found: list[tuple[int, str]] = []
     consumed: list[bool] = [False] * len(norm_block)
@@ -326,6 +326,55 @@ def _extract_skills(
                 consumed[k] = True
             found.append((idx, norm_name))
             start = idx + len(norm_name)
+
+    # PR-OCR7 — Pass 2 (iterative-subtractive): build a "remaining
+    # block" from positions NOT consumed by pass 1, and scan it
+    # against the catalogue. Catches multi-row ult names whose
+    # halves were visually wrapped onto separate rows in-game and
+    # ended up split by an intervening catalog skill in Vision's
+    # row-cluster join.
+    #
+    # Concrete: for the Tamamo Cross dump, pass 1 finds
+    # "anchorsaweigh" at pos 19 of the block "whitelightningcomin
+    # anchorsaweigh through" and consumes positions 19-31. The
+    # remaining block becomes "whitelightningcominthrough" — and
+    # "White Lightning Comin' Through!" now matches contiguously.
+    #
+    # Generalises to any "skill name visually split by another known
+    # skill"; the pass is bounded (one extra catalogue scan) so the
+    # cost is linear in catalog size, no recursion.
+    remaining_chars: list[str] = []
+    remaining_to_original: list[int] = []
+    for i, ch in enumerate(norm_block):
+        if not consumed[i]:
+            remaining_chars.append(ch)
+            remaining_to_original.append(i)
+    remaining = "".join(remaining_chars)
+    if remaining and len(remaining) >= 3:
+        consumed_remaining = [False] * len(remaining)
+        for norm_name in sorted_norms:
+            start = 0
+            while True:
+                idx = remaining.find(norm_name, start)
+                if idx < 0:
+                    break
+                if any(
+                    consumed_remaining[idx : idx + len(norm_name)]
+                ):
+                    start = idx + 1
+                    continue
+                for k in range(idx, idx + len(norm_name)):
+                    consumed_remaining[k] = True
+                # Map back to the original position of the FIRST
+                # character of the match so the screen-order sort
+                # places the candidate correctly. The split-skill's
+                # head was at the lower original position; using
+                # that anchors the candidate before the intervening
+                # consumed skill.
+                orig_pos = remaining_to_original[idx]
+                found.append((orig_pos, norm_name))
+                start = idx + len(norm_name)
+
     found.sort()
 
     # Second pass — turn each match into a candidate dict.

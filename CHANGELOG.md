@@ -4,9 +4,23 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
-## 2026-05-19
+## 2026-05-18
 
 ### Official races
+
+- **Multi-row ult names now resolve via iterative-subtractive
+  match (PR-OCR7).** When Vision wraps a long ult name (e.g.
+  `White Lightning Comin' Through!`) onto two rows AND another
+  skill (e.g. `Anchors Aweigh!`) lands between the halves in the
+  row-cluster join, the contiguous catalogue scan used to give
+  up — the documented "known limitation" since the sandbox
+  shipped. The matcher now does a second pass over the text with
+  the pass-1 matches subtracted out, so the wrap'd name
+  re-stitches into a contiguous substring (`whitelightningcomin`
+  + `through` = `whitelightningcominthrough`) and resolves
+  normally. Screen-order sort uses the original head position so
+  the ult appears in the right slot of the skill list. Generalises
+  to any number of intervening matched skills.
 
 - **Tier-variant dropdown + inherited-ult badge on the
   per-result confirm page (PR-OCR6).** Two long-standing OCR
@@ -27,10 +41,6 @@ log for the full history.
     innate catalogue row and subsequent ones to the gene-version
     row. Saved skills also get the badge when they're inherited
     so re-upload + re-confirm keeps the distinction.
-
-## 2026-05-18
-
-### Official races
 
 - **Multi-screenshot OCR upload, with clipboard paste (PR-OCR5).**
   The Official race-result screenshot upload now matches Draft's
@@ -230,6 +240,18 @@ log for the full history.
   hour per IP to keep the queue scannable; all transitions are
   audit-logged.
 
+- **Per-IP rate limiting on sensitive endpoints.** Registration,
+  login, password-reset request, OAuth callbacks (Discord +
+  Google), profile updates, avatar removal, and every OCR /
+  screenshot upload route now have per-IP rate limits sized for
+  legitimate use. A flood of attempts (e.g. mass-account creation
+  or rapid OCR upload) hits a friendly **Too many requests** page
+  with the limit and "try again later" instead of consuming
+  resources. Login already had per-username lockout (PR-J10); this
+  adds the per-IP cap so the two layers compose. In-memory
+  counters reset on app restart; we'll move to a shared backend
+  when we scale beyond one Fly machine.
+
 ### Admin
 
 - **Disable account (soft delete).** A new **Moderation** card on
@@ -250,33 +272,6 @@ log for the full history.
   duplicates with no history; for active racers, disable is the
   right tool. Audit-logged under `user_disable` / `user_restore`.
 
-### Performance
-
-- **Firefox: lower GPU usage from the dark UI.** Firefox-family
-  browsers (Firefox, Zen, LibreWolf, etc.) draw the site's frosted
-  cards and blurred background glows on the GPU's slow path,
-  sustaining 40-50% GPU on some Linux setups just from scrolling.
-  We now detect Firefox at page load and disable the backdrop blur
-  + reduce the decorative blur halos for that engine only — the
-  page still has its dark cards and colour washes, just without
-  the heavy filter. Chrome / Safari / Edge users see no change.
-
-### Safety
-
-- **Per-IP rate limiting on sensitive endpoints.** Registration,
-  login, password-reset request, OAuth callbacks (Discord +
-  Google), profile updates, avatar removal, and every OCR /
-  screenshot upload route now have per-IP rate limits sized for
-  legitimate use. A flood of attempts (e.g. mass-account creation
-  or rapid OCR upload) hits a friendly **Too many requests** page
-  with the limit and "try again later" instead of consuming
-  resources. Login already had per-username lockout (PR-J10); this
-  adds the per-IP cap so the two layers compose. In-memory
-  counters reset on app restart; we'll move to a shared backend
-  when we scale beyond one Fly machine.
-
-### Admin
-
 - **Delete user from the admin panel.** A new **Danger zone** card
   on the admin user detail page lets a superadmin permanently remove
   an account — useful for cleaning up duplicates created when
@@ -287,6 +282,17 @@ log for the full history.
   placings) survive as `@?` so leaderboards and history stay
   consistent. Audit-logged. Superadmin-only for now; admin-level
   access can be granted later by relaxing the route gate.
+
+### Performance
+
+- **Firefox: lower GPU usage from the dark UI.** Firefox-family
+  browsers (Firefox, Zen, LibreWolf, etc.) draw the site's frosted
+  cards and blurred background glows on the GPU's slow path,
+  sustaining 40-50% GPU on some Linux setups just from scrolling.
+  We now detect Firefox at page load and disable the backdrop blur
+  + reduce the decorative blur halos for that engine only — the
+  page still has its dark cards and colour washes, just without
+  the heavy filter. Chrome / Safari / Edge users see no change.
 
 ### Official races
 
@@ -317,6 +323,14 @@ log for the full history.
   per-club ladder live on Uma Ladder. Member rows reuse the same
   card style as the Players index — avatar, display name,
   username, oshi.
+
+- **Total member count on club pages.** The `/clubs/<id>` header
+  now shows "X of Y members on Uma Ladder" so visitors understand
+  the roster is partial — Y is what uma.moe reports for the
+  whole club, X is how many of those have linked their friend
+  code on Uma Ladder. The number was already in the trainer JSON
+  we fetch for in-game stats, so this required no additional
+  uma.moe API calls; it just wasn't being captured before.
 
 ### Rankings
 
@@ -349,16 +363,6 @@ log for the full history.
   invitee list stays as the override for one-off out-of-club
   guests.
 
-### Clubs
-
-- **Total member count on club pages.** The `/clubs/<id>` header
-  now shows "X of Y members on Uma Ladder" so visitors understand
-  the roster is partial — Y is what uma.moe reports for the
-  whole club, X is how many of those have linked their friend
-  code on Uma Ladder. The number was already in the trainer JSON
-  we fetch for in-game stats, so this required no additional
-  uma.moe API calls; it just wasn't being captured before.
-
 ### Profile
 
 - **Avatar border tone picker.** Pick a border tone for your
@@ -381,14 +385,13 @@ log for the full history.
   unearned badges don't render here so profiles stay clean;
   visit any active player's profile to see what others have
   earned.
+
 - **Achievement icons.** Switched the seed catalogue from emoji
   glyphs to stroke SVG icons (matching the rest of the site's
   icon system). Same visual storytelling — trophy, crown, flag,
   swords, etc. — without the emoji-rendering inconsistency
   across browsers. Custom designed artwork is queued for the
   longer term.
-
-### Profile
 
 - **Profile tabs.** Player profiles now have three tabs:
   **Overview** (the rich oshi hero with stat tiles + in-game
