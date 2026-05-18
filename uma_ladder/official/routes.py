@@ -511,10 +511,18 @@ def submit_results(race_id: int) -> object:
 @min_role_required(Role.ORGANIZER)
 @limiter.limit("30 per hour")
 def upload_result_screenshot(race_id: int) -> object:
-    """Step 1 of the OCR-driven results flow: organiser uploads a result
-    screenshot. We save the image, run the configured OCR provider, and
-    redirect to a confirmation page where the parsed rows can be edited
-    and assigned to specific registrations before submission."""
+    """Step 1 of the OCR-driven results flow: organiser uploads one or
+    more result screenshots. We save each image, run the configured OCR
+    provider, and redirect to a confirmation page where the parsed rows
+    can be edited and assigned to specific registrations before
+    submission.
+
+    PR-OCR5 — multi-file parity with Draft. When the in-game result
+    screen scrolls past one shot (large fields), the organiser can
+    pick all screenshots in one go (or paste sequentially via the
+    arm-button clipboard helper). Parsed rows are merged by placement
+    across attempts — highest confidence wins on collisions. Rows
+    without a placement (header / footer noise) are concatenated."""
     try:
         official_service.get_race(race_id)
     except official_service.RaceNotFoundError:
@@ -525,19 +533,68 @@ def upload_result_screenshot(race_id: int) -> object:
             for err in errs:
                 flash(err)
         return redirect(url_for("official.detail", race_id=race_id))
-    try:
-        image = ocr_service.save_uploaded_image(
-            form.image.data, uploader_user_id=current_user.id
-        )
-    except ocr_service.OcrError as exc:
-        flash(str(exc))
+
+    files = [f for f in request.files.getlist("image") if f and f.filename]
+    if not files:
+        flash("Pick at least one screenshot.")
         return redirect(url_for("official.detail", race_id=race_id))
-    attempt = ocr_service.run_parse(image)
+
+    attempts = []
+    for f in files:
+        try:
+            image = ocr_service.save_uploaded_image(
+                f, uploader_user_id=current_user.id
+            )
+        except ocr_service.OcrError as exc:
+            flash(str(exc))
+            return redirect(url_for("official.detail", race_id=race_id))
+        attempts.append(ocr_service.run_parse(image))
+
+    # Single screenshot: keep the original behaviour — the attempt's
+    # parsed rows already drive the review page.
+    if len(attempts) == 1:
+        return redirect(
+            url_for(
+                "official.results_from_ocr",
+                race_id=race_id,
+                attempt_id=attempts[0].id,
+            )
+        )
+
+    # Multi-screenshot: merge into the FIRST attempt's parsed_json so
+    # the review URL is unchanged. Dedupe by placement (highest
+    # confidence wins); placement-less rows are concatenated.
+    by_placement: dict[int, dict] = {}
+    unplaced: list[dict] = []
+    for att in attempts:
+        for row in (att.parsed_json or {}).get("rows", []) or []:
+            p = row.get("placement")
+            if p is None:
+                unplaced.append(row)
+                continue
+            existing = by_placement.get(p)
+            if existing is None or (
+                row.get("confidence", 0) > existing.get("confidence", 0)
+            ):
+                by_placement[p] = row
+    merged_rows = sorted(by_placement.values(), key=lambda r: r["placement"])
+    merged_rows.extend(unplaced)
+    primary = attempts[0]
+    # Build the full dict before assigning so SQLAlchemy's change
+    # tracker sees a single replacement on a plain JSON column —
+    # in-place mutations don't reliably persist without MutableDict.
+    new_parsed = dict(primary.parsed_json or {})
+    new_parsed["rows"] = merged_rows
+    new_parsed["screenshot_image_ids"] = [
+        a.uploaded_image_id for a in attempts
+    ]
+    primary.parsed_json = new_parsed
+    db.session.commit()
     return redirect(
         url_for(
             "official.results_from_ocr",
             race_id=race_id,
-            attempt_id=attempt.id,
+            attempt_id=primary.id,
         )
     )
 
@@ -605,9 +662,16 @@ def _match_ocr_to_registrations(
 @min_role_required(Role.ORGANIZER)
 @limiter.limit("30 per hour")
 def upload_result_details_screenshot(race_id: int, result_id: int) -> object:
-    """Step 1 of the per-result OCR enrichment flow: upload a stat-screen
-    screenshot for one specific completed result. Saves + parses, then
-    redirects to the confirmation step."""
+    """Step 1 of the per-result OCR enrichment flow: upload one or more
+    stat-screen screenshots for a specific completed result. Saves +
+    parses each, then redirects to the confirmation step.
+
+    PR-OCR5 — multi-file parity. An uma's profile typically spans two
+    screens in-game; the organiser can pick both screenshots in one
+    submit (or paste sequentially via the arm button). We pre-merge
+    the per-attempt sheet extractions into the FIRST attempt's
+    parsed_json so the confirm route sees the union without needing
+    a new multi-attempt URL pattern."""
     try:
         official_service.get_race(race_id)
     except official_service.RaceNotFoundError:
@@ -621,20 +685,74 @@ def upload_result_details_screenshot(race_id: int, result_id: int) -> object:
             for err in errs:
                 flash(err)
         return redirect(url_for("official.detail", race_id=race_id))
-    try:
-        image = ocr_service.save_uploaded_image(
-            form.image.data, uploader_user_id=current_user.id
-        )
-    except ocr_service.OcrError as exc:
-        flash(str(exc))
+
+    files = [f for f in request.files.getlist("image") if f and f.filename]
+    if not files:
+        flash("Pick at least one screenshot.")
         return redirect(url_for("official.detail", race_id=race_id))
-    attempt = ocr_service.run_parse(image)
+
+    attempts = []
+    for f in files:
+        try:
+            image = ocr_service.save_uploaded_image(
+                f, uploader_user_id=current_user.id
+            )
+        except ocr_service.OcrError as exc:
+            flash(str(exc))
+            return redirect(url_for("official.detail", race_id=race_id))
+        attempts.append(ocr_service.run_parse(image))
+
+    if len(attempts) == 1:
+        return redirect(
+            url_for(
+                "official.result_details_from_ocr",
+                race_id=race_id,
+                result_id=result_id,
+                attempt_id=attempts[0].id,
+            )
+        )
+
+    # Multi-screenshot: extract each attempt's sheet independently,
+    # merge via the sandbox's merge_extracts (union skills, first-
+    # non-empty per stat/header/aptitude field), then pre-populate
+    # the FIRST attempt's parsed_json with the merged stats + skill
+    # names. The confirm route's existing extract-or-fallback logic
+    # picks up the pre-merged values via the parsed_json["stats"] /
+    # ["skills"] fallback path (re-running extract on the empty rows
+    # of this combined view returns nothing, so the fallback wins).
+    from ..services.ocr_uma_sheet import extract_uma_sheet, merge_extracts
+
+    extracts = []
+    for att in attempts:
+        parsed = att.parsed_json or {}
+        rows = parsed.get("rows") or []
+        line_texts = [
+            (r.get("raw_line") or r.get("uma_name") or "").strip()
+            for r in rows
+        ]
+        line_texts = [t for t in line_texts if t]
+        extracts.append(extract_uma_sheet(line_texts))
+    merged = merge_extracts(extracts)
+
+    primary = attempts[0]
+    new_parsed = dict(primary.parsed_json or {})
+    new_parsed["stats"] = merged.stats
+    new_parsed["skills"] = [s["name_en"] for s in merged.skills]
+    # Empty rows so the confirm route's re-extract pass returns empty
+    # and the fallback to parsed_json's pre-merged stats/skills wins.
+    new_parsed["rows"] = []
+    new_parsed["screenshot_image_ids"] = [
+        a.uploaded_image_id for a in attempts
+    ]
+    primary.parsed_json = new_parsed
+    db.session.commit()
+
     return redirect(
         url_for(
             "official.result_details_from_ocr",
             race_id=race_id,
             result_id=result_id,
-            attempt_id=attempt.id,
+            attempt_id=primary.id,
         )
     )
 

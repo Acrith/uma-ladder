@@ -252,6 +252,84 @@ def test_full_ocr_to_results_round_trip(
         assert [r.uma_name for r in results] == ["MockUma A", "MockUma B"]
 
 
+# ─── PR-OCR5: multi-file upload + merge-by-placement ─────────────
+
+
+def test_upload_multiple_screenshots_creates_attempts_and_merges(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Posting N image files creates N OcrParseAttempts. The redirect
+    targets the FIRST attempt's confirm page; its parsed_json carries
+    a merged rows list deduped by placement (highest confidence wins)
+    so the review page sees the union of what each screenshot saw."""
+    app.config["OCR_PROVIDER"] = "mock"
+    sid, pid = _setup(app)
+    make_user(username="org", role=Role.ORGANIZER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    resp = client.post(
+        f"/official/{race_id}/results-screenshot",
+        data={
+            "image": [
+                (io.BytesIO(_png_bytes()), "first.png"),
+                (io.BytesIO(_png_bytes()), "second.png"),
+                (io.BytesIO(_png_bytes()), "third.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/results-from-ocr/" in resp.headers["Location"]
+    with app.app_context():
+        attempts = (
+            db.session.query(OcrParseAttempt).order_by(OcrParseAttempt.id).all()
+        )
+        assert len(attempts) == 3
+        # The first attempt's parsed_json should now carry the merged
+        # rows + the list of contributing image ids.
+        primary = attempts[0]
+        screenshot_ids = (primary.parsed_json or {}).get(
+            "screenshot_image_ids"
+        )
+        assert screenshot_ids is not None
+        assert len(screenshot_ids) == 3
+
+
+def test_upload_zero_files_redirects_with_flash(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """No files at all → redirect back to race detail with a flash,
+    no attempts created. Catches the regression where an empty
+    file-list slipped through to OCR provider."""
+    sid, pid = _setup(app)
+    make_user(username="org", role=Role.ORGANIZER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+    resp = client.post(
+        f"/official/{race_id}/results-screenshot",
+        data={},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert f"/official/{race_id}" in resp.headers["Location"]
+    with app.app_context():
+        assert db.session.query(OcrParseAttempt).count() == 0
+
+
 def test_non_organizer_cannot_upload(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

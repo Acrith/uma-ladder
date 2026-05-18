@@ -206,6 +206,87 @@ def test_per_result_confirm_uses_sheet_extractor(
     assert "Anchors Aweigh!" in skill_inputs
 
 
+def test_per_result_multi_upload_merges_sheet_extracts(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR5 — picking N screenshots for one result creates N
+    attempts; the first attempt's parsed_json gets the union of the
+    per-screenshot sheet extracts (skills deduped, stats first-non-
+    empty). The confirm route reads from parsed_json's stats/skills
+    fallback after sheet re-extraction returns empty over the
+    intentionally-cleared rows."""
+    from uma_ladder.models import OcrParseAttempt
+
+    app.config["OCR_PROVIDER"] = "mock"
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={
+            "image": [
+                (io.BytesIO(_png_bytes()), "a.png"),
+                (io.BytesIO(_png_bytes()), "b.png"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "details-from-ocr" in resp.headers["Location"]
+    with app.app_context():
+        attempts = (
+            db.session.query(OcrParseAttempt).order_by(OcrParseAttempt.id).all()
+        )
+        # Two attempts created, one per file.
+        assert len(attempts) == 2
+        primary = attempts[0]
+        # First attempt's parsed_json carries the merge marker
+        # (list of contributing screenshot image ids).
+        screenshot_ids = (primary.parsed_json or {}).get(
+            "screenshot_image_ids"
+        )
+        assert screenshot_ids is not None
+        assert len(screenshot_ids) == 2
+        # Rows were cleared so the confirm route's re-extract pass
+        # returns empty and the fallback picks up our pre-merged
+        # stats / skills.
+        assert (primary.parsed_json or {}).get("rows") == []
+
+
+def test_per_result_single_upload_unchanged(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Posting one file should NOT trigger the merge path — the
+    redirect goes to the single attempt's confirm URL and parsed_json
+    keeps its rows intact (no merge marker, no clearing)."""
+    from uma_ladder.models import OcrParseAttempt
+
+    app.config["OCR_PROVIDER"] = "mock"
+    _seed_skills(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    resp = client.post(
+        f"/official/{race_id}/results/{result_id}/details-screenshot",
+        data={"image": (io.BytesIO(_png_bytes()), "single.png")},
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with app.app_context():
+        attempts = db.session.query(OcrParseAttempt).all()
+        assert len(attempts) == 1
+        primary = attempts[0]
+        # Rows from the original parse survive — not cleared.
+        assert (primary.parsed_json or {}).get("rows") is not None
+        # No multi-screenshot marker.
+        assert "screenshot_image_ids" not in (primary.parsed_json or {})
+
+
 def test_per_result_confirm_falls_back_when_sheet_extractor_empty(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
