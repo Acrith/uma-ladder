@@ -1,4 +1,3 @@
-{% from "_components.html" import podium_row %}
 <div id="official-top5">
   {% if not active_season %}
     <p class="text-sm text-slate-500">No active season.</p>
@@ -8,7 +7,6 @@
     <ol class="space-y-2">
       {% for row in ladder_top5 %}
         {% set rank = loop.index %}
-        {% call podium_row(rank, "") %}{% endcall %}
         <li>
           <div class="rounded-lg border bg-gradient-to-r {% if rank == 1 %}from-amber-500/15 to-fuchsia-500/5 border-amber-500/30{% elif rank == 2 %}from-slate-300/10 to-slate-500/0 border-slate-400/20{% elif rank == 3 %}from-orange-500/15 to-orange-700/5 border-orange-500/30{% else %}from-slate-900/60 to-slate-900/20 border-slate-800{% endif %} px-3 py-2 flex items-center justify-between">
             <div class="flex items-center gap-3">

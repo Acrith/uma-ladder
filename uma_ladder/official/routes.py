@@ -179,7 +179,11 @@ def detail(race_id: int) -> object:
         else []
     )
     # Pull existing race results so the page can render a per-result
-    # "Add details" upload form (PR19b OCR enrichment).
+    # "Add details" upload form (PR19b OCR enrichment). `.unique()`
+    # is required because `OfficialRaceResult.skills` is
+    # `lazy="joined"` on a collection — SQLAlchemy 2.x emits a JOIN
+    # that produces duplicate parent rows and refuses to iterate
+    # without explicit dedupe.
     from sqlalchemy import select as _select  # local import to keep top tidy
 
     results = list(
@@ -187,7 +191,7 @@ def detail(race_id: int) -> object:
             _select(OfficialRaceResult)
             .where(OfficialRaceResult.official_race_id == race_id)
             .order_by(OfficialRaceResult.placement)
-        )
+        ).unique()
     )
     room_code_form = RoomCodeForm()
     results_form = ResultsForm()
