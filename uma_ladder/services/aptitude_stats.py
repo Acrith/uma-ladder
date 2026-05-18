@@ -104,86 +104,146 @@ _STRATEGY_TO_SLOT: dict[str, str] = {
 
 @dataclass(frozen=True)
 class EffectiveStats:
-    """Aptitude-adjusted displayed stat values. None for any field
-    means: raw is missing, race context is missing, aptitude data
-    is missing, OR the modifier rounds to zero net effect — the
-    template renders raw alone in that case."""
+    """Aptitude- and green-skill-adjusted displayed stat values.
+    None for any field means: raw is missing, no modifier applies
+    (no aptitude, no green buff, all-A grades), OR the modifiers
+    round to zero net effect — the template renders raw alone in
+    that case.
+
+    PR-SK10 — expanded from three to five fields. Green skills
+    can buff Stamina and Guts (which no aptitude row touches),
+    so those fields are now part of the struct."""
 
     speed: int | None = None
+    stamina: int | None = None
     power: int | None = None
+    guts: int | None = None
     wisdom: int | None = None
 
     @property
     def any_set(self) -> bool:
-        return any(v is not None for v in (self.speed, self.power, self.wisdom))
+        return any(
+            v is not None
+            for v in (self.speed, self.stamina, self.power, self.guts, self.wisdom)
+        )
 
 
 def effective_stats(
     *,
     raw_speed: int | None,
+    raw_stamina: int | None = None,
     raw_power: int | None,
+    raw_guts: int | None = None,
     raw_wisdom: int | None,
     aptitudes: dict | None,
     surface: str | None,
     distance_category: str | None,
     strategy: str | None,
+    buff_speed: int = 0,
+    buff_stamina: int = 0,
+    buff_power: int = 0,
+    buff_guts: int = 0,
+    buff_wisdom: int = 0,
 ) -> EffectiveStats:
-    """Compute aptitude-modified Speed / Power / Wisdom for one
-    race result. Returns an empty struct when no modifiers apply
-    (no aptitude data, no race context, all-A grades, etc.).
+    """Compute the displayed stat after both green-skill flat
+    buffs (item 6) and aptitude modifiers (item 7). Game order:
 
-    Note: when the modifier is exactly zero (grade A) the field is
-    left None — same display path as the no-modifier case, less
-    UI noise."""
-    if not aptitudes:
-        return EffectiveStats()
+        effective = (raw + green_buff) * (1 + aptitude_modifier)
 
-    def _apply(
-        raw: int | None,
+    A field is None when:
+      - raw is missing entirely (we can't modify what we don't have),
+      - no buff AND no aptitude touches this stat (no change to
+        show; template falls back to displaying raw alone).
+
+    Stamina and Guts only get effective values when a green buff
+    touches them — no aptitude row affects either."""
+    apts = aptitudes or {}
+
+    def _apt_mod(
         ctx_value: str | None,
         ctx_lookup: dict[str, str],
         apt_key: str,
         modifier_fn,
-    ) -> int | None:
-        if raw is None or ctx_value is None:
-            return None
+    ) -> float:
+        """Return the aptitude % modifier for this stat. 0.0 if
+        the relevant slot isn't filled or context is missing —
+        keeps the buff+apt combination math working when one
+        side is absent."""
+        if ctx_value is None:
+            return 0.0
         slot = ctx_lookup.get(ctx_value)
         if slot is None:
-            return None
-        grade = (aptitudes.get(apt_key) or {}).get(slot)
+            return 0.0
+        grade = (apts.get(apt_key) or {}).get(slot)
         if not grade:
+            return 0.0
+        return modifier_fn(grade)
+
+    def _eff(
+        raw: int | None,
+        buff: int,
+        apt_mod: float,
+    ) -> int | None:
+        if raw is None:
             return None
-        mod = modifier_fn(grade)
-        if mod == 0.0:
+        if buff == 0 and apt_mod == 0.0:
+            # No change to display.
             return None
-        return round(raw * (1.0 + mod))
+        return round((raw + buff) * (1.0 + apt_mod))
 
     return EffectiveStats(
-        speed=_apply(
-            raw_speed, distance_category, _DIST_CATEGORY_TO_SLOT,
-            "distance", _distance_stat_mod,
+        speed=_eff(
+            raw_speed,
+            buff_speed,
+            _apt_mod(
+                distance_category, _DIST_CATEGORY_TO_SLOT,
+                "distance", _distance_stat_mod,
+            ),
         ),
-        power=_apply(
-            raw_power, surface, _SURFACE_TO_SLOT,
-            "track", _surface_stat_mod,
+        stamina=_eff(raw_stamina, buff_stamina, 0.0),
+        power=_eff(
+            raw_power,
+            buff_power,
+            _apt_mod(
+                surface, _SURFACE_TO_SLOT, "track", _surface_stat_mod,
+            ),
         ),
-        wisdom=_apply(
-            raw_wisdom, strategy, _STRATEGY_TO_SLOT,
-            "style", _style_stat_mod,
+        guts=_eff(raw_guts, buff_guts, 0.0),
+        wisdom=_eff(
+            raw_wisdom,
+            buff_wisdom,
+            _apt_mod(
+                strategy, _STRATEGY_TO_SLOT, "style", _style_stat_mod,
+            ),
         ),
     )
 
 
-def effective_stats_for_result(result, race) -> EffectiveStats:
-    """Convenience wrapper for Jinja: pulls fields off the
-    ``OfficialRaceResult`` + ``OfficialRace`` instances directly."""
+def effective_stats_for_result(
+    result, race, green_buffs=None
+) -> EffectiveStats:
+    """Convenience wrapper for Jinja: pulls raw stats off the
+    ``OfficialRaceResult`` + race context off ``OfficialRace``.
+
+    PR-SK10 — accepts an optional `green_buffs` arg (a ``Buff``
+    instance or dict with .speed/.stamina/.power/.guts/.wisdom).
+    The route pre-computes this via
+    ``skill_catalog.passive_buffs_by_result`` to keep template
+    logic simple."""
     preset = getattr(race, "preset", None) if race is not None else None
     return effective_stats(
         raw_speed=getattr(result, "speed", None),
+        raw_stamina=getattr(result, "stamina", None),
         raw_power=getattr(result, "power", None),
+        raw_guts=getattr(result, "guts", None),
         raw_wisdom=getattr(result, "wisdom", None),
         aptitudes=getattr(result, "aptitudes", None),
         surface=getattr(preset, "surface", None),
         distance_category=getattr(preset, "distance_category", None),
         strategy=getattr(result, "strategy", None),
+        buff_speed=getattr(green_buffs, "speed", 0) if green_buffs else 0,
+        buff_stamina=getattr(green_buffs, "stamina", 0) if green_buffs else 0,
+        buff_power=getattr(green_buffs, "power", 0) if green_buffs else 0,
+        buff_guts=getattr(green_buffs, "guts", 0) if green_buffs else 0,
+        buff_wisdom=getattr(green_buffs, "wisdom", 0) if green_buffs else 0,
     )

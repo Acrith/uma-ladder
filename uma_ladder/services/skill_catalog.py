@@ -197,10 +197,94 @@ def applies_passively(
     will definitely fire on this race — no runtime conditions
     remaining. Used by item 6 (green-skill buff display) to decide
     whether to add the buff to the shown stat; we only add it
-    when we know the skill will passively be active in the race."""
+    when we know the skill will passively be active in the race.
+
+    Caller must STILL check holder count + bracket bounds
+    separately — those depend on per-race aggregates this
+    function doesn't see. See `passive_buffs_by_result` for the
+    full "will definitely fire on this result" check."""
     if condition.is_dynamic:
         return False
     return condition_matches(condition, context)
+
+
+def passive_buffs_by_result(results, race) -> dict[int, Buff]:
+    """PR-SK10 — for each result, sum the buffs from every skill
+    that DEFINITELY fires passively on this race. Used to
+    augment displayed stats (item 6).
+
+    Stricter than the gray-out check (`inapplicable_skill_ids_by_result`):
+
+    - `is_dynamic=True` skills don't contribute (their trigger is
+      runtime; we can't guarantee they'll fire so we don't lie
+      about a buff to the displayed stat).
+    - Holder count and bracket bounds must be inside the
+      catalog's [min, max] range. Missing data (no participant
+      count → no bracket) is conservative — bracketed skills
+      don't contribute when bracket can't be computed.
+
+    Single batched fetch of `SkillCondition` + a single pass over
+    holder counts, same as the gray-out helper."""
+    if not results:
+        return {}
+    all_skill_ids: set[int] = set()
+    holder_counts: dict[int, int] = {}
+    for r in results:
+        for assoc in getattr(r, "skills", []) or []:
+            sid = getattr(assoc, "skill_id", None)
+            if sid is not None:
+                all_skill_ids.add(sid)
+                holder_counts[sid] = holder_counts.get(sid, 0) + 1
+    catalog = conditions_for(list(all_skill_ids))
+
+    participant_count = getattr(race, "participant_count", None)
+
+    out: dict[int, Buff] = {}
+    for r in results:
+        ctx = race_context_for(race, r)
+        bracket = gate_bracket(
+            getattr(r, "gate", None), participant_count
+        )
+        total = Buff()
+        for assoc in getattr(r, "skills", []) or []:
+            sid = getattr(assoc, "skill_id", None)
+            if sid is None:
+                continue
+            cond = catalog.get(sid)
+            if cond is None:
+                continue
+            # Item 6 only credits skills that WILL definitely fire.
+            if cond.is_dynamic:
+                continue
+            if not condition_matches(cond, ctx):
+                continue
+            count = holder_counts.get(sid, 0)
+            if cond.min_holders is not None and count < cond.min_holders:
+                continue
+            if cond.max_holders is not None and count > cond.max_holders:
+                continue
+            if (
+                cond.min_post_number is not None
+                or cond.max_post_number is not None
+            ):
+                # Bracket-conditional skill: skip when bracket
+                # can't be computed (defensive — don't lie about
+                # a buff that depends on data we don't have).
+                if bracket is None:
+                    continue
+                if (
+                    cond.min_post_number is not None
+                    and bracket < cond.min_post_number
+                ):
+                    continue
+                if (
+                    cond.max_post_number is not None
+                    and bracket > cond.max_post_number
+                ):
+                    continue
+            total = total + buff_for(cond)
+        out[r.id] = total
+    return out
 
 
 def buff_for(condition: SkillCondition) -> Buff:

@@ -237,11 +237,20 @@ def detail(race_id: int) -> object:
     # the race's static conditions so the template can gray out
     # green skills that won't fire in this race. Single batched
     # SkillCondition fetch covers every skill across every result.
-    from ..services.skill_catalog import inapplicable_skill_ids_by_result
+    # PR-SK10 — also pre-compute the per-result sum of buffs from
+    # green skills that DEFINITELY fire (item 6). The template
+    # passes this Buff into the existing effective_stats Jinja
+    # global so the eff line on each stat tile reflects raw +
+    # green + aptitude rather than raw + aptitude.
+    from ..services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+        passive_buffs_by_result,
+    )
 
     inapplicable_skills_by_result = inapplicable_skill_ids_by_result(
         results, race
     )
+    green_buffs_by_result = passive_buffs_by_result(results, race)
 
     return render_template(
         "official/detail.html",
@@ -258,6 +267,7 @@ def detail(race_id: int) -> object:
         allowed_clubs=allowed_clubs,
         known_clubs=known_clubs,
         inapplicable_skills_by_result=inapplicable_skills_by_result,
+        green_buffs_by_result=green_buffs_by_result,
     )
 
 

@@ -206,6 +206,188 @@ def test_applies_passively_stricter_than_condition_matches(
 # ─── is_standard_distance ────────────────────────────────────────
 
 
+def test_passive_buffs_sums_matching_static_skills(app: Flask) -> None:
+    """PR-SK10 — `passive_buffs_by_result` sums the buffs of
+    every skill on a result whose catalog row says
+    is_dynamic=False AND static predicates align. Used by item 6
+    to bake green-skill flat buffs into the displayed stat."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        Buff,
+        passive_buffs_by_result,
+    )
+
+    rh_id = _seed_skill(
+        app, "Right-Handed ◎ Buff Test",
+        direction="Right", buff_speed=60,
+    )
+    style_id = _seed_skill(
+        app, "Front Runner Savvy Test",
+        strategy="Front", buff_wisdom=60,
+    )
+    result = SimpleNamespace(
+        id=1, strategy="Front", gate=None,
+        skills=[
+            SimpleNamespace(skill_id=rh_id),
+            SimpleNamespace(skill_id=style_id),
+        ],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction="Right", surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=None,
+    )
+
+    with app.app_context():
+        out = passive_buffs_by_result([result], race)
+    assert out[1] == Buff(speed=60, wisdom=60)
+
+
+def test_passive_buffs_skips_dynamic_skills(app: Flask) -> None:
+    """Dynamic skills don't contribute their buff because we
+    can't guarantee they fire — same logic as `applies_passively`
+    but with the holder/bracket bounds layered on top."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        Buff,
+        passive_buffs_by_result,
+    )
+
+    dyn_id = _seed_skill(
+        app, "Speed Star Buff Test",
+        strategy="Pace", is_dynamic=True, buff_speed=60,
+    )
+    result = SimpleNamespace(
+        id=1, strategy="Pace", gate=None,
+        skills=[SimpleNamespace(skill_id=dyn_id)],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=None,
+    )
+
+    with app.app_context():
+        out = passive_buffs_by_result([result], race)
+    assert out[1] == Buff()  # Empty — dynamic excluded.
+
+
+def test_passive_buffs_respects_holder_count_bounds(app: Flask) -> None:
+    """Sympathy (min_holders=5): with only 1 holder, buff is NOT
+    applied. Lone Wolf (max_holders=1): with 2 holders, buff is
+    NOT applied. Same gates as the gray-out check."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        Buff,
+        passive_buffs_by_result,
+    )
+
+    sympathy_id = _seed_skill(
+        app, "Sympathy Buff Test",
+        min_holders=5, buff_speed=40,
+    )
+    wolf_id = _seed_skill(
+        app, "Lone Wolf Buff Test",
+        min_holders=1, max_holders=1, buff_speed=40,
+    )
+
+    # Build a 2-uma race where both have both skills.
+    skills = [
+        SimpleNamespace(skill_id=sympathy_id),
+        SimpleNamespace(skill_id=wolf_id),
+    ]
+    r1 = SimpleNamespace(id=1, strategy=None, gate=None, skills=skills)
+    r2 = SimpleNamespace(id=2, strategy=None, gate=None, skills=skills)
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=None,
+    )
+
+    with app.app_context():
+        out = passive_buffs_by_result([r1, r2], race)
+    # Sympathy needs 5+ holders (only 2 → no buff).
+    # Lone Wolf needs ≤1 holder (2 holders → no buff).
+    # Neither skill fires → both umas get empty buff.
+    assert out[1] == Buff()
+    assert out[2] == Buff()
+
+
+def test_passive_buffs_skips_bracket_skills_without_data(app: Flask) -> None:
+    """Inner / Outer Post buffs need a computable bracket. When
+    gate or participant_count is missing, the buff is NOT applied
+    — opposite default from the gray-out check (which stays
+    permissive on missing data). Don't lie about a buff we can't
+    confirm."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        Buff,
+        passive_buffs_by_result,
+    )
+
+    inner_id = _seed_skill(
+        app, "Inner Post Buff Test",
+        max_post_number=3, buff_wisdom=60,
+    )
+    # Uma has the skill but gate is None.
+    result = SimpleNamespace(
+        id=1, strategy=None, gate=None,
+        skills=[SimpleNamespace(skill_id=inner_id)],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=12,
+    )
+
+    with app.app_context():
+        out = passive_buffs_by_result([result], race)
+    assert out[1] == Buff()
+
+
+def test_passive_buffs_applies_bracket_skill_in_range(app: Flask) -> None:
+    """Same test inverted: with gate=1 + participant_count=12,
+    bracket is 1 (inner). Inner Post buff fires → +60 Wisdom."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        Buff,
+        passive_buffs_by_result,
+    )
+
+    inner_id = _seed_skill(
+        app, "Inner Post Buff Apply Test",
+        max_post_number=3, buff_wisdom=60,
+    )
+    result = SimpleNamespace(
+        id=1, strategy=None, gate=1,
+        skills=[SimpleNamespace(skill_id=inner_id)],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None, ground_condition=None,
+        participant_count=12,
+    )
+
+    with app.app_context():
+        out = passive_buffs_by_result([result], race)
+    assert out[1] == Buff(wisdom=60)
+
+
 def test_gate_bracket_one_to_one_at_eight_participants() -> None:
     """PR-SK9 — with exactly 8 participants, gate G maps to
     bracket G. Baseline of the bracket algorithm."""

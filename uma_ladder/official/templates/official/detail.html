@@ -618,14 +618,20 @@
                        adjusted effective stat for the three stats
                        any aptitude touches (Speed via distance apt,
                        Power via surface apt, Wisdom via style apt).
-                       Stamina and Guts show "—" since no aptitude
-                       row modifies them. Colour reflects sign
-                       (emerald = buff, rose = penalty). #}
-                    {% set _eff = effective_stats(r, race) %}
+                       PR-SK10 — also bakes in green-skill flat
+                       buffs from skills the catalog confirms will
+                       definitely fire (item 6). Stamina + Guts now
+                       can show eff too when a green skill targets
+                       them (Sunny Days ◎ → +60 Guts etc.). Colour
+                       reflects sign (emerald = buff, rose = penalty). #}
+                    {% set _green = green_buffs_by_result.get(r.id) %}
+                    {% set _eff = effective_stats(r, race, _green) %}
                     {% set _eff_map = {
-                        'Speed': (r.speed, _eff.speed),
-                        'Power': (r.power, _eff.power),
-                        'Wit':   (r.wisdom, _eff.wisdom),
+                        'Speed':   (r.speed, _eff.speed),
+                        'Stamina': (r.stamina, _eff.stamina),
+                        'Power':   (r.power, _eff.power),
+                        'Guts':    (r.guts, _eff.guts),
+                        'Wit':     (r.wisdom, _eff.wisdom),
                     } %}
                     <div class="mt-2 grid grid-cols-5 gap-2 text-xs">
                       {% for label, val in [

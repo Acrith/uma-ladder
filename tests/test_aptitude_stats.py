@@ -288,6 +288,97 @@ def test_grade_case_insensitive() -> None:
     assert eff.speed == round(1000 * 1.1025)
 
 
+def test_green_buff_adds_to_raw_for_stats_without_aptitude() -> None:
+    """PR-SK10 — Stamina and Guts get no aptitude treatment but
+    can receive flat green-skill buffs (Sunny Days ◎ = +60 Guts,
+    etc.). With apt missing for these axes, the eff value is just
+    raw + buff."""
+    eff = effective_stats(
+        raw_speed=None, raw_stamina=1070, raw_power=None,
+        raw_guts=553, raw_wisdom=None,
+        aptitudes={},
+        surface=None, distance_category=None, strategy=None,
+        buff_stamina=60, buff_guts=40,
+    )
+    assert eff.stamina == 1130
+    assert eff.guts == 593
+
+
+def test_green_buff_compounds_with_aptitude() -> None:
+    """Game canon order: effective = (raw + green) × (1 + apt).
+    With distance apt S (+10.25%) AND a +60 green buff on Speed,
+    a 1200-Speed uma displays 1389 — apt math operates on the
+    green-adjusted base, not on raw."""
+    eff = effective_stats(
+        raw_speed=1200, raw_stamina=None, raw_power=None,
+        raw_guts=None, raw_wisdom=None,
+        aptitudes={"distance": {"medium": "S"}},
+        surface=None, distance_category="Medium", strategy=None,
+        buff_speed=60,
+    )
+    # (1200 + 60) * 1.1025 = 1389.15 → 1389
+    assert eff.speed == 1389
+
+
+def test_green_buff_negative_value_reduces_eff() -> None:
+    """× tier green skills store negative buff values. With a
+    -40 Speed buff and no aptitude, the eff value is raw - 40."""
+    eff = effective_stats(
+        raw_speed=1200, raw_stamina=None, raw_power=None,
+        raw_guts=None, raw_wisdom=None,
+        aptitudes=None,
+        surface=None, distance_category=None, strategy=None,
+        buff_speed=-40,
+    )
+    assert eff.speed == 1160
+
+
+def test_no_buff_no_apt_returns_none() -> None:
+    """When neither a green buff nor an aptitude touches a stat,
+    its eff is None so the template falls back to displaying raw
+    alone (no redundant `eff 1197` line)."""
+    eff = effective_stats(
+        raw_speed=1200, raw_stamina=1000, raw_power=1100,
+        raw_guts=500, raw_wisdom=600,
+        aptitudes={},
+        surface=None, distance_category=None, strategy=None,
+    )
+    assert eff.speed is None
+    assert eff.stamina is None
+    assert eff.power is None
+    assert eff.guts is None
+    assert eff.wisdom is None
+
+
+def test_effective_stats_for_result_passes_through_buff(app) -> None:
+    """PR-SK10 — the Jinja wrapper accepts a `Buff`-shaped object
+    (anything with .speed/.stamina/etc. attributes) and threads
+    the components into the calculation. Driving via the actual
+    `Buff` dataclass from skill_catalog so the integration is
+    pinned in CI."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.aptitude_stats import effective_stats_for_result
+    from uma_ladder.services.skill_catalog import Buff
+
+    result = SimpleNamespace(
+        speed=1200, stamina=1000, power=1100, guts=500, wisdom=600,
+        aptitudes=None, strategy=None,
+    )
+    race = SimpleNamespace(preset=SimpleNamespace(
+        direction=None, surface=None,
+        distance_category=None, distance_meters=None, venue=None,
+    ))
+    buff = Buff(speed=60, stamina=20, guts=-15)
+    eff = effective_stats_for_result(result, race, buff)
+    assert eff.speed == 1260
+    assert eff.stamina == 1020
+    assert eff.guts == 485
+    # Power and Wisdom untouched.
+    assert eff.power is None
+    assert eff.wisdom is None
+
+
 def test_jinja_global_registered(app) -> None:
     """The Jinja global ``effective_stats`` is what the race detail
     template calls per result. Pinned here so a refactor of the

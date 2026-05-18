@@ -836,6 +836,101 @@ def test_race_detail_renders_when_no_skills_are_inapplicable(
     assert "Doesn't apply to this race" not in body
 
 
+def test_race_detail_eff_line_reflects_green_buff_and_aptitude(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-SK10 — when a uma has a green skill that definitely
+    fires (Right-Handed ◎ on a Left-handed race used to be the
+    test seed; flip to Left-Handed ◎ which matches), the eff
+    line shows raw + green + aptitude. With distance apt S on
+    Medium (PR-OCR21 already pinned), the math compounds:
+    (1200 + 60) * 1.1025 = 1389."""
+    from uma_ladder.models import (
+        OfficialRaceResult,
+        OfficialRaceResultSkill,
+        SkillCondition,
+        UmaSkill,
+    )
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        # _setup_completed_race uses preset.direction=Left + Medium.
+        # Left-Handed ◎ matches → +60 Speed contributes to eff.
+        left_skill = UmaSkill(
+            gametora_id=200021, name_en="Left-Handed Test ◎",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        db.session.add(left_skill)
+        db.session.commit()
+        db.session.add(
+            SkillCondition(skill_id=left_skill.id, direction="Left", buff_speed=60)
+        )
+        row = db.session.get(OfficialRaceResult, result_id)
+        row.speed = 1200
+        row.aptitudes = {
+            "distance": {"medium": "S"},  # +10.25% on Speed.
+        }
+        db.session.add(OfficialRaceResultSkill(
+            official_race_result_id=row.id,
+            skill_id=left_skill.id,
+            position=0,
+        ))
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # eff line shows (1200 + 60) × 1.1025 = 1389. PR-OCR21 alone
+    # without the green buff would have rendered 1323.
+    assert "eff 1389" in body
+
+
+def test_race_detail_eff_line_appears_on_stamina_with_green_buff(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-SK10 — Stamina has no aptitude row in PR-OCR21, but a
+    Sunny-Days-style green skill targeting Stamina now produces
+    an eff line on that stat tile too."""
+    from uma_ladder.models import (
+        OfficialRaceResult,
+        OfficialRaceResultSkill,
+        SkillCondition,
+        UmaSkill,
+    )
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        # Race preset has direction=Left; this skill matches with
+        # no other constraints → always fires.
+        skill = UmaSkill(
+            gametora_id=200999, name_en="Stamina Buff Test ◎",
+            is_unique=False, is_inherited=False, enabled=True,
+        )
+        db.session.add(skill)
+        db.session.commit()
+        db.session.add(
+            SkillCondition(skill_id=skill.id, direction="Left", buff_stamina=60)
+        )
+        row = db.session.get(OfficialRaceResult, result_id)
+        row.stamina = 1000
+        db.session.add(OfficialRaceResultSkill(
+            official_race_result_id=row.id,
+            skill_id=skill.id,
+            position=0,
+        ))
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Stamina 1000 + 60 buff = 1060. No aptitude affects Stamina.
+    assert "eff 1060" in body
+
+
 def test_race_detail_grays_out_non_applicable_skill(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

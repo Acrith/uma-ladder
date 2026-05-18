@@ -8,6 +8,23 @@ log for the full history.
 
 ### Official races
 
+- **Green-skill flat buffs now baked into the displayed
+  effective stat (PR-SK10).** Item 6 from the QoL list — the
+  "eff" line under each stat tile now reflects `(raw +
+  green_buff) × (1 + aptitude_modifier)`, matching the in-game
+  formula order. So a Pace Chaser uma with 1200 Speed +
+  Distance-S aptitude + Left-Handed ◎ (+60 Speed) on a
+  Left-handed Medium race now shows `eff 1389` instead of
+  `eff 1323`. Stamina and Guts (which no aptitude touches) now
+  also gain an eff line when a green skill targets them
+  (Sunny Days ◎ → +60 Guts on Sunny tracks etc.). Buffs only
+  apply when the skill DEFINITELY fires — same checks as the
+  gray-out (item 5) layered with `is_dynamic=False`, so
+  runtime-trigger skills don't lie about a buff that might not
+  materialize. Bracket- or holder-count-conditional skills are
+  conservative on missing data (no participant count → no
+  bracket → no buff added).
+
 - **Inner / Outer Post Proficiency + Lucky Seven now gray out
   by gate bracket (PR-SK9).** Skills that activate based on
   starting gate bracket (Inner Post = brackets 1-3, Outer Post
