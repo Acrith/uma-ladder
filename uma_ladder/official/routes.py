@@ -475,7 +475,20 @@ def submit_results(race_id: int) -> object:
         return redirect(url_for("official.detail", race_id=race.id))
 
     lines: list[official_service.ResultLine] = []
+
+    def _opt_int_field(name: str) -> int | None:
+        raw = (request.form.get(name) or "").strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+
     # Read pairs of placement_<reg_id> + uma_name_<reg_id> from form data.
+    # PR-A5 — also read finish_time_<reg_id> / gate_<reg_id> /
+    # fav_rank_<reg_id> when the OCR confirm flow populated them.
+    # Manual entry leaves them blank (null), which is fine.
     for reg in official_service.list_registrations(race_id):
         placement_raw = request.form.get(f"placement_{reg.id}", "").strip()
         if not placement_raw:
@@ -490,6 +503,11 @@ def submit_results(race_id: int) -> object:
                 user_id=reg.user_id,
                 placement=placement,
                 uma_name=request.form.get(f"uma_name_{reg.id}", "").strip() or None,
+                finish_time_or_lengths=(
+                    request.form.get(f"finish_time_{reg.id}", "").strip() or None
+                ),
+                gate=_opt_int_field(f"gate_{reg.id}"),
+                fav_rank=_opt_int_field(f"fav_rank_{reg.id}"),
             )
         )
 

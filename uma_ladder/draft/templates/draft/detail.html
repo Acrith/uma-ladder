@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_components.html" import card, chip, draft_status_chip, live_dot %}
+{% from "_components.html" import card, chip, draft_status_chip, live_dot, season_chip, weather_chip %}
 {% from "_icons.html" import shuffle as icon_shuffle, pencil as icon_pencil %}
 {% block title %}Draft match #{{ match.id }} · Uma Ladder{% endblock %}
 {# Wider container — gives the center action column room to host an
@@ -105,12 +105,8 @@
         {% if match.race_season or match.weather or match.ground_condition %}
           <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span class="label-eyebrow text-slate-500">Conditions</span>
-            {% if match.race_season %}{{ chip(match.race_season, "slate") }}{% endif %}
-            {% if match.weather %}
-              {% set weather_tone = {'Sunny': 'amber', 'Cloudy': 'slate', 'Rainy': 'cyan', 'Snowy': 'cyan'}[match.weather] %}
-              {% set weather_icon = {'Sunny': '☀', 'Cloudy': '☁', 'Rainy': '☂', 'Snowy': '❄'}[match.weather] %}
-              {{ chip(weather_icon ~ " " ~ match.weather, weather_tone) }}
-            {% endif %}
+            {% if match.race_season %}{{ season_chip(match.race_season) }}{% endif %}
+            {% if match.weather %}{{ weather_chip(match.weather) }}{% endif %}
             {% if match.ground_condition %}
               {% set ground_tone = {'Firm': 'emerald', 'Good': 'cyan', 'Soft': 'amber', 'Heavy': 'rose'}[match.ground_condition] %}
               {{ chip(match.ground_condition, ground_tone) }}

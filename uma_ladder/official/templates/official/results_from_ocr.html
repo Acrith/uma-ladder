@@ -64,6 +64,9 @@
               {% set row = parsed_rows[i] %}
               {% set placement = row.get('placement', i + 1) %}
               {% set ocr_uma = row.get('uma_name', '') %}
+              {% set ocr_time = row.get('time_or_lengths', '') %}
+              {% set ocr_gate = row.get('gate', '') %}
+              {% set ocr_fav = row.get('fav_rank', '') %}
               {% set suggested_reg_id = suggestions.get(i) %}
               <tr class="border-t border-slate-800 align-top">
                 <td class="pr-3 py-2">
@@ -75,12 +78,23 @@
                          disabled />
                 </td>
                 <td class="pr-3 py-2 text-slate-400">
-                  {{ ocr_uma or '—' }}
+                  <p>{{ ocr_uma or '—' }}</p>
+                  {# PR-A5 — surface the row-parser fields the OCR
+                     pipeline pulls off the result screen. Hidden
+                     value carriers below mirror these into the
+                     submit_results POST. #}
+                  {% if ocr_gate or ocr_time or ocr_fav %}
+                    <p class="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-500">
+                      {% if ocr_gate %}{{ chip("Gate " ~ ocr_gate, "slate") }}{% endif %}
+                      {% if ocr_time %}{{ chip(ocr_time, "slate") }}{% endif %}
+                      {% if ocr_fav %}{{ chip("#" ~ ocr_fav ~ " fav", "slate") }}{% endif %}
+                    </p>
+                  {% endif %}
                 </td>
                 <td class="pr-3 py-2">
                   <select name="ocr_assign_{{ i }}"
                           class="input-base"
-                          onchange="syncAssignment({{ i }}, {{ placement }}, '{{ ocr_uma|e }}')">
+                          onchange="syncAssignment({{ i }})">
                     <option value="">— skip this row —</option>
                     {% for r in registrations %}
                       <option value="{{ r.id }}"
@@ -102,12 +116,16 @@
         </table>
 
         {# Hidden placement_<reg_id> + uma_name_<reg_id> fields populated
-           from the visible OCR rows. The existing /results endpoint reads
-           these — no service-side changes needed. JS keeps them in sync. #}
+           from the visible OCR rows. PR-A5 — also carry through
+           finish_time_or_lengths / gate / fav_rank so they reach the
+           service layer. JS keeps them in sync. #}
         <div id="ocr-hidden-fields" class="hidden">
           {% for r in registrations %}
             <input type="hidden" name="placement_{{ r.id }}" data-reg-placement="{{ r.id }}" value="" />
             <input type="hidden" name="uma_name_{{ r.id }}" data-reg-uma-name="{{ r.id }}" value="" />
+            <input type="hidden" name="finish_time_{{ r.id }}" data-reg-finish-time="{{ r.id }}" value="" />
+            <input type="hidden" name="gate_{{ r.id }}" data-reg-gate="{{ r.id }}" value="" />
+            <input type="hidden" name="fav_rank_{{ r.id }}" data-reg-fav-rank="{{ r.id }}" value="" />
           {% endfor %}
         </div>
 
@@ -153,33 +171,51 @@
       const assignments = {};  // ocr row index → reg_id (or null)
       const ocrRowPlacements = {};  // ocr row index → placement
       const ocrRowNames = {};  // ocr row index → uma name
+      // PR-A5 — extra row-parser fields carried through to the
+      // hidden form inputs so they reach the service layer.
+      const ocrRowFinishTimes = {};  // ocr row index → time / lengths string
+      const ocrRowGates = {};         // ocr row index → gate int
+      const ocrRowFavRanks = {};      // ocr row index → fav_rank int
       {% for i in range(parsed_rows|length) %}
       assignments[{{ i }}] = document.querySelector('[name="ocr_assign_{{ i }}"]').value || null;
       ocrRowPlacements[{{ i }}] = {{ parsed_rows[i].get('placement', i + 1) }};
       ocrRowNames[{{ i }}] = {{ parsed_rows[i].get('uma_name', '') | tojson }};
+      ocrRowFinishTimes[{{ i }}] = {{ parsed_rows[i].get('time_or_lengths', '') | tojson }};
+      ocrRowGates[{{ i }}] = {{ parsed_rows[i].get('gate', '') | tojson }};
+      ocrRowFavRanks[{{ i }}] = {{ parsed_rows[i].get('fav_rank', '') | tojson }};
       {% endfor %}
 
       function refreshHiddenFromOcr() {
-        // Reset all hidden placement/uma_name fields, then write whatever
-        // the OCR rows currently say. Manual rows below override.
-        document.querySelectorAll('[data-reg-placement]').forEach(el => el.value = '');
-        document.querySelectorAll('[data-reg-uma-name]').forEach(el => el.value = '');
+        // Reset all hidden carrier fields, then write whatever the
+        // OCR rows currently say. Manual rows below override on
+        // submit.
+        const fields = [
+          'data-reg-placement', 'data-reg-uma-name',
+          'data-reg-finish-time', 'data-reg-gate', 'data-reg-fav-rank',
+        ];
+        fields.forEach(attr =>
+          document.querySelectorAll('[' + attr + ']').forEach(el => el.value = '')
+        );
         for (const [idxStr, regId] of Object.entries(assignments)) {
           if (!regId) continue;
           const i = parseInt(idxStr, 10);
-          const placeInput = document.querySelector('[name="ocr_assign_' + i + '"]');
           const umaInput = document.querySelector('[name="ocr_uma_name_' + i + '"]');
-          // pull edited uma name from the visible input
           const uma = umaInput ? umaInput.value : ocrRowNames[i];
           const place = ocrRowPlacements[i];
           const ph = document.querySelector('[data-reg-placement="' + regId + '"]');
           const nh = document.querySelector('[data-reg-uma-name="' + regId + '"]');
+          const fth = document.querySelector('[data-reg-finish-time="' + regId + '"]');
+          const gh = document.querySelector('[data-reg-gate="' + regId + '"]');
+          const fh = document.querySelector('[data-reg-fav-rank="' + regId + '"]');
           if (ph) ph.value = place;
           if (nh) nh.value = uma;
+          if (fth) fth.value = ocrRowFinishTimes[i] || '';
+          if (gh) gh.value = ocrRowGates[i] || '';
+          if (fh) fh.value = ocrRowFavRanks[i] || '';
         }
       }
 
-      window.syncAssignment = function(rowIdx, _placement, _ocrUma) {
+      window.syncAssignment = function(rowIdx) {
         const sel = document.querySelector('[name="ocr_assign_' + rowIdx + '"]');
         assignments[rowIdx] = sel.value || null;
         // Prevent the same registration from being assigned twice — reset

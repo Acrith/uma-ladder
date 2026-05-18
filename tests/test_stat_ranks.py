@@ -11,9 +11,11 @@ import pytest
 
 from uma_ladder.services.stat_ranks import (
     aptitude_grade_icon_filename,
+    season_icon_filename,
     stat_rank_icon_filename,
     stat_rank_index,
     stat_rank_label,
+    weather_icon_filename,
 )
 
 
@@ -131,3 +133,55 @@ def test_aptitude_grade_icon_filename_invalid_returns_none(
     """Empty / unknown / out-of-range grades produce None; caller
     renders an em-dash placeholder."""
     assert aptitude_grade_icon_filename(grade) is None
+
+
+# ─── PR-A4: weather + season icons ───────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "weather,expected",
+    [
+        ("Sunny", "utx_ico_weather_00.png"),
+        ("Cloudy", "utx_ico_weather_01.png"),
+        ("Rainy", "utx_ico_weather_02.png"),
+        ("Snowy", "utx_ico_weather_03.png"),
+        # Case-insensitive (Title-case normalize).
+        ("sunny", "utx_ico_weather_00.png"),
+        ("SUNNY", "utx_ico_weather_00.png"),
+    ],
+)
+def test_weather_icon_filename(weather: str, expected: str) -> None:
+    assert weather_icon_filename(weather) == expected
+
+
+@pytest.mark.parametrize("weather", [None, "", "Foggy", "Hail"])
+def test_weather_icon_filename_invalid(weather: str | None) -> None:
+    assert weather_icon_filename(weather) is None
+
+
+@pytest.mark.parametrize(
+    "season,expected",
+    [
+        ("Spring", "utx_txt_season_00.png"),
+        ("Summer", "utx_txt_season_01.png"),
+        ("Autumn", "utx_txt_season_02.png"),
+        ("Winter", "utx_txt_season_03.png"),
+        ("spring", "utx_txt_season_00.png"),
+    ],
+)
+def test_season_icon_filename(season: str, expected: str) -> None:
+    assert season_icon_filename(season) == expected
+
+
+@pytest.mark.parametrize(
+    "season", [None, "", "Sakura", "Fall", "Monsoon"]
+)
+def test_season_icon_filename_invalid(season: str | None) -> None:
+    """Sakura is in kachi's enum but not in our RaceSeason, so it
+    falls through the lookup just like an unknown value would."""
+    assert season_icon_filename(season) is None
+
+
+def test_pr_a4_jinja_filters_registered(app) -> None:
+    assert "weather_icon_filename" in app.jinja_env.filters
+    assert "season_icon_filename" in app.jinja_env.filters

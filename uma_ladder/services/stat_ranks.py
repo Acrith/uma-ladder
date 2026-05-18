@@ -137,3 +137,36 @@ def aptitude_grade_icon_filename(grade: str | None) -> str | None:
     except ValueError:
         return None
     return f"utx_ico_statusrank_{idx:02d}.png"
+
+
+# ─── Weather + season icons ──────────────────────────────────────
+#
+# Filename → meaning mirrors kachi-dev's RaceParameters enums:
+#   Weather: Sunny=00, Cloudy=01, Rainy=02, Snowy=03
+#   Season:  Spring=00, Summer=01, Autumn=02, Winter=03
+# (Sakura=04 exists upstream but our RaceSeason enum doesn't ship it.)
+
+_WEATHER_ORDER: tuple[str, ...] = ("Sunny", "Cloudy", "Rainy", "Snowy")
+_SEASON_ORDER: tuple[str, ...] = ("Spring", "Summer", "Autumn", "Winter")
+
+
+def weather_icon_filename(weather: str | None) -> str | None:
+    """PNG filename for a Weather string. None for unknown / empty."""
+    if not weather:
+        return None
+    try:
+        idx = _WEATHER_ORDER.index(weather.strip().title())
+    except ValueError:
+        return None
+    return f"utx_ico_weather_{idx:02d}.png"
+
+
+def season_icon_filename(season: str | None) -> str | None:
+    """PNG filename (text-glyph style) for a RaceSeason string."""
+    if not season:
+        return None
+    try:
+        idx = _SEASON_ORDER.index(season.strip().title())
+    except ValueError:
+        return None
+    return f"utx_txt_season_{idx:02d}.png"

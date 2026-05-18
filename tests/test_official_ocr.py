@@ -330,6 +330,249 @@ def test_upload_zero_files_redirects_with_flash(
         assert db.session.query(OcrParseAttempt).count() == 0
 
 
+# ─── PR-A5: row-parser fields surfaced + persisted ───────────────
+
+
+def test_confirm_page_renders_row_parser_chips(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-A5 — the official confirm template now displays the
+    parsed gate / time-or-lengths / fav_rank as compact chips
+    under each OCR row's detected uma name, matching what Draft
+    has already had."""
+    from uma_ladder.models import OcrParseAttempt, OcrParseStatus, UploadedImage
+
+    app.config["OCR_PROVIDER"] = "mock"
+    sid, pid = _setup(app)
+    host = make_user(username="org", role=Role.ORGANIZER)
+    make_user(username="gold_ship", role=Role.USER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "gold_ship")
+    client.post(f"/official/{race_id}/register")
+    client.post("/auth/logout")
+    _login(client, "org")
+
+    # Craft an attempt with a row that carries the row-parser fields
+    # so we don't depend on the mock provider doing the field peel.
+    with app.app_context():
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"a5-{race_id}.png",
+            mime_type="image/png",
+            size_bytes=100,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            parsed_json={
+                "rows": [
+                    {
+                        "placement": 1,
+                        "uma_name": "Gold Ship",
+                        "raw_line": "...",
+                        "confidence": 0.9,
+                        "gate": 8,
+                        "time_or_lengths": "3:43.8",
+                        "fav_rank": 1,
+                    }
+                ],
+            },
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # All three chips render as text.
+    assert "Gate 8" in body
+    assert "3:43.8" in body
+    assert "#1 fav" in body
+    # The hidden carrier fields for the registered user exist so
+    # the submit can ship the values through.
+    assert 'name="finish_time_' in body
+    assert 'name="gate_' in body
+    assert 'name="fav_rank_' in body
+
+
+def test_submit_results_persists_row_parser_fields(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """End-to-end: posting finish_time_<reg> / gate_<reg> /
+    fav_rank_<reg> alongside placement_<reg> saves them on the
+    OfficialRaceResult row."""
+    from uma_ladder.models import OfficialRaceResult
+
+    sid, pid = _setup(app)
+    make_user(username="org", role=Role.ORGANIZER)
+    make_user(username="alice", role=Role.USER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice")
+    client.post(f"/official/{race_id}/register")
+    client.post("/auth/logout")
+    _login(client, "org")
+
+    with app.app_context():
+        from uma_ladder.services import official as official_service
+
+        regs = official_service.list_registrations(race_id)
+        reg_id = regs[0].id
+
+    resp = client.post(
+        f"/official/{race_id}/results",
+        data={
+            f"placement_{reg_id}": "1",
+            f"uma_name_{reg_id}": "Gold Ship",
+            f"finish_time_{reg_id}": "3:43.8",
+            f"gate_{reg_id}": "8",
+            f"fav_rank_{reg_id}": "1",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    with app.app_context():
+        row = (
+            db.session.query(OfficialRaceResult)
+            .filter_by(official_race_id=race_id)
+            .one()
+        )
+        assert row.finish_time_or_lengths == "3:43.8"
+        assert row.gate == 8
+        assert row.fav_rank == 1
+
+
+def test_submit_results_skips_blank_row_parser_fields(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Manual entry path: leaving the new fields blank persists
+    NULLs without erroring. Confirms ResultLine defaults pass
+    through cleanly."""
+    from uma_ladder.models import OfficialRaceResult
+
+    sid, pid = _setup(app)
+    make_user(username="org", role=Role.ORGANIZER)
+    make_user(username="alice", role=Role.USER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice")
+    client.post(f"/official/{race_id}/register")
+    client.post("/auth/logout")
+    _login(client, "org")
+
+    with app.app_context():
+        from uma_ladder.services import official as official_service
+
+        regs = official_service.list_registrations(race_id)
+        reg_id = regs[0].id
+
+    client.post(
+        f"/official/{race_id}/results",
+        data={
+            f"placement_{reg_id}": "1",
+            f"uma_name_{reg_id}": "Gold Ship",
+            # No finish_time / gate / fav_rank — manual entry.
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        row = (
+            db.session.query(OfficialRaceResult)
+            .filter_by(official_race_id=race_id)
+            .one()
+        )
+        assert row.finish_time_or_lengths is None
+        assert row.gate is None
+        assert row.fav_rank is None
+
+
+def test_race_detail_renders_row_parser_pills(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """Once persisted, the fields render as compact pills above
+    the stat grid on the race detail per-result card."""
+    from uma_ladder.models import OfficialRaceResult
+
+    sid, pid = _setup(app)
+    make_user(username="org", role=Role.ORGANIZER)
+    make_user(username="alice", role=Role.USER)
+    _login(client, "org")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "R", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post("/auth/logout")
+    _login(client, "alice")
+    client.post(f"/official/{race_id}/register")
+    client.post("/auth/logout")
+    _login(client, "org")
+
+    with app.app_context():
+        from uma_ladder.services import official as official_service
+
+        regs = official_service.list_registrations(race_id)
+        reg_id = regs[0].id
+
+    client.post(
+        f"/official/{race_id}/results",
+        data={
+            f"placement_{reg_id}": "1",
+            f"uma_name_{reg_id}": "Gold Ship",
+            f"finish_time_{reg_id}": "3:43.8",
+            f"gate_{reg_id}": "8",
+            f"fav_rank_{reg_id}": "1",
+        },
+    )
+
+    with app.app_context():
+        row = (
+            db.session.query(OfficialRaceResult)
+            .filter_by(official_race_id=race_id)
+            .one()
+        )
+        # Sanity — persisted before we check render.
+        assert row.gate == 8
+
+    resp = client.get(f"/official/{race_id}")
+    body = resp.data.decode()
+    assert "Gate 8" in body
+    assert "3:43.8" in body
+    assert "#1 fav" in body
+
+
 def test_non_organizer_cannot_upload(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

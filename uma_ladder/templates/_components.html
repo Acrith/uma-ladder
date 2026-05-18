@@ -132,6 +132,50 @@
 {% endmacro %}
 
 
+{# PR-A4 — weather + season glyph chips. Render the in-game art
+   (asset attribution in static/img/{weather,season}/CREDITS.md)
+   inside a `chip()`-shaped pill so the surrounding chip row layout
+   doesn't shift. Falls back to a plain text chip when the value
+   doesn't resolve to a known icon — keeps the page readable if a
+   future value gets added to the enum before the icons land. #}
+{% macro weather_chip(weather) %}
+  {%- set icon = weather | weather_icon_filename -%}
+  {% if icon %}
+    {% set tone = {'Sunny': 'amber', 'Cloudy': 'slate', 'Rainy': 'cyan', 'Snowy': 'cyan'}[weather] %}
+    {% set tone_classes = {
+      "slate":   "bg-slate-800/70 text-slate-300 border-slate-700",
+      "cyan":    "bg-cyan-500/10 text-cyan-300 border-cyan-500/30",
+      "amber":   "bg-amber-500/10 text-amber-300 border-amber-500/30",
+    }[tone] %}
+    <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium {{ tone_classes }}">
+      <img src="{{ url_for('static', filename='img/weather/' + icon) }}"
+           alt="{{ weather }}"
+           title="{{ weather }}"
+           loading="lazy"
+           class="h-4 w-auto" />
+      {{ weather }}
+    </span>
+  {% else %}
+    {{ chip(weather, "slate") }}
+  {% endif %}
+{% endmacro %}
+
+{% macro season_chip(season) %}
+  {%- set icon = season | season_icon_filename -%}
+  {% if icon %}
+    <span class="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-xs font-medium text-slate-300">
+      <img src="{{ url_for('static', filename='img/season/' + icon) }}"
+           alt="{{ season }}"
+           title="{{ season }}"
+           loading="lazy"
+           class="h-4 w-auto" />
+    </span>
+  {% else %}
+    {{ chip(season, "slate") }}
+  {% endif %}
+{% endmacro %}
+
+
 {# PR-A1 + PR-A3 — Track / distance / style aptitude grade.
    Used on race-result detail rows. The PR-A1 version rendered a
    styled text chip; PR-A3 swaps to the official Cygames glyph

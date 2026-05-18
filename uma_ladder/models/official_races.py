@@ -159,6 +159,18 @@ class OfficialRaceResult(db.Model):
     # Each grade is one of G F E D C B A S. Nullable so historical
     # rows (without OCR enrichment) survive the migration.
     aptitudes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # PR-A5 — row-parser fields the OCR pipeline has been pulling
+    # off the result screen all along. `finish_time_or_lengths` is
+    # the winner's race time ("3:43.8") OR the gap to the winner
+    # for non-winners ("1/2 L" / "Nose" / "Distance"). `gate` is the
+    # starting gate number; `fav_rank` is the pre-race favorite
+    # number. All nullable: historical rows + manual entries don't
+    # have to fill these.
+    finish_time_or_lengths: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    gate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fav_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confirmed_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

@@ -184,8 +184,10 @@ def _register_template_filters(app: Flask) -> None:
     from .services.profiles import masked_display_for
     from .services.stat_ranks import (
         aptitude_grade_icon_filename,
+        season_icon_filename,
         stat_rank_icon_filename,
         stat_rank_label,
+        weather_icon_filename,
     )
 
     app.jinja_env.filters["masked_display"] = masked_display_for
@@ -199,6 +201,9 @@ def _register_template_filters(app: Flask) -> None:
     app.jinja_env.filters["aptitude_grade_icon_filename"] = (
         aptitude_grade_icon_filename
     )
+    # PR-A4 — season + weather text/icon glyphs.
+    app.jinja_env.filters["weather_icon_filename"] = weather_icon_filename
+    app.jinja_env.filters["season_icon_filename"] = season_icon_filename
 
 
 def _register_inbox_context(app: Flask) -> None:

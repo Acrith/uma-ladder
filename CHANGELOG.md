@@ -8,6 +8,33 @@ log for the full history.
 
 ### Official races
 
+- **Result-screen detail: gate, time, fav rank now persisted +
+  shown (PR-A5).** The OCR row parser has been pulling these
+  off the in-game result screen for a while (Draft already
+  surfaced them as display chips on its confirm page); they've
+  been discarded at save time on Official races. Now they live
+  on the result row: starting gate, the winner's finish time
+  (e.g. `3:43.8`) or the gap to the winner for everyone else
+  (e.g. `1/2 L`, `Nose`, `Distance`), and pre-race favorite
+  number (`#1 fav`). All three render under each result on the
+  race detail page as a compact pill row above the stat grid;
+  the OCR confirm page also shows them as chips so an organiser
+  can see what got parsed. Manual entry can leave them blank.
+
+### Race detail (Official + Draft)
+
+- **Season + weather chips use official game glyphs (PR-A4).**
+  The Track-conditions row on both Official and Draft race detail
+  pages used to show *Spring* as a plain text chip and *Rainy* as
+  a Unicode glyph (`☂ Rainy`). They now render the actual in-game
+  artwork — Cygames' season-name typography and weather icons —
+  for visual parity with the uma sheet. Same fallback behaviour
+  as before: an unknown value falls back to a plain text chip so
+  nothing breaks if the catalogue grows past what's been
+  mirrored. Asset attribution in `static/img/{season,weather}/CREDITS.md`.
+
+### Official races
+
 - **Official-style aptitude glyphs on race results (PR-A3).**
   The Track / Distance / Style aptitude row on each per-result
   card used to render hand-styled letter chips (`A`, `B`, etc.).

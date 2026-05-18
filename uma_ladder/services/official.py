@@ -81,6 +81,14 @@ class ResultLine:
     power: int | None = None
     guts: int | None = None
     wisdom: int | None = None
+    # PR-A5 — row-parser fields surfaced from the result screen OCR.
+    # `finish_time_or_lengths` is the winner's race time
+    # ("3:43.8") OR the gap to the winner for non-winners ("1/2 L",
+    # "Nose", "Distance"). All optional — manual entry leaves them
+    # blank.
+    finish_time_or_lengths: str | None = None
+    gate: int | None = None
+    fav_rank: int | None = None
 
 
 def _utcnow() -> datetime:
@@ -707,6 +715,9 @@ def submit_results(
             power=line.power,
             guts=line.guts,
             wisdom=line.wisdom,
+            finish_time_or_lengths=line.finish_time_or_lengths,
+            gate=line.gate,
+            fav_rank=line.fav_rank,
             confirmed_by_user_id=confirmed_by_user_id,
         )
         db.session.add(result)
