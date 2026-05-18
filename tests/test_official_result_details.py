@@ -206,6 +206,232 @@ def test_per_result_confirm_uses_sheet_extractor(
     assert "Anchors Aweigh!" in skill_inputs
 
 
+# ─── PR-OCR6: tier dropdown + inherited badge + position-aware matcher ─
+
+
+def test_confirm_page_renders_tier_dropdown(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR6 — when the parsed candidate has multiple tier
+    variants (◎/○/×), the confirm template renders a <select>
+    listing all of them so the organiser picks which tier was
+    actually in the screenshot."""
+    from uma_ladder.models import OcrParseAttempt, OcrParseStatus, UploadedImage
+    from uma_ladder.models.enums import UploadPurpose
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    with app.app_context():
+        # Three tier variants of Right-Handed.
+        db.session.add_all(
+            [
+                UmaSkill(
+                    gametora_id=20011,
+                    name_en="Right-Handed ◎",
+                    enabled=True,
+                    is_inherited=False,
+                ),
+                UmaSkill(
+                    gametora_id=20012,
+                    name_en="Right-Handed ○",
+                    enabled=True,
+                    is_inherited=False,
+                ),
+                UmaSkill(
+                    gametora_id=20013,
+                    name_en="Right-Handed ×",
+                    enabled=True,
+                    is_inherited=False,
+                ),
+            ]
+        )
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"test-rh-{result_id}.png",
+            mime_type="image/png",
+            size_bytes=100,
+            purpose=UploadPurpose.OCR_RESULT,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            raw_text="",
+            parsed_json={
+                "rows": [
+                    {"raw_line": "Skills Inspiration Career Info"},
+                    {"raw_line": "Right-Handed"},
+                    {"raw_line": "Close"},
+                ],
+                "stats": {},
+                "skills": [],
+            },
+            confidence_json={},
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}"
+        f"/details-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # A <select> element should render with all three tier
+    # options. Look for both the dropdown opening tag and each
+    # option value.
+    assert "<select" in body
+    assert 'name="skill_name_0"' in body
+    assert 'value="Right-Handed ◎"' in body
+    assert 'value="Right-Handed ○"' in body
+    assert 'value="Right-Handed ×"' in body
+
+
+def test_confirm_page_renders_inherited_badge(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR6 — when the parsed candidate is_inherited=True (a
+    later-slot occurrence of an ult name), the confirm template
+    renders an `inherited` badge next to the input so the
+    organiser knows the slot is a gene-version."""
+    from uma_ladder.models import OcrParseAttempt, OcrParseStatus, UploadedImage
+    from uma_ladder.models.enums import UploadPurpose
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+    _login(client, "org")
+
+    with app.app_context():
+        # Inherited-dupe pair for Anchors Aweigh!.
+        db.session.add_all(
+            [
+                UmaSkill(
+                    gametora_id=30001,
+                    name_en="Anchors Aweigh!",
+                    enabled=True,
+                    is_inherited=False,
+                ),
+                UmaSkill(
+                    gametora_id=30002,
+                    name_en="Anchors Aweigh!",
+                    enabled=True,
+                    is_inherited=True,
+                ),
+            ]
+        )
+        image = UploadedImage(
+            uploader_user_id=host["id"],
+            storage_key=f"test-aa-{result_id}.png",
+            mime_type="image/png",
+            size_bytes=100,
+            purpose=UploadPurpose.OCR_RESULT,
+        )
+        db.session.add(image)
+        db.session.commit()
+        attempt = OcrParseAttempt(
+            uploaded_image_id=image.id,
+            provider="google_vision",
+            raw_text="",
+            parsed_json={
+                "rows": [
+                    {"raw_line": "Skills Inspiration Career Info"},
+                    {"raw_line": "Anchors Aweigh!"},
+                    {"raw_line": "Anchors Aweigh!"},
+                    {"raw_line": "Close"},
+                ],
+                "stats": {},
+                "skills": [],
+            },
+            confidence_json={},
+            status=OcrParseStatus.PARSED,
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        attempt_id = attempt.id
+
+    resp = client.get(
+        f"/official/{race_id}/results/{result_id}"
+        f"/details-from-ocr/{attempt_id}"
+    )
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Both rows render — first is innate (no badge), second is
+    # inherited (badge present somewhere on the page).
+    assert ">inherited<" in body or 'inherited\n' in body or "inherited" in body
+    # Catch the actual badge span — title attribute is distinctive.
+    assert "Inherited (gene-version)" in body
+
+
+def test_match_skill_names_inherited_position_rule(
+    app: Flask,
+) -> None:
+    """PR-OCR6 — the save-side matcher prefers non-inherited at
+    first occurrence and inherited at subsequent occurrences. So
+    saving ['Anchors Aweigh!', 'Anchors Aweigh!'] resolves to two
+    different UmaSkill ids."""
+    from uma_ladder.services import official as official_service
+
+    with app.app_context():
+        innate = UmaSkill(
+            gametora_id=30100,
+            name_en="Anchors Aweigh!",
+            enabled=True,
+            is_inherited=False,
+        )
+        inherited = UmaSkill(
+            gametora_id=30101,
+            name_en="Anchors Aweigh!",
+            enabled=True,
+            is_inherited=True,
+        )
+        db.session.add_all([innate, inherited])
+        db.session.commit()
+        matches = official_service._match_skill_names(
+            ["Anchors Aweigh!", "Anchors Aweigh!"]
+        )
+        # Two results.
+        assert len(matches) == 2
+        # First is the non-inherited (innate unique).
+        assert matches[0][1] == innate.id
+        # Second is the inherited (gene-version).
+        assert matches[1][1] == inherited.id
+
+
+def test_match_skill_names_tier_variants_resolve_directly(
+    app: Flask,
+) -> None:
+    """When the form posts the full tier-suffixed name (the
+    dropdown picks emit ``Right-Handed ○`` etc.), the matcher
+    resolves directly to that exact catalog row."""
+    from uma_ladder.services import official as official_service
+
+    with app.app_context():
+        double_circle = UmaSkill(
+            gametora_id=30200,
+            name_en="Right-Handed ◎",
+            enabled=True,
+            is_inherited=False,
+        )
+        single_circle = UmaSkill(
+            gametora_id=30201,
+            name_en="Right-Handed ○",
+            enabled=True,
+            is_inherited=False,
+        )
+        db.session.add_all([double_circle, single_circle])
+        db.session.commit()
+        matches = official_service._match_skill_names(
+            ["Right-Handed ◎", "Right-Handed ○"]
+        )
+        assert matches[0][1] == double_circle.id
+        assert matches[1][1] == single_circle.id
+
+
 def test_per_result_multi_upload_merges_sheet_extracts(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

@@ -1016,45 +1016,86 @@ def _normalize_skill_name(s: str) -> str:
 def _match_skill_names(
     names: Iterable[str],
 ) -> list[tuple[str, int | None]]:
-    """Map raw skill name strings to UmaSkill.id.
+    """Map raw skill name strings to UmaSkill.id, **in order**.
 
     Two-stage match per name: first case-insensitive exact on name_en
     (cheapest, definitive), then a normalized-key fallback that strips
     typography differences. Returns (raw_name, skill_id_or_None) in the
     input order. Empty / whitespace-only names are dropped.
+
+    **PR-OCR6** — order-aware variant pick for ults that have both an
+    innate and inherited catalog row (same name_en, different
+    is_inherited). In-game rule: skill slot 0 is the innate unique;
+    later occurrences of the same name are inherited (gene-versions).
+    We assume the input list is in slot order (the per-result confirm
+    form emits skill_name_<i> in DOM order which matches slot order).
+    First occurrence of a name picks the non-inherited catalog row;
+    subsequent occurrences pick the inherited one. Names that have
+    only one variant (regular skills, tier-suffixed variants like
+    "Right-Handed ◎" / "Right-Handed ○") are unaffected.
     """
     cleaned = [n.strip() for n in names if n and n.strip()]
     if not cleaned:
         return []
-    # Stage 1: exact case-insensitive match.
+    # Stage 1: exact case-insensitive match. Now we collect ALL
+    # variants per name_en (not just one id) so the order-aware pick
+    # below can distinguish innate vs inherited.
     lower_lookup = {n.lower() for n in cleaned}
     rows = db.session.scalars(
         select(UmaSkill)
         .where(UmaSkill.enabled.is_(True))
         .where(func.lower(UmaSkill.name_en).in_(lower_lookup))
+        .order_by(UmaSkill.is_inherited.asc(), UmaSkill.id.asc())
     ).all()
-    by_lower = {s.name_en.lower(): s.id for s in rows}
+    by_lower: dict[str, list[UmaSkill]] = {}
+    for s in rows:
+        by_lower.setdefault(s.name_en.lower(), []).append(s)
 
-    # Stage 2: build a normalized lookup over ALL enabled skills for
-    # any names that didn't get an exact hit. Only run the second SQL
-    # query if at least one name needs it.
+    # Stage 2: normalized-key fallback. Same per-name variant list
+    # shape so the picker downstream is uniform.
     needs_fuzzy = [n for n in cleaned if n.lower() not in by_lower]
-    by_normalized: dict[str, int] = {}
+    by_normalized: dict[str, list[UmaSkill]] = {}
     if needs_fuzzy:
-        # Loading the catalogue once is cheap (≈2k rows); doing this in
-        # SQL would require either FTS or a dedicated normalized column.
+        # Loading the catalogue once is cheap (≈2k rows).
         all_enabled = db.session.scalars(
-            select(UmaSkill).where(UmaSkill.enabled.is_(True))
+            select(UmaSkill)
+            .where(UmaSkill.enabled.is_(True))
+            .order_by(UmaSkill.is_inherited.asc(), UmaSkill.id.asc())
         ).all()
         for s in all_enabled:
-            by_normalized.setdefault(_normalize_skill_name(s.name_en), s.id)
+            by_normalized.setdefault(
+                _normalize_skill_name(s.name_en), []
+            ).append(s)
 
+    # Track per-name occurrence count so the second "Anchors Aweigh!"
+    # in a slot list picks the inherited variant. Tier variants
+    # (different name_en, e.g. "Right-Handed ◎" vs "Right-Handed ○")
+    # each have their own counter — they're separate names.
+    seen_names: dict[str, int] = {}
     out: list[tuple[str, int | None]] = []
     for n in cleaned:
-        sid = by_lower.get(n.lower())
-        if sid is None:
-            sid = by_normalized.get(_normalize_skill_name(n))
-        out.append((n, sid))
+        variants = by_lower.get(n.lower())
+        if variants is None:
+            variants = by_normalized.get(_normalize_skill_name(n))
+        if not variants:
+            out.append((n, None))
+            continue
+        canonical = variants[0].name_en
+        occ = seen_names.get(canonical, 0)
+        seen_names[canonical] = occ + 1
+        if occ == 0:
+            # First occurrence of this name — prefer non-inherited.
+            picked = next(
+                (s for s in variants if not s.is_inherited), variants[0]
+            )
+        else:
+            # Subsequent occurrence — prefer inherited (the gene
+            # version). Falls back to whatever we have if catalogue
+            # has only the innate variant.
+            picked = next(
+                (s for s in variants if s.is_inherited), variants[0]
+            )
+        out.append((n, picked.id))
     return out
 
 

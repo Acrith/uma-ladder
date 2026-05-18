@@ -4,6 +4,30 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-05-19
+
+### Official races
+
+- **Tier-variant dropdown + inherited-ult badge on the
+  per-result confirm page (PR-OCR6).** Two long-standing OCR
+  papercuts both addressed:
+  - Green skills with tier glyphs (`Right-Handed ◎ / ○ / ×`) used
+    to surface as separate chips — OCR can't read the ◎/○/×
+    glyph so the matcher couldn't pick. The confirm page now
+    renders a single **dropdown** listing every tier variant and
+    the organiser picks which one is actually in the screenshot.
+    The chosen option's catalogue name flows directly to save, so
+    the right UmaSkill row is referenced — no manual cleanup.
+  - Duplicated ult skills (e.g. an uma with both her innate
+    `Anchors Aweigh!` at slot 0 AND an inherited copy from a
+    parent uma later in the list) now show **both** rows; the
+    second one carries a violet `inherited` badge. Per the
+    in-game rule "slot 0 is always the innate, later slots are
+    inherited", the matcher resolves the first occurrence to the
+    innate catalogue row and subsequent ones to the gene-version
+    row. Saved skills also get the badge when they're inherited
+    so re-upload + re-confirm keeps the distinction.
+
 ## 2026-05-18
 
 ### Official races

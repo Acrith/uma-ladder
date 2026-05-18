@@ -274,12 +274,14 @@ def test_extract_returns_dataclass(app: Flask) -> None:
 # ─── PR-OCR3: tier-variant matching ──────────────────────────────
 
 
-def test_tier_variants_all_emit(app: Flask) -> None:
-    """Right-Handed ◎/○/× all normalize to the same key. When the
-    OCR'd text says just `Right-Handed`, all three catalogue
-    variants should appear in the result so the user can pick
-    which tier was actually on-screen — the OCR can't read the
-    tier glyph reliably."""
+def test_tier_variants_collapse_to_one_candidate_with_variants(
+    app: Flask,
+) -> None:
+    """Right-Handed ◎/○/× all normalize to the same key. PR-OCR6:
+    the extractor emits ONE candidate per OCR position with a
+    multi-entry ``variants`` list — the confirm form renders a
+    dropdown so the organiser picks the actual tier (the OCR
+    text can't disambiguate ◎/○/× glyphs)."""
     with app.app_context():
         db.session.add_all(
             [
@@ -296,10 +298,26 @@ def test_tier_variants_all_emit(app: Flask) -> None:
                 "Close",
             ]
         )
-    names = [s["name_en"] for s in result.skills]
-    assert "Right-Handed ◎" in names
-    assert "Right-Handed ○" in names
-    assert "Right-Handed ×" in names
+    # Exactly one candidate for this position.
+    rh_candidates = [
+        s for s in result.skills if "Right-Handed" in s["name_en"]
+    ]
+    assert len(rh_candidates) == 1
+    candidate = rh_candidates[0]
+    # Its variants list carries all three tier options for the
+    # dropdown (order isn't a contract — we just assert the set).
+    variant_names = {v["name_en"] for v in candidate["variants"]}
+    assert variant_names == {
+        "Right-Handed ×",
+        "Right-Handed ◎",
+        "Right-Handed ○",
+    }
+    # Each variant carries id + is_inherited for the form-renderer
+    # + save-flow path to resolve the right catalog row.
+    for v in candidate["variants"]:
+        assert "id" in v
+        assert "name_en" in v
+        assert v["is_inherited"] is False
 
 
 def test_longer_skill_still_shadows_shorter(
@@ -457,6 +475,114 @@ def test_merge_header_first_wins(app: Flask) -> None:
         m = merge_extracts([a, b])
     assert m.header["uma_name"] == "Tamamo Cross"  # first wins
     assert m.header["trainer_name"] == "Yuuta"  # only b had it
+
+
+# ─── PR-OCR6: inherited ult position rule + tier-variant candidate shape ─
+
+
+def test_inherited_ult_position_rule_first_innate_rest_inherited(
+    app: Flask,
+) -> None:
+    """Per the in-game rule "every uma starts with their innate
+    ultimate at slot 0; any later occurrence of the same ult name
+    is the inherited (gene-version) copy from a parent uma". The
+    extractor walks matches in screen order and tags the first
+    occurrence of each name as non-inherited, subsequent as
+    inherited."""
+    with app.app_context():
+        # Same name_en, both variants exist in the catalogue.
+        db.session.add_all(
+            [
+                UmaSkill(
+                    gametora_id=93001,
+                    name_en="Anchors Aweigh!",
+                    enabled=True,
+                    is_inherited=False,
+                ),
+                UmaSkill(
+                    gametora_id=93002,
+                    name_en="Anchors Aweigh!",
+                    enabled=True,
+                    is_inherited=True,
+                ),
+            ]
+        )
+        db.session.commit()
+        result = extract_uma_sheet(
+            [
+                "Skills Inspiration Career Info",
+                # Two occurrences of the same name in screen order.
+                "Anchors Aweigh!",
+                "Anchors Aweigh!",
+                "Close",
+            ]
+        )
+    # Two candidates emitted.
+    aa = [s for s in result.skills if s["name_en"] == "Anchors Aweigh!"]
+    assert len(aa) == 2
+    # First (lower raw_pos) is the innate.
+    aa.sort(key=lambda s: s["raw_pos"])
+    assert aa[0]["is_inherited"] is False
+    assert aa[1]["is_inherited"] is True
+    # The two have different catalogue ids — innate (non-inh) vs gene
+    # (inh) — so the save flow knows which UmaSkill row to reference.
+    assert aa[0]["id"] != aa[1]["id"]
+
+
+def test_inherited_only_in_catalogue_still_surfaces(
+    app: Flask,
+) -> None:
+    """Edge case: catalogue has only the inherited variant for a
+    name (rare; would happen if the seeder dropped the innate row).
+    The extractor still emits the skill — better to show something
+    so the organiser can fix the catalogue."""
+    with app.app_context():
+        db.session.add(
+            UmaSkill(
+                gametora_id=93010,
+                name_en="Orphaned Ult",
+                enabled=True,
+                is_inherited=True,
+            )
+        )
+        db.session.commit()
+        result = extract_uma_sheet(
+            [
+                "Skills Inspiration Career Info",
+                "Orphaned Ult",
+                "Close",
+            ]
+        )
+    names = [s["name_en"] for s in result.skills]
+    assert "Orphaned Ult" in names
+
+
+def test_candidate_shape_carries_variants_and_inherited(
+    app: Flask,
+    seeded_skills: list[UmaSkill],  # noqa: ARG001
+) -> None:
+    """Sanity check: every candidate has the new fields plus the
+    legacy id/name_en/raw_pos. The confirm template + save flow
+    both rely on this shape."""
+    with app.app_context():
+        result = extract_uma_sheet(
+            [
+                "Skills Inspiration Career Info",
+                "Anchors Aweigh!",
+                "Close",
+            ]
+        )
+    assert len(result.skills) == 1
+    c = result.skills[0]
+    assert set(c.keys()) >= {
+        "id",
+        "name_en",
+        "raw_pos",
+        "is_inherited",
+        "variants",
+    }
+    assert isinstance(c["variants"], list)
+    assert len(c["variants"]) >= 1
 
 
 # ─── PR-OCR4: inherited-variant dedupe ───────────────────────────

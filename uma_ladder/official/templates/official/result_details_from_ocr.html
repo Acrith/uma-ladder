@@ -73,35 +73,49 @@
         <div>
           <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Skills</h2>
           <p class="mt-1 text-xs text-slate-500">
-            One per line. Matched against the catalogue on save — unmatched names get stored as raw text.
-            Uma skill lists usually need two screenshots — upload again from the race page and the second batch will be appended here.
+            Matched against the catalogue on save — unmatched names get
+            stored as raw text. Uma skill lists usually need two
+            screenshots; upload again from the race page and the new batch
+            merges with what's already saved here. <strong>Tier-suffixed
+            green skills</strong> (◎/○/×) render as a dropdown because
+            OCR can't read the tier glyph — pick the right one.
+            <strong>Inherited</strong> labels mark gene-version
+            duplicates of the innate ult (slot 0 is the innate; later
+            slots with the same name are inherited).
           </p>
-          {# Merge already-saved skills with newly-parsed skills (existing
-             first, new ones appended). Case-insensitive dedupe so a skill
-             that appeared in both screenshots only renders once. The list
-             includes both matched skills (skill.name_en) and unmatched
-             rows preserved as raw_ocr_text. #}
-          {% set saved_names = [] %}
-          {% for assoc in result.skills %}
-            {% set _ = saved_names.append(assoc.skill.name_en if assoc.skill else (assoc.raw_ocr_text or '')) %}
-          {% endfor %}
-          {% set merged = [] %}
-          {% set seen_lower = [] %}
-          {% for n in saved_names + parsed_skills %}
-            {% if n and n.lower() not in seen_lower %}
-              {% set _ = merged.append(n) %}
-              {% set _ = seen_lower.append(n.lower()) %}
-            {% endif %}
-          {% endfor %}
           <div id="skill-rows" class="mt-2 space-y-2">
-            {% for name in merged %}
+            {% for row in merged_skill_rows %}
+              {% set c = row.candidate %}
               <div class="flex items-center gap-2">
-                <input type="text"
-                       name="skill_name_{{ loop.index0 }}"
-                       value="{{ name }}"
-                       list="skill-names"
-                       autocomplete="off"
-                       class="input-base w-full" />
+                {% if c and c.variants and c.variants|length > 1 %}
+                  {# PR-OCR6 — tier-variant dropdown (◎/○/×). The
+                     organiser picks the actual tier from the
+                     screenshot; the chosen `<option value>` is the
+                     full catalog name_en so the matcher resolves
+                     directly to the right UmaSkill row on save. #}
+                  <select name="skill_name_{{ loop.index0 }}"
+                          class="input-base w-full">
+                    {% for v in c.variants %}
+                      <option value="{{ v.name_en }}"
+                              {% if v.id == c.id %}selected{% endif %}>
+                        {{ v.name_en }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                {% else %}
+                  <input type="text"
+                         name="skill_name_{{ loop.index0 }}"
+                         value="{{ row.name_en }}"
+                         list="skill-names"
+                         autocomplete="off"
+                         class="input-base w-full" />
+                {% endif %}
+                {% if c and c.is_inherited %}
+                  <span class="rounded-full border border-violet-500/40 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-300 whitespace-nowrap"
+                        title="Inherited (gene-version) of the same ult — slot 0 is the innate unique; later slots with the same name are inherited from a parent uma">
+                    inherited
+                  </span>
+                {% endif %}
                 <button type="button"
                         class="text-xs text-rose-400 hover:text-rose-300"
                         onclick="this.parentElement.remove()">×</button>

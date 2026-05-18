@@ -806,6 +806,61 @@ def result_details_from_ocr(
     parsed_stats = sheet.stats or (parsed.get("stats") or {})
     parsed_skills = sheet_skill_names or (parsed.get("skills") or [])
 
+    # PR-OCR6 — build a merged list of skill rows for the confirm
+    # form. Each row is {"name_en", "candidate"}. `candidate` carries
+    # the variant + inherited info that drives the template's
+    # dropdown / badge render. Saved rows go first so they survive
+    # a re-upload + re-confirm.
+    #
+    # Dedupe key is (name_lower, is_inherited) — NOT just name. The
+    # in-game rule "slot 0 = innate, later slots = inherited" means
+    # the same name_en can legitimately appear TWICE (innate +
+    # inherited copy). Dedupe-by-name alone would collapse them.
+    saved_rows: list[dict[str, object]] = []
+    for assoc in result.skills:
+        name = (
+            assoc.skill.name_en if assoc.skill else (assoc.raw_ocr_text or "")
+        )
+        if not name:
+            continue
+        is_inh = bool(assoc.skill and assoc.skill.is_inherited)
+        saved_rows.append(
+            {
+                "name_en": name,
+                # Minimal candidate carrying just the badge signal —
+                # no `variants` so the template renders a text input,
+                # not a dropdown (the user already picked once).
+                "candidate": {"is_inherited": is_inh},
+            }
+        )
+
+    parsed_rows: list[dict[str, object]] = []
+    if sheet.skills:
+        # Have rich candidates — preserve variant lists.
+        for c in sheet.skills:
+            parsed_rows.append({"name_en": c["name_en"], "candidate": c})
+    else:
+        # Race-result extractor / mock fallback: bare strings only,
+        # no variant info, no inherited flag.
+        for name in parsed_skills:
+            parsed_rows.append({"name_en": name, "candidate": None})
+
+    def _dedupe_key(row: dict[str, object]) -> tuple[str, bool]:
+        c = row.get("candidate") or {}
+        return (
+            ((row["name_en"] or "")).lower(),
+            bool(c.get("is_inherited")),
+        )
+
+    seen_keys: set[tuple[str, bool]] = set()
+    merged_skill_rows: list[dict[str, object]] = []
+    for row in saved_rows + parsed_rows:
+        key = _dedupe_key(row)
+        if not key[0] or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        merged_skill_rows.append(row)
+
     # Pull every enabled skill name for the typeahead datalist. ~1.8k
     # rows fits in the rendered HTML (≈ 30KB) without JS — modern
     # browsers handle a datalist of this size fine. Sorted so the
@@ -827,7 +882,8 @@ def result_details_from_ocr(
         result=result,
         attempt=attempt,
         parsed_stats=parsed_stats,
-        parsed_skills=parsed_skills,
+        parsed_skills=parsed_skills,  # kept for back-compat
+        merged_skill_rows=merged_skill_rows,
         skill_names=skill_names,
         csrf_form=CsrfOnlyForm(),
     )

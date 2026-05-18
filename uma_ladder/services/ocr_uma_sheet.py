@@ -241,16 +241,41 @@ def _extract_skills(
     line_texts: Sequence[str],
 ) -> list[dict[str, object]]:
     """Find every UmaSkill catalogue name occurring in the post-Skills
-    text block. Returns ``[{"id", "name_en", "raw_pos"}]`` ordered by
-    first occurrence so the UI lists them in screen order.
+    text block. Returns one candidate dict per OCR occurrence,
+    ordered by first occurrence (screen order). Each candidate:
 
-    Tier variants (Right-Handed ◎ / ○ / × all normalize to
-    ``righthanded``) are kept as separate entries: the OCR can't
-    distinguish the tier glyph reliably, so we surface ALL catalogue
-    rows that share the normalized name and let the human decide
-    which one was actually on-screen. Dedupe is by skill id, so
-    inherited-variant duplicates (same name_en, same id space) still
-    collapse."""
+    ::
+
+        {
+            "id": int,            # default catalog id (primary)
+            "name_en": str,       # default name (e.g. "Right-Handed ◎")
+            "raw_pos": int,       # position in normalized text block
+            "is_inherited": bool, # True if this slot is a gene-version
+                                  # (only meaningful for ults with both
+                                  # innate + inherited catalog rows)
+            "variants": [         # all catalog rows the OCR text could
+                                  # resolve to — len > 1 when the
+                                  # screenshot can't disambiguate
+                {"id", "name_en", "is_inherited"}, ...
+            ],
+        }
+
+    Two structural cases the extractor handles separately:
+
+    - **Tier variants** (PR-OCR3): same normalized name, DIFFERENT
+      ``name_en`` (e.g. ``Right-Handed ◎ / ○ / ×``). The OCR can't
+      read the tier glyph reliably, so we emit ONE candidate with a
+      multi-entry ``variants`` list and let the human pick in the
+      confirm form's dropdown.
+    - **Inherited dupes** (PR-OCR6): same ``name_en``, both
+      ``is_inherited=False`` (innate unique) and ``is_inherited=True``
+      (gene-version of the same ult) exist in the catalogue. Per the
+      in-game rule "slot 0 is always the innate, later slots are
+      inherited", the first OCR occurrence of the name picks the
+      non-inherited row, subsequent occurrences pick the inherited
+      row. Both surface in the confirm form so the organiser sees the
+      full set.
+    """
     block = _extract_skills_section_text(line_texts)
     if not block:
         return []
@@ -258,10 +283,8 @@ def _extract_skills(
     if not norm_block:
         return []
     # Load enabled skills once. ~2k rows is cheap. Order so
-    # non-inherited rows come first within the iteration — the
-    # name-dedupe pass below keeps the first one it sees for a given
-    # name_en, so an inherited variant only wins if no original
-    # exists in the catalogue.
+    # non-inherited rows come first within each catalog group — the
+    # primary-pick logic below relies on this ordering.
     catalog = (
         db.session.query(UmaSkill)
         .filter(UmaSkill.enabled.is_(True))
@@ -286,10 +309,11 @@ def _extract_skills(
         groups.keys(),
         key=lambda n: (-len(n), n),
     )
-    found: list[tuple[int, int, str]] = []
+    # First pass — find every (position, norm_name) pair in the block,
+    # marking spans consumed so a shorter prefix can't double-match.
+    found: list[tuple[int, str]] = []
     consumed: list[bool] = [False] * len(norm_block)
     for norm_name in sorted_norms:
-        skills_in_group = groups[norm_name]
         start = 0
         while True:
             idx = norm_block.find(norm_name, start)
@@ -300,36 +324,84 @@ def _extract_skills(
                 continue
             for k in range(idx, idx + len(norm_name)):
                 consumed[k] = True
-            # Emit every skill that shares this normalized name —
-            # the tier glyph is not in the OCR'd text, so the human
-            # picks which tier from the rendered list.
-            for s in skills_in_group:
-                found.append((idx, s.id, s.name_en))
+            found.append((idx, norm_name))
             start = idx + len(norm_name)
     found.sort()
-    # PR-OCR4 — Two-stage dedupe:
-    # 1. by skill id (cheap guard against the same row matching twice)
-    # 2. by name_en (drops inherited variants that share the original's
-    #    English name — catalogue has e.g. two "Anchors Aweigh!" rows,
-    #    one is_inherited=True, one is_inherited=False. The screenshot
-    #    can't tell them apart by text alone, and showing both would
-    #    spam the confirm form for organisers. We rely on the
-    #    longest-first sort + insertion order: original tends to be
-    #    seeded first / have a smaller id, so it wins. The tier
-    #    variants (◎ / ○ / ×) have DISTINCT name_en values and are
-    #    NOT collapsed by this step — those are real different
-    #    skills.)
-    seen_ids: set[int] = set()
-    seen_names: set[str] = set()
+
+    # Second pass — turn each match into a candidate dict.
+    # Track per-name_en occurrence count so we can flag the first as
+    # innate and subsequent as inherited for ults with both variants.
+    name_occurrences: dict[str, int] = defaultdict(int)
+
     out: list[dict[str, object]] = []
-    for pos, sid, name_en in found:
-        if sid in seen_ids:
-            continue
-        if name_en in seen_names:
-            continue
-        seen_ids.add(sid)
-        seen_names.add(name_en)
-        out.append({"id": sid, "name_en": name_en, "raw_pos": pos})
+    for pos, norm_name in found:
+        group = groups[norm_name]
+        distinct_names = {s.name_en for s in group}
+
+        if len(distinct_names) > 1:
+            # Tier-variant case (Right-Handed ◎ / ○ / ×). The OCR
+            # text says "Right-Handed" — we don't know which glyph
+            # was beside it. Collapse to one variant per name_en
+            # (prefer non-inherited), sort by name_en for stable UI.
+            by_name: dict[str, UmaSkill] = {}
+            for s in group:
+                cur = by_name.get(s.name_en)
+                if cur is None or (cur.is_inherited and not s.is_inherited):
+                    by_name[s.name_en] = s
+            variant_list = sorted(by_name.values(), key=lambda x: x.name_en)
+            primary = variant_list[0]
+            out.append(
+                {
+                    "id": primary.id,
+                    "name_en": primary.name_en,
+                    "raw_pos": pos,
+                    "is_inherited": primary.is_inherited,
+                    "variants": [
+                        {
+                            "id": v.id,
+                            "name_en": v.name_en,
+                            "is_inherited": v.is_inherited,
+                        }
+                        for v in variant_list
+                    ],
+                }
+            )
+        else:
+            # Single name_en — either a solo catalog entry or an
+            # inherited-dupe (innate + gene). The position rule
+            # decides which variant we surface.
+            name_en = next(iter(distinct_names))
+            non_inh = next((s for s in group if not s.is_inherited), None)
+            inh = next((s for s in group if s.is_inherited), None)
+            occ = name_occurrences[name_en]
+            name_occurrences[name_en] = occ + 1
+            if occ == 0 and non_inh is not None:
+                picked = non_inh
+            elif occ > 0 and inh is not None:
+                picked = inh
+            elif non_inh is not None:
+                picked = non_inh
+            else:
+                # Catalogue only has the inherited variant. Rare;
+                # surface it anyway so the skill at least appears.
+                picked = inh  # type: ignore[assignment]
+            if picked is None:
+                continue
+            out.append(
+                {
+                    "id": picked.id,
+                    "name_en": picked.name_en,
+                    "raw_pos": pos,
+                    "is_inherited": picked.is_inherited,
+                    "variants": [
+                        {
+                            "id": picked.id,
+                            "name_en": picked.name_en,
+                            "is_inherited": picked.is_inherited,
+                        }
+                    ],
+                }
+            )
     return out
 
 
