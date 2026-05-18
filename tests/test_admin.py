@@ -116,6 +116,47 @@ def test_admin_can_view_index(client: FlaskClient, make_user) -> None:
     assert b"Control room" in resp.data
 
 
+def test_admin_index_shows_skill_catalog_never_seeded(
+    client: FlaskClient, make_user
+) -> None:
+    """PR-SK3 — when the skill_conditions_refreshed_at AppSetting
+    is absent (fresh env, seeder never run), the admin dashboard's
+    Skill catalog card surfaces an amber "Never seeded" hint with
+    the CLI command the operator should run."""
+    make_user(username="adm", role=Role.ADMIN)
+    _login(client, "adm")
+    resp = client.get("/admin/")
+    body = resp.data.decode()
+    assert "Skill catalog" in body
+    assert "Never seeded" in body
+    assert "seed-skill-conditions" in body
+
+
+def test_admin_index_shows_skill_catalog_refreshed_at(
+    client: FlaskClient, app, make_user
+) -> None:
+    """When the seeder has run, the timestamp + row count render."""
+    from uma_ladder.models import AppSetting
+    from uma_ladder.services.seed_skill_conditions import (
+        LAST_REFRESHED_SETTING_KEY,
+    )
+
+    make_user(username="adm", role=Role.ADMIN)
+    with app.app_context():
+        db.session.add(AppSetting(
+            key=LAST_REFRESHED_SETTING_KEY,
+            value="2026-05-19T12:34:56+00:00",
+        ))
+        db.session.commit()
+    _login(client, "adm")
+    resp = client.get("/admin/")
+    body = resp.data.decode()
+    assert "Skill catalog" in body
+    assert "Last refreshed" in body
+    # The countdown JS uses data-utc-iso to render relative time.
+    assert "2026-05-19T12:34:56+00:00" in body
+
+
 def test_admin_users_list_search(client: FlaskClient, make_user) -> None:
     make_user(username="adm", role=Role.ADMIN)
     make_user(username="findme", role=Role.USER)

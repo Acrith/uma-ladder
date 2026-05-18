@@ -11,12 +11,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
 
 from ..extensions import db
-from ..models import SkillCondition, UmaSkill
+from ..models import AppSetting, SkillCondition, UmaSkill
+
+# PR-SK3 — AppSetting key the seeder writes after each run. Lets
+# `/admin/` (and any future ops surface) display when the catalog
+# was last refreshed without having to inspect the file system.
+LAST_REFRESHED_SETTING_KEY = "skill_conditions_refreshed_at"
 
 DEFAULT_SEED_PATH = (
     Path(__file__).resolve().parents[2]
@@ -120,6 +126,19 @@ def seed_skill_conditions(path: Path | None = None) -> SeedReport:
                     changed = True
             if changed:
                 updated += 1
+
+    # PR-SK3 — stamp the AppSetting so admins can see when the
+    # catalog was last refreshed. Upsert by key (single-row-per-key
+    # table); value is ISO-8601 UTC for unambiguous parsing.
+    now_iso = datetime.now(UTC).isoformat()
+    setting = db.session.get(AppSetting, LAST_REFRESHED_SETTING_KEY)
+    if setting is None:
+        db.session.add(
+            AppSetting(key=LAST_REFRESHED_SETTING_KEY, value=now_iso)
+        )
+    else:
+        setting.value = now_iso
+        setting.updated_at = datetime.now(UTC)
 
     db.session.commit()
     return SeedReport(

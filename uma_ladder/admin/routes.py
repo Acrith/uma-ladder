@@ -50,6 +50,20 @@ def index() -> object:
     )
     season_count = db.session.scalar(select(func.count(Season.id))) or 0
     active_season = seasons_service.get_active_season()
+    # PR-SK3 — surface the skill catalog freshness on the admin
+    # dashboard so we can tell at a glance when prod's
+    # skill_conditions was last seeded. Count + timestamp; both
+    # `None` when the seeder has never been run (early local envs).
+    from ..models import AppSetting, SkillCondition
+    from ..services.seed_skill_conditions import LAST_REFRESHED_SETTING_KEY
+
+    skill_catalog_count = db.session.scalar(
+        select(func.count(SkillCondition.id))
+    ) or 0
+    skill_catalog_refreshed_at = None
+    setting = db.session.get(AppSetting, LAST_REFRESHED_SETTING_KEY)
+    if setting is not None:
+        skill_catalog_refreshed_at = setting.value
     return render_template(
         "admin/index.html",
         user_count=user_count,
@@ -57,6 +71,8 @@ def index() -> object:
         open_matches=open_matches,
         season_count=season_count,
         active_season=active_season,
+        skill_catalog_count=skill_catalog_count,
+        skill_catalog_refreshed_at=skill_catalog_refreshed_at,
     )
 
 

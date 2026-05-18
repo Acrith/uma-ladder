@@ -60,5 +60,28 @@
       <p class="mt-1 text-sm text-slate-400">Upcoming CM schedule shown on the dashboard.</p>
       <a href="{{ url_for('admin.cm_list') }}" class="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200">Manage CMs →</a>
     {% endcall %}
+
+    {# PR-SK3 — skill catalog freshness. Stamped by
+       `seed-skill-conditions` (`AppSetting.skill_conditions_refreshed_at`).
+       Useful for "is the catalog out of date?" debugging when item
+       5 or item 6 ships and a player flags a missing skill effect. #}
+    {% call card(class="p-5") %}
+      <p class="label-eyebrow">Skill catalog</p>
+      <p class="mt-1 text-3xl font-semibold text-slate-100">{{ skill_catalog_count }}</p>
+      {% if skill_catalog_refreshed_at %}
+        <p class="text-xs text-slate-500">
+          Last refreshed
+          <span data-countdown
+                data-utc-iso="{{ skill_catalog_refreshed_at }}"
+                data-update-interval-ms="60000"
+                data-prefix-past=""
+                data-suffix-past="ago">
+            <span class="text-slate-300" data-relative>{{ skill_catalog_refreshed_at[:10] }}</span>
+          </span>
+        </p>
+      {% else %}
+        <p class="text-xs text-amber-300">Never seeded — run <code>flask uma seed-skill-conditions</code></p>
+      {% endif %}
+    {% endcall %}
   </div>
 {% endblock %}

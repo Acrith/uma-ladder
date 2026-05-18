@@ -398,6 +398,66 @@ def test_seed_skill_conditions_updates_changed_fields(
         assert cond.buff_speed == 80
 
 
+def test_seed_writes_app_setting_with_refresh_timestamp(
+    app: Flask, tmp_path
+) -> None:
+    """PR-SK3 — every successful seed stamps the
+    `skill_conditions_refreshed_at` AppSetting so the admin
+    dashboard can show "last refreshed N hours ago" without
+    inspecting file mtime."""
+    import json
+    from datetime import UTC, datetime
+
+    from uma_ladder.models import AppSetting
+    from uma_ladder.services.seed_skill_conditions import (
+        LAST_REFRESHED_SETTING_KEY,
+        seed_skill_conditions,
+    )
+
+    snapshot = tmp_path / "conditions.json"
+    snapshot.write_text(json.dumps({"conditions": []}))
+
+    before = datetime.now(UTC)
+    with app.app_context():
+        seed_skill_conditions(snapshot)
+        setting = db.session.get(AppSetting, LAST_REFRESHED_SETTING_KEY)
+        assert setting is not None
+        parsed = datetime.fromisoformat(setting.value)
+        assert parsed >= before
+
+
+def test_seed_updates_existing_refresh_timestamp(
+    app: Flask, tmp_path
+) -> None:
+    """Re-seeding overwrites the stamp rather than inserting a
+    second row — AppSetting is keyed by `key`, one row per key."""
+    import json
+    import time
+
+    from uma_ladder.models import AppSetting
+    from uma_ladder.services.seed_skill_conditions import (
+        LAST_REFRESHED_SETTING_KEY,
+        seed_skill_conditions,
+    )
+
+    snapshot = tmp_path / "conditions.json"
+    snapshot.write_text(json.dumps({"conditions": []}))
+
+    with app.app_context():
+        seed_skill_conditions(snapshot)
+        first = db.session.get(AppSetting, LAST_REFRESHED_SETTING_KEY).value
+
+    time.sleep(0.01)
+
+    with app.app_context():
+        seed_skill_conditions(snapshot)
+        rows = db.session.scalars(db.select(AppSetting).where(
+            AppSetting.key == LAST_REFRESHED_SETTING_KEY
+        )).all()
+        assert len(rows) == 1
+        assert rows[0].value > first
+
+
 def test_model_buff_columns_default_to_zero(app: Flask) -> None:
     """A SkillCondition row inserted with only the predicate fields
     set must come back with all five buff columns at 0 — items 5/6
