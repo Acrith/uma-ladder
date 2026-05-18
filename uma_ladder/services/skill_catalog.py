@@ -86,12 +86,22 @@ class Buff:
 def condition_matches(
     condition: SkillCondition, context: RaceContext
 ) -> bool:
-    """True iff every non-NULL predicate on the condition row
-    matches the corresponding axis of the race context. `is_dynamic`
-    skills NEVER match — their trigger is runtime-only and the
-    display layer can't know whether they'll fire."""
-    if condition.is_dynamic:
-        return False
+    """True iff every non-NULL STATIC predicate matches the race
+    context. The function answers "could this skill fire?" — not
+    "will it definitely fire?". Specifically: `is_dynamic=True`
+    skills (those with runtime-only sub-conditions like
+    `order_rate<=50` or `straight_random==1`) CAN match, provided
+    their static predicates (strategy, surface, etc.) line up.
+
+    Why: a skill like Speed Star ◎ requires `strategy=Pace` AND a
+    runtime "near the front of the pack" trigger. On a Late
+    Surger uma, Speed Star definitely can't fire (wrong strategy)
+    — gray out. On a Pace Chaser uma, Speed Star MIGHT fire (the
+    runtime check happens during the race) — don't gray. The
+    is_dynamic flag stays in the catalog so consumers like item 6
+    (apply green-skill buffs to displayed stats) can distinguish
+    "definitely fires" (apply buff) from "might fire" (don't);
+    item 5 only cares about "definitely won't fire"."""
 
     def _matches(predicate, context_value) -> bool:
         # NULL predicate = "skill doesn't care".
@@ -119,6 +129,19 @@ def condition_matches(
     return _matches(
         condition.is_standard_distance, context.is_standard_distance
     )
+
+
+def applies_passively(
+    condition: SkillCondition, context: RaceContext
+) -> bool:
+    """Stricter than `condition_matches`: True only when the skill
+    will definitely fire on this race — no runtime conditions
+    remaining. Used by item 6 (green-skill buff display) to decide
+    whether to add the buff to the shown stat; we only add it
+    when we know the skill will passively be active in the race."""
+    if condition.is_dynamic:
+        return False
+    return condition_matches(condition, context)
 
 
 def buff_for(condition: SkillCondition) -> Buff:

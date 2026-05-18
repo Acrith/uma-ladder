@@ -8,18 +8,21 @@ log for the full history.
 
 ### Official races
 
-- **Skills that don't apply to the race are now visibly grayed
-  out (PR-SK4).** Each green skill on a per-result card now
-  shows whether it'll actually fire for this race's conditions:
-  Right-Handed skills on a Left-handed track, Sunny-Days skills
-  in the Rain, Front Runner Savvy on an End-strategy uma — all
-  render with reduced opacity, strikethrough, and a "Doesn't
-  apply to this race's conditions" tooltip. Skills with
-  runtime-only triggers (random straights, race-phase boosts,
-  etc.) gray out too — we can't predict whether they'll fire so
-  we mark them conservatively. Skill catalog data comes from
-  PR-SK2's GameTora parser; skills not yet in the catalog stay
-  cyan (we don't gray what we don't have data for).
+- **Skills that definitely won't fire for the race are now
+  grayed out (PR-SK4 + PR-SK5).** Each green skill on a
+  per-result card reads cyan when it could fire and grayed +
+  strikethrough when a hard race-context mismatch makes it
+  impossible. Examples that gray: Right-Handed skill on a
+  Left-handed track, Long Corners on a Medium race, Pace
+  Chaser Savvy on a Late Surger uma, Sunny Days skills in the
+  Rain. Examples that stay bright: ultimates (mostly pure
+  runtime triggers), Medium Straightaways on a Medium race
+  (the random-straight part fires *during* the race),
+  position-conditional skills when the uma's strategy lines up.
+  PR-SK5 fixed a too-aggressive first cut that grayed every
+  skill with any runtime sub-condition — "could fire" and "will
+  definitely fire" are different questions; the gray-out only
+  fires on definite "can't fire."
 
 ## 2026-05-18
 

@@ -115,16 +115,21 @@ def test_multiple_predicates_all_must_match(app: Flask) -> None:
         ) is False
 
 
-def test_is_dynamic_never_matches(app: Flask) -> None:
-    """Dynamic-condition skills (runtime-only triggers like 'when
-    1L behind') don't apply for display purposes regardless of
-    race context — items 5/6 conservatively treat them as
-    non-applying."""
+def test_is_dynamic_skills_match_when_statics_align(app: Flask) -> None:
+    """PR-SK5 — dynamic-condition skills CAN match condition_matches
+    when their static predicates line up. Example: Speed Star ◎
+    requires strategy=Pace (static) AND a runtime position trigger
+    (dynamic). On a Pace Chaser uma, the static check passes —
+    the skill might fire during the race, so item 5 doesn't gray
+    it out. Item 6 still won't apply the buff (uses the stricter
+    `applies_passively` check), but display-time visibility is
+    permissive."""
     skill_id = _seed_skill(
         app,
-        "Dynamic Skill",
-        direction="Right",
+        "Speed Star ◎ Test",
+        strategy="Pace",
         is_dynamic=True,
+        buff_speed=60,
     )
     with app.app_context():
         cond = db.session.scalars(
@@ -132,8 +137,70 @@ def test_is_dynamic_never_matches(app: Flask) -> None:
                 SkillCondition.skill_id == skill_id
             )
         ).one()
-        # Direction matches the predicate but is_dynamic still wins.
-        assert condition_matches(cond, RaceContext(direction="Right")) is False
+        # Pace strategy → static matches → could fire → not grayed.
+        assert condition_matches(cond, RaceContext(strategy="Pace")) is True
+        # Late strategy → static fails → definitely can't fire → grayed.
+        assert condition_matches(cond, RaceContext(strategy="Late")) is False
+
+
+def test_is_dynamic_skill_with_no_static_predicates_matches(
+    app: Flask,
+) -> None:
+    """Pure-runtime skills (e.g. an ultimate with only race-state
+    triggers like 'first 1/3 of the race') have no static
+    predicates to fail. They're "could fire" against any race
+    context — display-time visibility is permissive."""
+    skill_id = _seed_skill(
+        app, "Pure Runtime Skill", is_dynamic=True, buff_speed=100,
+    )
+    with app.app_context():
+        cond = db.session.scalars(
+            db.select(SkillCondition).where(
+                SkillCondition.skill_id == skill_id
+            )
+        ).one()
+        assert condition_matches(cond, RaceContext()) is True
+        assert condition_matches(
+            cond,
+            RaceContext(strategy="Front", direction="Right", surface="Turf"),
+        ) is True
+
+
+def test_applies_passively_stricter_than_condition_matches(
+    app: Flask,
+) -> None:
+    """PR-SK5 — item 6 uses `applies_passively` to decide whether
+    to apply a green skill's buff to the displayed stat. Stricter:
+    requires statics to match AND `is_dynamic=False`. A Pace
+    Chaser running Speed Star ◎ on a Pace race: condition_matches
+    says yes (could fire), applies_passively says no (we can't
+    guarantee, runtime trigger remains)."""
+    from uma_ladder.services.skill_catalog import applies_passively
+
+    dyn_id = _seed_skill(
+        app, "Conditional Buff", strategy="Pace", is_dynamic=True,
+    )
+    static_id = _seed_skill(
+        app, "Passive Buff", strategy="Pace", is_dynamic=False,
+    )
+    with app.app_context():
+        dyn = db.session.scalars(
+            db.select(SkillCondition).where(
+                SkillCondition.skill_id == dyn_id
+            )
+        ).one()
+        static = db.session.scalars(
+            db.select(SkillCondition).where(
+                SkillCondition.skill_id == static_id
+            )
+        ).one()
+        ctx = RaceContext(strategy="Pace")
+        # Both pass the "could fire" gate.
+        assert condition_matches(dyn, ctx) is True
+        assert condition_matches(static, ctx) is True
+        # Only the static one passes the stricter "definitely fires" gate.
+        assert applies_passively(dyn, ctx) is False
+        assert applies_passively(static, ctx) is True
 
 
 # ─── is_standard_distance ────────────────────────────────────────
@@ -600,11 +667,15 @@ def test_inapplicable_skill_unknown_in_catalog_is_permissive(
     assert out[result.id] == set()
 
 
-def test_inapplicable_skill_dynamic_always_gray(app: Flask) -> None:
-    """A skill with `is_dynamic=True` (runtime conditions we can't
-    predict) always grays out — even when other static predicates
-    match the race context, the dynamic atom forces conservative
-    treatment."""
+def test_inapplicable_dynamic_skill_stays_bright_when_statics_match(
+    app: Flask,
+) -> None:
+    """PR-SK5 — a dynamic skill whose static predicates match the
+    race context is NOT inapplicable. Example: a skill with
+    direction=Right + a runtime corner trigger, on a Right race.
+    The runtime trigger might or might not fire during the race
+    — display-side we can't tell — but the skill's not
+    *definitely* off-condition, so we don't gray it."""
     from types import SimpleNamespace
 
     from uma_ladder.services.skill_catalog import (
@@ -612,7 +683,7 @@ def test_inapplicable_skill_dynamic_always_gray(app: Flask) -> None:
     )
 
     dyn_id = _seed_skill(
-        app, "Dynamic Sometimes ◎",
+        app, "Dynamic But Static Matches",
         direction="Right", is_dynamic=True,
     )
     result = SimpleNamespace(
@@ -628,7 +699,41 @@ def test_inapplicable_skill_dynamic_always_gray(app: Flask) -> None:
 
     with app.app_context():
         out = inapplicable_skill_ids_by_result([result], race)
-    assert out[result.id] == {dyn_id}
+    assert out[result.id] == set()
+
+
+def test_inapplicable_dynamic_skill_grays_when_static_fails(
+    app: Flask,
+) -> None:
+    """The other side of PR-SK5: when a dynamic skill ALSO has a
+    static predicate that doesn't match the race context, it IS
+    inapplicable. Example: Speed Star ◎ (strategy=Pace + runtime
+    position) on a Late Surger uma — static fails regardless of
+    what the race phase does, so the skill definitely can't fire."""
+    from types import SimpleNamespace
+
+    from uma_ladder.services.skill_catalog import (
+        inapplicable_skill_ids_by_result,
+    )
+
+    speed_star_id = _seed_skill(
+        app, "Speed Star ◎ Late Test",
+        strategy="Pace", is_dynamic=True, buff_speed=60,
+    )
+    result = SimpleNamespace(
+        id=1, strategy="Late",  # uma running Late, not Pace
+        skills=[SimpleNamespace(skill_id=speed_star_id)],
+    )
+    race = SimpleNamespace(
+        preset=SimpleNamespace(direction=None, surface=None,
+                               distance_category=None, distance_meters=None,
+                               venue=None),
+        weather=None, race_season=None,
+    )
+
+    with app.app_context():
+        out = inapplicable_skill_ids_by_result([result], race)
+    assert out[result.id] == {speed_star_id}
 
 
 def test_model_buff_columns_default_to_zero(app: Flask) -> None:
