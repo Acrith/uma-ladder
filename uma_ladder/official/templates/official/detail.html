@@ -602,7 +602,20 @@
                     {# PR-A2 — 5-col grid with the official Cygames
                        rank glyph (G/G+/F/.../SS+/UG) next to each
                        value. Asset attribution in
-                       static/img/statusrank/CREDITS.md. #}
+                       static/img/statusrank/CREDITS.md.
+                       PR-OCR21 — second line shows the aptitude-
+                       adjusted effective stat for the three stats
+                       any aptitude touches (Speed via distance apt,
+                       Power via surface apt, Wisdom via style apt).
+                       Stamina and Guts show "—" since no aptitude
+                       row modifies them. Colour reflects sign
+                       (emerald = buff, rose = penalty). #}
+                    {% set _eff = effective_stats(r, race) %}
+                    {% set _eff_map = {
+                        'Speed': (r.speed, _eff.speed),
+                        'Power': (r.power, _eff.power),
+                        'Wit':   (r.wisdom, _eff.wisdom),
+                    } %}
                     <div class="mt-2 grid grid-cols-5 gap-2 text-xs">
                       {% for label, val in [
                           ('Speed', r.speed),
@@ -616,6 +629,17 @@
                           <div class="mt-0.5">
                             {{ stat_rank_value(val) }}
                           </div>
+                          {% set _pair = _eff_map.get(label) %}
+                          {% if _pair and _pair[1] is not none and val %}
+                            {% set _delta = _pair[1] - val %}
+                            <p class="mt-0.5 text-[10px] font-mono {{ 'text-emerald-300' if _delta > 0 else 'text-rose-300' }}">
+                              eff {{ _pair[1] }}
+                            </p>
+                          {% elif _pair %}
+                            <p class="mt-0.5 text-[10px] text-slate-600">—</p>
+                          {% else %}
+                            <p class="mt-0.5 text-[10px] text-slate-600">—</p>
+                          {% endif %}
                         </div>
                       {% endfor %}
                     </div>
@@ -657,8 +681,8 @@
                                label column (3rem) + auto grade
                                column = stable cell width =
                                max-content matches across rows. #}
-                            <span class="grid grid-cols-[3rem_auto] items-center gap-1">
-                              <span class="text-[11px] text-slate-400">{{ slot }}</span>
+                            <span class="grid grid-cols-[2.5rem_auto] items-center gap-1">
+                              <span class="text-right text-[11px] text-slate-400">{{ slot }}</span>
                               {{ grade_letter_badge(cat_data.get(slot|lower)) }}
                             </span>
                           {% endfor %}

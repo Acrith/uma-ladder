@@ -8,6 +8,24 @@ log for the full history.
 
 ### Official races
 
+- **Effective stats from aptitudes now visible on the race detail
+  card (PR-OCR21).** Each per-result stat tile now shows a second
+  line below the raw value with the *aptitude-modified* effective
+  value — Speed adjusted by the uma's distance aptitude for the
+  race's distance band, Power adjusted by the surface aptitude for
+  the track surface, Wisdom adjusted by the style aptitude for the
+  strategy the uma ran. Stamina and Guts show "—" since no
+  aptitude row touches them. Modifiers are colour-coded
+  (emerald = buff, rose = penalty) so a quick glance tells you
+  whether the uma is well-fit for the race. Math comes from the
+  published doc: Surface and Distance modifiers use the squared
+  conversion `(1 + raw)² − 1` (so S = +10.25%, B = -19%, etc.,
+  matching the doc's two calibration points), Style uses the
+  direct % from the table. Diminishing returns above 1200 and
+  green-skill flat buffs are *not* applied yet — those are items 6
+  and the "above 1200 = half" rule from the same backlog spec,
+  queued for follow-up.
+
 - **Race-result UI polish + lock-once-completed (PR-OCR18).**
   Four small fixes from a real submit session:
   - **Lock.** Once a race is completed, the OCR + manual entry

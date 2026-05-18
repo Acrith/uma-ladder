@@ -209,6 +209,13 @@ def _register_template_filters(app: Flask) -> None:
     # PR-A6 — overall uma rank from uma_score.
     app.jinja_env.filters["rank_points_label"] = rank_points_label
     app.jinja_env.filters["rank_points_icon_filename"] = rank_points_icon_filename
+    # PR-OCR21 — aptitude → stat modifiers. Registered as a global
+    # rather than a filter because it takes two args (the result + the
+    # race) and `{{ result | effective_stats(race) }}` reads worse
+    # than `{% set eff = effective_stats(r, race) %}` at the call site.
+    from .services.aptitude_stats import effective_stats_for_result
+
+    app.jinja_env.globals["effective_stats"] = effective_stats_for_result
 
 
 def _register_inbox_context(app: Flask) -> None:

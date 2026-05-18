@@ -711,6 +711,80 @@ def test_uma_score_zero_or_missing_skips_render(
     assert "title=\"Rank " not in body
 
 
+def test_race_detail_renders_effective_aptitude_stats(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-OCR21 — the per-result stat grid shows an aptitude-
+    adjusted "eff" line beneath each modifiable stat (Speed via
+    distance apt, Power via surface apt, Wisdom via style apt).
+    The two race-context calibration points the doc gave
+    (S = +10.25%, B = -19%) are pinned here against a hand-built
+    result row."""
+    from uma_ladder.models import OfficialRaceResult
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        row = db.session.get(OfficialRaceResult, result_id)
+        row.speed = 1200
+        row.power = 1200
+        row.wisdom = 1000
+        row.strategy = "Pace"
+        # Distance S on Medium (race preset distance_category) →
+        # Speed × 1.1025 = 1323. Surface B on Turf (race preset
+        # surface) → Power × 0.81 = 972. Style C on Pace →
+        # Wisdom × 0.75 = 750.
+        row.aptitudes = {
+            "track":    {"turf": "B", "dirt": "G"},
+            "distance": {"sprint": "G", "mile": "A",
+                         "medium": "S", "long": "A"},
+            "style":    {"front": "A", "pace": "C",
+                         "late": "A", "end": "A"},
+        }
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # Speed: S on Medium → 1200 → 1323. Power: B on Turf → 972.
+    # Wisdom: C on Pace → 750.
+    assert "eff 1323" in body
+    assert "eff 972" in body
+    assert "eff 750" in body
+    # The tint hint shows up too — green for the buff, rose for the
+    # penalties.
+    assert "text-emerald-300" in body
+    assert "text-rose-300" in body
+
+
+def test_race_detail_no_effective_line_without_aptitudes(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """When the result has stats but no aptitudes saved, the
+    effective-stat line collapses to em-dashes — we don't invent
+    a modifier we don't have data for."""
+    from uma_ladder.models import OfficialRaceResult
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        row = db.session.get(OfficialRaceResult, result_id)
+        row.speed = 1200
+        row.power = 1100
+        # aptitudes left None.
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # No "eff <number>" lines anywhere on the page.
+    import re
+
+    assert not re.search(r"eff \d+", body)
+
+
 def test_race_detail_renders_strategy_chip(
     client: FlaskClient, app: Flask, make_user
 ) -> None:
