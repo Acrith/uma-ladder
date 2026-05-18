@@ -647,7 +647,17 @@
                         {% if cat_data %}
                           <span class="text-[10px] uppercase tracking-wider text-slate-400">{{ cat_label }}</span>
                           {% for slot in slots %}
-                            <span class="inline-flex items-center gap-1">
+                            {# PR-OCR20 — sub-grid per cell so the
+                               grade glyph always sits in the same
+                               x-position regardless of slot-name
+                               width. Without it "Sprint G" pushes
+                               its grade further right than
+                               "Mile G" / "Pace A", so column 2's
+                               grades zigzag across rows. Fixed
+                               label column (3rem) + auto grade
+                               column = stable cell width =
+                               max-content matches across rows. #}
+                            <span class="grid grid-cols-[3rem_auto] items-center gap-1">
                               <span class="text-[11px] text-slate-400">{{ slot }}</span>
                               {{ grade_letter_badge(cat_data.get(slot|lower)) }}
                             </span>
