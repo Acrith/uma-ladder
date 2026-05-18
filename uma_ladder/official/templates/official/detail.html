@@ -576,7 +576,7 @@
                      category label + slot+badge pairs. Only renders
                      when the result actually has aptitude data. #}
                   {% if r.aptitudes %}
-                    <div class="mt-2 space-y-1 text-xs text-slate-400">
+                    <div class="mt-3 space-y-1 text-xs text-slate-400">
                       {% for cat_key, cat_label, slots in [
                           ('track', 'Track', ['Turf', 'Dirt']),
                           ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
@@ -598,7 +598,7 @@
                     </div>
                   {% endif %}
                   {% if r.skills %}
-                    <p class="mt-1 flex flex-wrap gap-1.5 text-xs">
+                    <p class="mt-3 flex flex-wrap gap-1.5 text-xs">
                       {% for assoc in r.skills %}
                         <span class="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/5 px-1.5 py-0.5 text-cyan-200">
                           {% if assoc.skill and assoc.skill.image_url %}

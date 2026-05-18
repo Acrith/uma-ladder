@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from uma_ladder.services.stat_ranks import (
+    aptitude_grade_icon_filename,
     stat_rank_icon_filename,
     stat_rank_index,
     stat_rank_label,
@@ -90,7 +91,43 @@ def test_stat_rank_icon_filename_format() -> None:
 
 
 def test_jinja_filters_registered(app) -> None:
-    """The two helper functions are exposed as Jinja filters so
+    """The helper functions are exposed as Jinja filters so
     templates can do `{{ value | stat_rank_label }}` directly."""
     assert "stat_rank_label" in app.jinja_env.filters
     assert "stat_rank_icon_filename" in app.jinja_env.filters
+    assert "aptitude_grade_icon_filename" in app.jinja_env.filters
+
+
+# ─── PR-A3: aptitude grade icon mapping ──────────────────────────
+
+
+@pytest.mark.parametrize(
+    "grade,expected_filename",
+    [
+        ("G", "utx_ico_statusrank_00.png"),
+        ("F", "utx_ico_statusrank_01.png"),
+        ("E", "utx_ico_statusrank_02.png"),
+        ("D", "utx_ico_statusrank_03.png"),
+        ("C", "utx_ico_statusrank_04.png"),
+        ("B", "utx_ico_statusrank_05.png"),
+        ("A", "utx_ico_statusrank_06.png"),
+        ("S", "utx_ico_statusrank_07.png"),
+    ],
+)
+def test_aptitude_grade_icon_filename_full_table(
+    grade: str, expected_filename: str
+) -> None:
+    """Mapping mirrors kachi-dev: G=00, F=01, ..., S=07. Stored
+    uppercase; case-insensitive lookup."""
+    assert aptitude_grade_icon_filename(grade) == expected_filename
+    # Case insensitive.
+    assert aptitude_grade_icon_filename(grade.lower()) == expected_filename
+
+
+@pytest.mark.parametrize("grade", [None, "", "SS", "Z", "+", "  "])
+def test_aptitude_grade_icon_filename_invalid_returns_none(
+    grade: str | None,
+) -> None:
+    """Empty / unknown / out-of-range grades produce None; caller
+    renders an em-dash placeholder."""
+    assert aptitude_grade_icon_filename(grade) is None

@@ -8,6 +8,16 @@ log for the full history.
 
 ### Official races
 
+- **Official-style aptitude glyphs on race results (PR-A3).**
+  The Track / Distance / Style aptitude row on each per-result
+  card used to render hand-styled letter chips (`A`, `B`, etc.).
+  Now they render the actual in-game Cygames aptitude glyph
+  (G through S) for visual parity with the uma sheet. The
+  confirm-form dropdowns keep the plain text options since HTML
+  `<option>` can't embed images — that's the editing surface,
+  display happens elsewhere. Asset attribution in
+  `static/img/aptituderank/CREDITS.md`.
+
 - **Official-style stat rank glyphs on race results (PR-A2).**
   The per-result stat row used to be plain text
   (*Speed 1197 · Stamina 1070 · …*). It's now a 5-column grid

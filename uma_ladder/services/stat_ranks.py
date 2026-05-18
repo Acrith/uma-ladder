@@ -104,3 +104,36 @@ def stat_rank_icon_filename(value: int | None) -> str | None:
     if idx is None:
         return None
     return f"ui_statusrank_{idx:02d}.png"
+
+
+# ─── Aptitude grade icons ────────────────────────────────────────
+#
+# Aptitudes (Track / Distance / Style slots on the uma profile)
+# span G through S — 8 grades, no "+" tier. Mapping mirrors kachi-
+# dev/uma-tools' JSX (game-mechanic mapping, not a copyrightable
+# expression):
+#
+#     APTITUDES = ['S','A','B','C','D','E','F','G']
+#     idx = 7 - APTITUDES.indexOf(grade)
+#     filename = `utx_ico_statusrank_${idx zero-padded to 2}.png`
+#
+# So G→00, F→01, ..., S→07.
+
+_APTITUDE_GRADES: tuple[str, ...] = (
+    "G", "F", "E", "D", "C", "B", "A", "S",
+)
+
+
+def aptitude_grade_icon_filename(grade: str | None) -> str | None:
+    """PNG filename for a Track/Distance/Style aptitude grade.
+
+    Returns None for empty / unknown grades — caller renders an
+    em-dash placeholder. Case-insensitive."""
+    if not grade:
+        return None
+    g = grade.strip().upper()
+    try:
+        idx = _APTITUDE_GRADES.index(g)
+    except ValueError:
+        return None
+    return f"utx_ico_statusrank_{idx:02d}.png"

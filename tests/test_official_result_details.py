@@ -563,7 +563,9 @@ def test_aptitudes_save_round_trip(
     # The "Track" / "Distance" / "Style" category labels appear in
     # the per-result card now.
     assert "Track" in body
-    assert "Aptitude grade S" in body  # title attr of the badge macro
+    # PR-A3: aptitude S = utx_ico_statusrank_07.png with title="Aptitude S".
+    assert "utx_ico_statusrank_07.png" in body
+    assert 'title="Aptitude S"' in body
 
 
 def test_aptitudes_empty_field_omits_slot(

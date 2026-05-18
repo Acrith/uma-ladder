@@ -183,6 +183,7 @@ def _register_template_filters(app: Flask) -> None:
     handle for any soft-deleted user)."""
     from .services.profiles import masked_display_for
     from .services.stat_ranks import (
+        aptitude_grade_icon_filename,
         stat_rank_icon_filename,
         stat_rank_label,
     )
@@ -194,6 +195,10 @@ def _register_template_filters(app: Flask) -> None:
     # gymnastics in templates.
     app.jinja_env.filters["stat_rank_label"] = stat_rank_label
     app.jinja_env.filters["stat_rank_icon_filename"] = stat_rank_icon_filename
+    # PR-A3 — aptitude grade icon (G/F/E/D/C/B/A/S → 00..07.png).
+    app.jinja_env.filters["aptitude_grade_icon_filename"] = (
+        aptitude_grade_icon_filename
+    )
 
 
 def _register_inbox_context(app: Flask) -> None:

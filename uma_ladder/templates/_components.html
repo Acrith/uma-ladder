@@ -132,31 +132,23 @@
 {% endmacro %}
 
 
-{# PR-A1 — Track / distance / style aptitude grade letter.
-   Used on race-result detail rows and the per-result confirm form.
-   Colour scheme is inspired by the in-game palette (S = gold-amber,
-   A = green, descending through blue / orange / pink / purple to
-   gray for G); rendered as styled text rather than real game art
-   so we don't ship third-party assets. `grade` should be one of
-   G F E D C B A S — anything else falls back to a neutral slate
-   chip and renders the literal text. Passing None / empty string
-   renders an em-dash placeholder. #}
+{# PR-A1 + PR-A3 — Track / distance / style aptitude grade.
+   Used on race-result detail rows. The PR-A1 version rendered a
+   styled text chip; PR-A3 swaps to the official Cygames glyph
+   (asset source + mapping in static/img/aptituderank/CREDITS.md).
+   `grade` should be one of G F E D C B A S; anything else falls
+   back to an em-dash placeholder. The confirm FORM still uses a
+   text <select> (HTML <option> can't embed images) — that's the
+   editing surface, not display. #}
 {% macro grade_letter_badge(grade) %}
-  {%- if grade -%}
-    {%- set tones = {
-      "S":  "bg-amber-500/20 text-amber-200 border-amber-400/70",
-      "A":  "bg-emerald-500/20 text-emerald-200 border-emerald-400/60",
-      "B":  "bg-cyan-500/20 text-cyan-200 border-cyan-400/60",
-      "C":  "bg-orange-500/15 text-orange-200 border-orange-400/50",
-      "D":  "bg-rose-500/20 text-rose-200 border-rose-400/60",
-      "E":  "bg-violet-500/20 text-violet-200 border-violet-400/60",
-      "F":  "bg-slate-500/20 text-slate-300 border-slate-400/40",
-      "G":  "bg-slate-700/50 text-slate-400 border-slate-600/40",
-    } -%}
-    {%- set tone = tones.get(grade.upper(), "bg-slate-800/60 text-slate-300 border-slate-700") -%}
-    <span class="inline-flex h-5 w-5 items-center justify-center rounded border text-[10px] font-mono font-semibold {{ tone }}"
-          title="Aptitude grade {{ grade }}">{{ grade }}</span>
-  {%- else -%}
+  {%- set icon = grade | aptitude_grade_icon_filename -%}
+  {% if icon %}
+    <img src="{{ url_for('static', filename='img/aptituderank/' + icon) }}"
+         alt="{{ grade }}"
+         title="Aptitude {{ grade }}"
+         loading="lazy"
+         class="h-5 w-auto" />
+  {% else %}
     <span class="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-800 text-[10px] text-slate-600">—</span>
-  {%- endif -%}
+  {% endif %}
 {% endmacro %}
