@@ -182,8 +182,18 @@ def _register_template_filters(app: Flask) -> None:
     display_name-or-username fallback (which would leak the raw
     handle for any soft-deleted user)."""
     from .services.profiles import masked_display_for
+    from .services.stat_ranks import (
+        stat_rank_icon_filename,
+        stat_rank_label,
+    )
 
     app.jinja_env.filters["masked_display"] = masked_display_for
+    # PR-A2 — stat-rank helpers exposed as Jinja filters so the
+    # per-result stat grid can do `{{ value | stat_rank_label }}`
+    # and `{{ value | stat_rank_icon_filename }}` without import
+    # gymnastics in templates.
+    app.jinja_env.filters["stat_rank_label"] = stat_rank_label
+    app.jinja_env.filters["stat_rank_icon_filename"] = stat_rank_icon_filename
 
 
 def _register_inbox_context(app: Flask) -> None:

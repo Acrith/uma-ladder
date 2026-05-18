@@ -8,6 +8,18 @@ log for the full history.
 
 ### Official races
 
+- **Official-style stat rank glyphs on race results (PR-A2).**
+  The per-result stat row used to be plain text
+  (*Speed 1197 · Stamina 1070 · …*). It's now a 5-column grid
+  where each cell shows the in-game rank glyph (G / G+ / F / …
+  / SS+ / UG) next to the numeric value, computed from the
+  value via the same thresholds the in-game uma sheet uses. So
+  Speed 1197 renders as **SS+ 1197**, Stamina 648 renders as
+  **B 648**, and so on. Glyph art is the official Cygames asset
+  (mirrored from kachi-dev/uma-tools — see the asset directory's
+  CREDITS file for attribution); the mapping logic is a clean
+  Python reimplementation of the published thresholds.
+
 - **Multi-screenshot polish: upload-order-independent + all
   screenshots visible on the confirm page (PR-OCR10).** Two
   follow-up papercuts from the multi-upload uma-sheet flow: the

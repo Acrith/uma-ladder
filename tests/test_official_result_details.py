@@ -598,6 +598,36 @@ def test_aptitudes_empty_field_omits_slot(
         }
 
 
+def test_race_detail_renders_stat_rank_icon(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """PR-A2 — race detail per-result card renders the official
+    Cygames status-rank icon for each stat value. Smoke-tests the
+    img tag + filename mapping."""
+    from uma_ladder.models import OfficialRaceResult
+
+    host = make_user(username="org", role=Role.ORGANIZER)
+    race_id, result_id = _setup_completed_race(app, host_id=host["id"])
+
+    with app.app_context():
+        row = db.session.get(OfficialRaceResult, result_id)
+        # Speed 1200 → index 17 (SS+) → ui_statusrank_17.png.
+        row.speed = 1200
+        # Stamina 648 → index 10 (B) → ui_statusrank_10.png.
+        row.stamina = 648
+        db.session.commit()
+
+    resp = client.get(f"/official/{race_id}")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # The two icon filenames appear in the rendered img URLs.
+    assert "ui_statusrank_17.png" in body
+    assert "ui_statusrank_10.png" in body
+    # Alt-text carries the human-readable label for accessibility.
+    assert 'alt="SS+"' in body
+    assert 'alt="B"' in body
+
+
 def test_confirm_page_renders_all_screenshots_after_multi_upload(
     client: FlaskClient, app: Flask, make_user
 ) -> None:

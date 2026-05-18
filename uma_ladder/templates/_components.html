@@ -106,6 +106,32 @@
 {% endmacro %}
 
 
+{# PR-A2 — stat-rank icon + value pair. Renders the game-art rank
+   glyph (from kachi-dev/uma-tools, see static/img/statusrank/CREDITS.md)
+   followed by the numeric value. Used in the per-result stat grid
+   on the race detail page. Missing values render as em-dash.
+   Pass `align="row"` (default) for the inline icon+value pair,
+   or `align="stack"` to render label/icon-value column-style. #}
+{% macro stat_rank_value(value, align="row") %}
+  {%- set icon = value | stat_rank_icon_filename -%}
+  {%- set label = value | stat_rank_label -%}
+  {% if value %}
+    <span class="inline-flex items-center gap-1 text-slate-200">
+      {% if icon %}
+        <img src="{{ url_for('static', filename='img/statusrank/' + icon) }}"
+             alt="{{ label }}"
+             title="{{ label }}"
+             loading="lazy"
+             class="h-4 w-auto" />
+      {% endif %}
+      <span class="text-sm font-mono">{{ value }}</span>
+    </span>
+  {% else %}
+    <span class="text-slate-600">—</span>
+  {% endif %}
+{% endmacro %}
+
+
 {# PR-A1 — Track / distance / style aptitude grade letter.
    Used on race-result detail rows and the per-result confirm form.
    Colour scheme is inspired by the in-game palette (S = gold-amber,

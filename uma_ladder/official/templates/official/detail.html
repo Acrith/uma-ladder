@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_components.html" import card, chip, grade_letter_badge, official_status_chip %}
+{% from "_components.html" import card, chip, grade_letter_badge, official_status_chip, stat_rank_value %}
 {% from "_icons.html" import lock as icon_lock, globe as icon_globe, users as icon_users, clock as icon_clock %}
 {% block title %}{{ race.name }} · Uma Ladder{% endblock %}
 {% block content %}
@@ -550,9 +550,26 @@
                     {% if r.uma_name %}<span class="ml-2 text-slate-400">· {{ r.uma_name }}</span>{% endif %}
                   </p>
                   {% if r.speed or r.stamina or r.power or r.guts or r.wisdom %}
-                    <p class="mt-1 text-xs text-slate-500">
-                      Speed {{ r.speed or '—' }} · Stamina {{ r.stamina or '—' }} · Power {{ r.power or '—' }} · Guts {{ r.guts or '—' }} · Wisdom {{ r.wisdom or '—' }}
-                    </p>
+                    {# PR-A2 — 5-col grid with the official Cygames
+                       rank glyph (G/G+/F/.../SS+/UG) next to each
+                       value. Asset attribution in
+                       static/img/statusrank/CREDITS.md. #}
+                    <div class="mt-2 grid grid-cols-5 gap-2 text-xs">
+                      {% for label, val in [
+                          ('Speed', r.speed),
+                          ('Stamina', r.stamina),
+                          ('Power', r.power),
+                          ('Guts', r.guts),
+                          ('Wit', r.wisdom),
+                        ] %}
+                        <div class="rounded border border-slate-800 bg-slate-950/30 px-1.5 py-1">
+                          <p class="text-[9px] uppercase tracking-wider text-slate-500">{{ label }}</p>
+                          <div class="mt-0.5">
+                            {{ stat_rank_value(val) }}
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
                   {% endif %}
                   {# PR-A1 — Track / Distance / Style aptitudes as
                      grade-letter badges. Three lines, each with the
