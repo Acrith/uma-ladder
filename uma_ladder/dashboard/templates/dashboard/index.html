@@ -393,7 +393,11 @@
   <p class="mt-10 text-center text-xs text-slate-600">
     Community-run ladder for Uma Musume: Pretty Derby. Organized races and 1v1 drafts.
     {% if not current_user.is_authenticated %}
-      <a class="text-slate-400 hover:text-cyan-300" href="{{ url_for('auth.register') }}">Create an account</a> to race.
+      {% if invite_only %}
+        Currently invite-only — <a class="text-slate-400 hover:text-cyan-300" href="{{ url_for('auth.register') }}">register with a code</a>, or message <span class="text-slate-400">Acrith</span> on Discord for one.
+      {% else %}
+        <a class="text-slate-400 hover:text-cyan-300" href="{{ url_for('auth.register') }}">Create an account</a> to race.
+      {% endif %}
     {% endif %}
   </p>
 

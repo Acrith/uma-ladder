@@ -8,6 +8,7 @@ from flask import Blueprint, abort, current_app, render_template
 from flask_login import current_user
 from markupsafe import Markup
 
+from ..services import app_settings as settings_service
 from ..services import cm as cm_service
 from ..services import draft as draft_service
 from ..services import official as official_service
@@ -111,6 +112,7 @@ def index() -> object:
         my_matches=my_matches,
         my_next_races=my_next_races,
         site_summary=site_service.public_summary(),
+        invite_only=settings_service.is_invite_only_enabled(),
         next_race=upcoming_with_counts[0] if upcoming_with_counts else None,
         more_upcoming=upcoming_with_counts[1:],
         upcoming_cms=upcoming_cms,

@@ -4,6 +4,13 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-08-01
+
+- **Invite-only mode says so out loud.** When registration is
+  gated, the register page states it up front and the home page's
+  footer line tells visitors to message Acrith on Discord for a
+  code — instead of silently rejecting signups.
+
 ## 2026-07-31
 
 ### Official races

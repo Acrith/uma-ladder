@@ -7,6 +7,12 @@
     {% call card(class="p-6") %}
       <p class="label-eyebrow">Welcome</p>
       <h1 class="mt-1 text-xl font-semibold text-slate-100">Create account</h1>
+      {% if invite_only %}
+        <div class="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+          Uma Ladder is currently <span class="font-semibold">invite-only</span>.
+          No code? Message <span class="font-semibold">Acrith</span> on Discord and ask for one.
+        </div>
+      {% endif %}
       {# PR-Q4 — invite-code field. Only rendered when invite-only
          mode is on; otherwise the field is hidden and the route
          ignores any value posted. OAuth buttons below mirror this
