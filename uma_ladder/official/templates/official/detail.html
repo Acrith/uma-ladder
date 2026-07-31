@@ -235,7 +235,9 @@
     <section class="mt-5 grid gap-4 md:grid-cols-3">
       {% for r in results[:3] %}
         {% set profile = profiles.get(r.user_id) if r.user_id else None %}
-        {% set art = r.uma_character.image_url if r.uma_character and r.uma_character.image_url else None %}
+        {# Route-resolved: FK'd character art, else name-matched
+           against the catalog (OCR results leave the FK null). #}
+        {% set art = podium_art.get(r.id) %}
         <div class="surface-card relative overflow-hidden p-4 {% if loop.index == 1 %}border-amber-500/30{% endif %}">
           {% if art %}
             <img src="{{ art }}"

@@ -18,6 +18,7 @@ from ..models import (
     OfficialRaceRegistration,
     OfficialRaceResult,
     Role,
+    UmaCharacter,
 )
 from ..services import ocr as ocr_service
 from ..services import official as official_service
@@ -260,10 +261,33 @@ def detail(race_id: int) -> object:
         + [res.user_id for res in results if res.user_id is not None]
     )
 
+    # Podium art — the raced uma's portrait. OCR-sourced results carry
+    # the uma as a name string with uma_character_id left null, so fall
+    # back to a case-insensitive name match against the character
+    # catalog when the FK didn't get stamped.
+    podium_art: dict[int, str] = {}
+    for res in results[:3]:
+        art_url = (
+            res.uma_character.image_url if res.uma_character is not None else None
+        )
+        if not art_url and res.uma_name:
+            from sqlalchemy import func as _func
+
+            match = db.session.scalars(
+                _select(UmaCharacter).where(
+                    _func.lower(UmaCharacter.name_en) == res.uma_name.strip().lower()
+                )
+            ).first()
+            if match is not None:
+                art_url = match.image_url
+        if art_url:
+            podium_art[res.id] = art_url
+
     return render_template(
         "official/detail.html",
         race=race,
         profiles=profiles,
+        podium_art=podium_art,
         registrations=registrations,
         invitees=invitees,
         results=results,
