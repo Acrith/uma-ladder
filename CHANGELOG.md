@@ -28,6 +28,14 @@ log for the full history.
 
 ### Draft matches
 
+- **The match page commits to champion select (PR-W2).** A phase
+  banner leads the page — phase name, what to do, and who we're
+  waiting on. The side panels stretch to full height so the oshi
+  art fills them like champ-select splash panels, bans render as
+  filled/pending slots (dashed until the pick lands), and submits
+  became lock-in buttons. The side columns are built as team
+  columns, ready to stack more players when 2v2/3v3 lands.
+
 - **Invite links work end to end.** The inbox notification sends
   you to the match page, and that page now offers Accept / Decline
   to the invitee (it used to show the host's "send the join code"
