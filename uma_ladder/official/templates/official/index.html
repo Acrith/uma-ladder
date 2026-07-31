@@ -2,28 +2,27 @@
 {% from "_components.html" import card, official_status_chip %}
 {% block title %}Official races · Uma Ladder{% endblock %}
 {% block content %}
-  {# Title row — title left, primary action right. Stays a single row
-     even on narrow viewports because both items are short. #}
+  {# Title row — title left, primary action right. #}
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <p class="label-eyebrow">Official</p>
-      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Race schedule <span class="text-base font-normal text-slate-500">({{ total }})</span></h1>
+      <h1 class="text-2xl font-semibold text-slate-100">Race schedule</h1>
+      <p class="mt-1 text-xs text-slate-500">{{ total }} race{{ "" if total == 1 else "s" }}</p>
     </div>
     {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
       <a href="{{ url_for('official.new') }}" class="btn-primary">+ New race</a>
     {% endif %}
   </div>
 
-  {# Filter strip — dedicated row below the title so a tall wrapped
-     form can never push the heading to the bottom of the cross-axis. #}
+  {# Filter strip — inline selects (input-base is w-full by default,
+     which stacked these into full-width rows). #}
   <form method="get" class="mt-4 flex flex-wrap items-center gap-2 text-sm">
-    <select name="status" class="input-base">
+    <select name="status" class="input-base w-auto">
       <option value="">all statuses</option>
       {% for s in statuses %}
         <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s.replace('_', ' ') }}</option>
       {% endfor %}
     </select>
-    <select name="season_id" class="input-base">
+    <select name="season_id" class="input-base w-auto">
       <option value="">all seasons</option>
       {% for s in seasons %}
         <option value="{{ s.id }}" {% if season_id and season_id|int == s.id %}selected{% endif %}>{{ s.name }}</option>
@@ -43,37 +42,34 @@
       {% endif %}
     </div>
   {% else %}
-    <ul class="mt-6 grid gap-3 md:grid-cols-2">
-      {% for race in races %}
-        <li>
-          {% call card(class="p-5") %}
-            <a href="{{ url_for('official.detail', race_id=race.id) }}" class="block">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="truncate text-base font-semibold text-slate-100">{{ race.name }}</p>
-                  <p class="mt-1 text-xs text-slate-400">
-                    {% if race.season %}{{ race.season.name }}{% endif %}
-                    {% if race.scheduled_at %}
-                      ·
-                      {# PR-T2 — relative time replaces absolute UTC.
-                         Pre-JS fallback keeps the UTC string visible. #}
-                      <span data-countdown
-                            data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
-                        <span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
-                      </span>
-                    {% endif %}
-                  </p>
-                </div>
-                {{ official_status_chip(race.status) }}
-              </div>
-              {% if race.preset %}
-                <p class="mt-3 text-xs text-slate-500">{{ race.preset.name }}</p>
+    <div class="surface-card mt-5 px-5 py-2">
+      <ul>
+        {% for race in races %}
+          <li class="{% if not loop.first %}border-t border-slate-800/70{% endif %}">
+            <a href="{{ url_for('official.detail', race_id=race.id) }}"
+               class="group flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+              <span class="min-w-0 flex-1 basis-56">
+                <span class="block truncate text-sm font-medium text-slate-100 group-hover:text-cyan-300">{{ race.name }}</span>
+                <span class="block truncate text-xs text-slate-400">
+                  {% if race.season %}{{ race.season.name }}{% endif %}
+                  {%- if race.preset and race.preset.name != race.name %}{% if race.season %} · {% endif %}{{ race.preset.name }}{% endif %}
+                </span>
+              </span>
+              {% if race.scheduled_at %}
+                {# PR-T2 — relative time; pre-JS fallback keeps the
+                   UTC string visible. #}
+                <span class="shrink-0 text-xs text-slate-400"
+                      data-countdown
+                      data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+                  <span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+                </span>
               {% endif %}
+              <span class="shrink-0">{{ official_status_chip(race.status) }}</span>
             </a>
-          {% endcall %}
-        </li>
-      {% endfor %}
-    </ul>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
 
     {% if pages > 1 %}
       <div class="mt-6 flex items-center justify-between text-xs text-slate-400">

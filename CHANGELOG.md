@@ -26,6 +26,22 @@ log for the full history.
 - **Direction reads as words again on the home page CM card**
   (↻ Clockwise, not a bare arrow).
 
+### List pages catch up with the new look
+
+- **Race schedule is a dense list.** One row per race — name,
+  season, track, relative time and status — instead of a
+  two-column card grid, with the filter dropdowns on a single
+  compact row.
+- **Draft matches on one card.** The join-code form sits inline
+  with the "Your matches" header, and matches render as rows
+  (players, format, code, status) instead of tiles. The
+  dashboard's "My drafts" card uses the same rows.
+- **Rankings podium columns say 1st / 2nd / 3rd** instead of
+  medal emoji.
+- **Player cards line up.** Every card reserves the oshi line,
+  so trainers with and without an oshi no longer produce ragged
+  rows; avatars are slightly larger.
+
 ### Home page
 
 - **The home page now leads with the season, not a slogan

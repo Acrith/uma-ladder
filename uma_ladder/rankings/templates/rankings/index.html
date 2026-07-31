@@ -6,8 +6,7 @@
 
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <p class="label-eyebrow">Community</p>
-      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Rankings</h1>
+      <h1 class="text-2xl font-semibold text-slate-100">Rankings</h1>
       <p class="mt-1 text-xs text-slate-500">
         {% if season %}
           Season <span class="text-slate-300">{{ season.name }}</span>
@@ -92,9 +91,9 @@
             {% if mode == "official" %}
               <th class="px-4 py-3 w-24">Points</th>
               <th class="px-4 py-3 w-20">Races</th>
-              <th class="px-4 py-3 w-14">🥇</th>
-              <th class="px-4 py-3 w-14">🥈</th>
-              <th class="px-4 py-3 w-14">🥉</th>
+              <th class="px-4 py-3 w-14 text-amber-300/90">1st</th>
+              <th class="px-4 py-3 w-14 text-slate-300">2nd</th>
+              <th class="px-4 py-3 w-14 text-orange-300/90">3rd</th>
             {% else %}
               <th class="px-4 py-3 w-24">Rating</th>
               <th class="px-4 py-3 w-20">Wins</th>

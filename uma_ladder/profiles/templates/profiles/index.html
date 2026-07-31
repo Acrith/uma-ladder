@@ -6,8 +6,8 @@
 
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <p class="label-eyebrow">Community</p>
-      <h1 class="mt-1 text-2xl font-semibold text-slate-100">Players <span class="text-base font-normal text-slate-500">({{ players.total }})</span></h1>
+      <h1 class="text-2xl font-semibold text-slate-100">Players</h1>
+      <p class="mt-1 text-xs text-slate-500">{{ players.total }} trainer{{ "" if players.total == 1 else "s" }} on the ladder</p>
     </div>
     <form method="get" class="flex items-center gap-2 text-sm">
       <input type="search"
@@ -25,23 +25,28 @@
       {% if q %}No players match “{{ q }}”.{% else %}No players yet.{% endif %}
     </div>
   {% else %}
-    <ul class="mt-6 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+    {# Every card reserves the oshi line (rendered empty when unset)
+       so rows don't come out ragged between users who picked an
+       oshi and users who didn't. #}
+    <ul class="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {% for u, profile in players.rows %}
         <li>
           <a href="{{ url_for('profiles.public', username=u.username) }}"
-             class="surface-card flex items-center gap-3 p-3 transition hover:border-cyan-500/40">
-            {{ avatar(u, profile) }}
+             class="surface-card group flex h-full items-center gap-3 p-4 transition hover:border-cyan-500/40">
+            {{ avatar(u, profile, size_class="h-12 w-12") }}
             <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-medium text-slate-100">
+              <p class="truncate text-sm font-medium text-slate-100 group-hover:text-cyan-300">
                 {% if profile and profile.display_name %}{{ profile.display_name }}{% else %}{{ u.username }}{% endif %}
               </p>
               <p class="truncate text-xs text-slate-500">@{{ u.username }}</p>
-              {% if profile and profile.oshi %}
-                <p class="truncate text-[11px] text-fuchsia-200/80">
+              <p class="truncate text-[11px] {% if profile and profile.oshi %}text-fuchsia-200/80{% else %}text-slate-600{% endif %}">
+                {%- if profile and profile.oshi -%}
                   {{ profile.oshi.name_en }}
                   {%- if profile.oshi_outfit %} · {{ profile.oshi_outfit.display_title }}{% endif %}
-                </p>
-              {% endif %}
+                {%- else -%}
+                  &nbsp;
+                {%- endif -%}
+              </p>
             </div>
           </a>
         </li>
