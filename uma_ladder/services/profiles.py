@@ -135,6 +135,17 @@ def find_user_by_username(username: str) -> User | None:
     ).first()
 
 
+def profiles_by_user_id(user_ids: Sequence[int]) -> dict[int, UserProfile]:
+    """Batch-fetch UserProfile rows so leaderboard-style tables can
+    render avatars + display names + oshi without N+1ing per row."""
+    if not user_ids:
+        return {}
+    rows = db.session.scalars(
+        select(UserProfile).where(UserProfile.user_id.in_(user_ids))
+    ).all()
+    return {p.user_id: p for p in rows}
+
+
 def sync_club_id_from_trainer(profile: UserProfile, trainer) -> None:  # noqa: ANN001
     """Reconcile ``profile.club_id`` from a freshly-fetched
     ``TrainerSummary`` (PR-L1) and refresh the first-class Club

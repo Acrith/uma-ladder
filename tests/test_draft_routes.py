@@ -247,7 +247,7 @@ def test_dashboard_includes_elo_block(client: FlaskClient, app: Flask) -> None:
     _season(app)
     resp = client.get("/")
     assert resp.status_code == 200
-    assert b"Draft Elo" in resp.data
+    assert b"Recent drafts" in resp.data
 
 
 def test_uma_ban_tile_picker_marks_oshi_and_banned(

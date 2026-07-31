@@ -222,7 +222,10 @@ def _load_profile_or_404(username: str):
     profile = profiles_service.get_or_create_profile(user)
 
     # Hero data — every tab needs these for the persistent banner.
-    active_season = seasons_service.get_active_season()
+    # Headline (not active) season: on day one of a new season the
+    # active one is empty, which showed a reigning champion's hero as
+    # "0 / 0 / 0 · 1 race this season".
+    active_season = seasons_service.get_headline_season()
     standing = (
         official_service.season_standing_for_user(user.id, active_season.id)
         if active_season is not None

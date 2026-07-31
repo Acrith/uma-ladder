@@ -1,55 +1,31 @@
 {% extends "base.html" %}
-{% from "_components.html" import card, chip, stat_tile, live_dot, draft_status_chip %}
+{% from "_components.html" import card, chip, live_dot, draft_status_chip, season_chip, weather_chip %}
 {% from "_icons.html" import clock as icon_clock %}
+{% from "_avatar.html" import avatar %}
 {% block title %}Uma Ladder{% endblock %}
 {% block content %}
 
-  {# Hero #}
-  <section class="surface-card relative overflow-hidden p-6 md:p-8">
-    <div class="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-cyan-500/15 blur-3xl"></div>
-    <div class="pointer-events-none absolute -bottom-16 -left-10 h-56 w-56 rounded-full bg-fuchsia-500/15 blur-3xl"></div>
-    <div class="relative">
-      <p class="label-eyebrow">Community ladder</p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-50 md:text-4xl">
-        <span class="bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-cyan-200 bg-clip-text text-transparent">Race. Rank. Repeat.</span>
-      </h1>
-      <p class="mt-2 max-w-xl text-sm text-slate-300">
-        Organize Uma Musume races, run draft 1v1s, and track who actually shows up on the podium —
-        all in one place.
+  {# Season strip — the season itself is the page's headline. The
+     aggregate counters that used to fill four stat tiles compress
+     into one line that never looks empty at low volume. #}
+  <section class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-50 md:text-3xl">
+      {{ active_season.name if active_season else "Between seasons" }}
+    </h1>
+    {% if active_season %}{{ live_dot() }}{% endif %}
+    {% if site_summary %}
+      <p class="text-sm text-slate-500">
+        {% if season_week %}week {{ season_week[0] }} of {{ season_week[1] }} · {% endif -%}
+        {{ site_summary.races_run }} race{{ "" if site_summary.races_run == 1 else "s" }} run
+        · {{ site_summary.trainers }} trainer{{ "" if site_summary.trainers == 1 else "s" }}
+        {%- if site_summary.drafts_played %} · {{ site_summary.drafts_played }} draft{{ "" if site_summary.drafts_played == 1 else "s" }}{% endif %}
       </p>
-      <div class="mt-4 flex flex-wrap items-center gap-2">
-        {% if active_season %}
-          {{ chip("Season · " + active_season.name, "cyan") }}
-        {% else %}
-          {{ chip("No active season", "rose") }}
-        {% endif %}
-        {{ live_dot() }}
-        <span class="ml-auto flex gap-2">
-          {% if current_user.is_authenticated %}
-            <a href="{{ url_for('draft.new') }}" class="btn-primary">+ New draft match</a>
-            <a href="{{ url_for('official.index') }}" class="btn-ghost">Browse races</a>
-          {% else %}
-            <a href="{{ url_for('auth.register') }}" class="btn-primary">Get started</a>
-            <a href="{{ url_for('auth.login') }}" class="btn-ghost">Log in</a>
-          {% endif %}
-        </span>
-      </div>
-    </div>
+    {% endif %}
   </section>
 
-  {# Quick stats grid #}
-  <section class="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-    {{ stat_tile("Top points", ladder_top5[0].total_points if ladder_top5 else "—", accent="amber", small=(ladder_top5[0].username if ladder_top5 else None)) }}
-    {{ stat_tile("Top Elo", elo_top5[0].rating if elo_top5 else "—", accent="fuchsia", small=(elo_top5[0].username if elo_top5 else None)) }}
-    {{ stat_tile("Active season", active_season.name if active_season else "—", accent="cyan") }}
-    {{ stat_tile("Your matches", my_matches | length if current_user.is_authenticated else "—", accent="emerald", small="last 5 visible below") }}
-  </section>
-
-  {# Layer-A draft invites (PR-I7) — shown above all other cards
-     so the user sees actionable items first. Empty when there
-     are no pending invites for them. #}
+  {# Layer-A draft invites (PR-I7) — actionable, so above everything. #}
   {% if current_user.is_authenticated and pending_invites %}
-    <div class="mt-6 space-y-2">
+    <div class="mt-5 space-y-2">
       {% for invite in pending_invites %}
         <div class="rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/5 p-3">
           <p class="text-sm">
@@ -77,6 +53,259 @@
       {% endfor %}
     </div>
   {% endif %}
+
+  {# Champion panel + next race — who leads the season, what race is
+     next. The champion panel reuses the profile-hero art treatment
+     (leader's oshi, masked to the right) at card scale. #}
+  <section class="mt-5 grid gap-4 lg:grid-cols-[1fr_20rem]">
+
+    <div class="surface-card relative overflow-hidden p-5 md:p-6">
+      {% if leader_oshi_image %}
+        <img src="{{ leader_oshi_image }}"
+             alt=""
+             loading="lazy"
+             referrerpolicy="no-referrer"
+             width="512"
+             height="512"
+             class="pointer-events-none absolute bottom-0 right-0 h-auto max-h-[16rem] w-auto max-w-[14rem] object-contain opacity-50"
+             style="mask-image: linear-gradient(to left, rgba(0,0,0,1) 45%, rgba(0,0,0,0.55) 80%, rgba(0,0,0,0) 100%); -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,1) 45%, rgba(0,0,0,0.55) 80%, rgba(0,0,0,0) 100%);" />
+        <div class="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-fuchsia-500/15 via-fuchsia-500/5 to-transparent"></div>
+      {% endif %}
+      <div class="relative {% if leader_oshi_image %}md:pr-44{% endif %}">
+        {# Name the panel's season only when it diverges from the h1
+           (fresh active season without results yet — headline falls
+           back to the season people actually raced). #}
+        <p class="label-eyebrow">
+          Season leader{% if ladder_season and (not active_season or ladder_season.id != active_season.id) %} · {{ ladder_season.name }}{% endif %}
+        </p>
+        {% if official_top3 %}
+          {% set leader = official_top3[0] %}
+          {% set leader_profile = (ladder_profiles or {}).get(leader.user_id) %}
+          <div class="mt-3 flex items-center gap-3">
+            {{ avatar(leader, leader_profile, size_class="h-12 w-12") }}
+            <div class="min-w-0">
+              <a href="{{ url_for('profiles.public', username=leader.username) }}"
+                 class="block truncate text-xl font-semibold text-slate-50 hover:text-cyan-300">
+                {{ leader_profile.display_name if leader_profile and leader_profile.display_name else leader.username }}
+              </a>
+              <p class="truncate text-xs text-slate-400">
+                {% if leader_profile and leader_profile.oshi %}{{ leader_profile.oshi.name_en }} · {% endif -%}
+                <span class="text-slate-300">{{ leader.total_points }} pts</span>
+                · {{ leader.races_entered }} race{{ "" if leader.races_entered == 1 else "s" }}
+              </p>
+            </div>
+          </div>
+          <ol class="mt-4 border-t border-slate-800/70">
+            {% for row in official_top3 %}
+              {% set profile = (ladder_profiles or {}).get(row.user_id) %}
+              <li class="flex items-center gap-3 border-b border-slate-800/70 py-2 text-sm">
+                <span class="w-7 font-mono text-xs {% if loop.index == 1 %}text-amber-300{% else %}text-slate-500{% endif %}">#{{ loop.index }}</span>
+                <a href="{{ url_for('profiles.public', username=row.username) }}"
+                   class="min-w-0 truncate text-slate-100 hover:text-cyan-300">
+                  {{ profile.display_name if profile and profile.display_name else row.username }}
+                </a>
+                <span class="ml-auto shrink-0 text-xs text-slate-500">{{ row.races_entered }} race{{ "" if row.races_entered == 1 else "s" }}</span>
+                <span class="shrink-0 font-mono text-xs font-semibold text-cyan-300">{{ row.total_points }} pts</span>
+              </li>
+            {% endfor %}
+          </ol>
+          <p class="mt-3 text-xs">
+            <a class="text-cyan-300 hover:text-cyan-200"
+               href="{{ url_for('rankings.index', season=ladder_season.id, mode='official') if ladder_season else url_for('rankings.index') }}">Full rankings →</a>
+          </p>
+        {% elif ladder_season %}
+          <p class="mt-3 text-sm text-slate-400">No results yet — the first race decides it.</p>
+          <p class="mt-2 text-xs">
+            <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('official.index') }}">Race schedule →</a>
+          </p>
+        {% else %}
+          <p class="mt-3 text-sm text-slate-400">No seasons yet.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="surface-card flex flex-col gap-3 p-5">
+      {% if next_race %}
+        {% set race = next_race[0] %}
+        {% set reg_count = next_race[1] %}
+        <p class="label-eyebrow">
+          Next race{% if race.status == "registration_open" %} · registration open{% endif %}
+        </p>
+        <a href="{{ url_for('official.detail', race_id=race.id) }}"
+           class="text-lg font-semibold text-slate-50 hover:text-cyan-300">{{ race.name }}</a>
+        {% if race.scheduled_at %}
+          <p class="font-mono"
+             data-countdown
+             data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+             data-class-size="text-2xl font-semibold"
+             data-class-future="text-cyan-300">
+            <span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+          </p>
+          <p class="-mt-1 text-xs text-slate-500">{{ race.scheduled_at.strftime('%b %d, %H:%M UTC') }}</p>
+        {% endif %}
+        <div class="flex flex-wrap gap-1.5">
+          {% if race.preset %}
+            {{ chip(race.preset.surface, "violet" if race.preset.surface == "Turf" else "amber") }}
+            {{ chip(race.preset.distance_meters|string + "m · " + race.preset.distance_category) }}
+            {{ chip(race.preset.direction) }}
+          {% endif %}
+          {% if race.weather %}{{ weather_chip(race.weather) }}{% endif %}
+          {% if race.ground_condition %}
+            {% set ground_tone = {'Firm': 'emerald', 'Good': 'cyan', 'Soft': 'amber', 'Heavy': 'rose'}[race.ground_condition] %}
+            {{ chip(race.ground_condition, ground_tone) }}
+          {% endif %}
+        </div>
+        <p class="text-xs text-slate-400">
+          <span class="font-semibold text-slate-200">{{ reg_count }}</span>
+          {%- if race.max_players %} / {{ race.max_players }}{% endif %} registered
+        </p>
+        <a href="{{ url_for('official.detail', race_id=race.id) }}" class="btn-primary mt-auto block text-center">
+          {{ "Register →" if race.status == "registration_open" else "View race →" }}
+        </a>
+        {% if more_upcoming %}
+          <div class="border-t border-slate-800/70 pt-2 text-xs">
+            <p class="text-slate-500">Also upcoming</p>
+            <ul class="mt-1 space-y-1">
+              {% for r, _count in more_upcoming %}
+                <li class="flex items-baseline justify-between gap-2">
+                  <a href="{{ url_for('official.detail', race_id=r.id) }}"
+                     class="truncate text-slate-300 hover:text-cyan-300">{{ r.name }}</a>
+                  {% if r.scheduled_at %}
+                    <span class="shrink-0 text-amber-300"
+                          data-countdown
+                          data-utc-iso="{{ r.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+                      <span data-relative>{{ r.scheduled_at.strftime('%b %d') }}</span>
+                    </span>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="label-eyebrow">Next race</p>
+        <p class="text-sm text-slate-400">Nothing scheduled yet.</p>
+        <a href="{{ url_for('official.index') }}" class="mt-auto text-xs text-cyan-300 hover:text-cyan-200">All races →</a>
+      {% endif %}
+    </div>
+  </section>
+
+  {# Races you're actually in. Scoped by registration, not by club:
+     club_id is mirrored from uma.moe and is often NULL, and Public
+     races cross club lines — either would make this card lie. #}
+  {% if current_user.is_authenticated and my_next_races %}
+    <section class="mt-6">
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="label-eyebrow">You're racing</p>
+            <h2 class="mt-1 text-lg font-semibold text-slate-100">Next up</h2>
+          </div>
+        </div>
+        <ul class="mt-3 grid gap-2 md:grid-cols-3">
+          {% for race in my_next_races %}
+            <li class="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3 transition hover:border-cyan-400/50 hover:bg-cyan-500/10">
+              <a href="{{ url_for('official.detail', race_id=race.id) }}" class="block">
+                <p class="truncate text-sm font-medium text-slate-100">{{ race.name }}</p>
+                {% if race.preset %}
+                  <p class="mt-0.5 truncate text-xs text-slate-400">
+                    {{ race.preset.venue }} · {{ race.preset.distance_meters }}m {{ race.preset.surface }}
+                  </p>
+                {% endif %}
+                {% if race.scheduled_at %}
+                  <p class="mt-2 inline-flex items-center gap-1 text-xs text-cyan-300"
+                     data-countdown
+                     data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+                    {{ icon_clock(class="h-3 w-3") }}
+                    <span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+                  </p>
+                {% endif %}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    </section>
+  {% endif %}
+
+  {# Activity feed — recent results prove the site is alive at a
+     glance. Sparse data reads as "quiet week", not "dead site". #}
+  <section class="mt-6 grid gap-4 lg:grid-cols-2">
+
+    {% call card(class="p-5") %}
+      <div class="flex items-baseline justify-between gap-3">
+        <h2 class="min-w-0 truncate text-sm font-semibold text-slate-100">
+          Latest race{% if latest_race %} · <span class="text-slate-300">{{ latest_race.name }}</span>{% endif %}
+        </h2>
+        {% if latest_race %}
+          <a class="shrink-0 text-xs text-cyan-300 hover:text-cyan-200"
+             href="{{ url_for('official.detail', race_id=latest_race.id) }}">Results →</a>
+        {% endif %}
+      </div>
+      {% if latest_race_podium %}
+        <ol class="mt-3">
+          {% for r in latest_race_podium %}
+            {% set profile = (ladder_profiles or {}).get(r.user_id) %}
+            <li class="flex items-center gap-3 border-t border-slate-800/70 py-2 text-sm">
+              <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full border font-mono text-[10px] font-bold
+                           {% if r.placement == 1 %}border-amber-500/50 bg-amber-500/10 text-amber-300
+                           {% elif r.placement == 2 %}border-slate-400/40 bg-slate-400/10 text-slate-200
+                           {% else %}border-orange-500/45 bg-orange-500/10 text-orange-300{% endif %}">{{ r.placement }}</span>
+              {{ avatar(r.user, profile, size_class="h-6 w-6") }}
+              <a href="{{ url_for('profiles.public', username=r.user.username) }}"
+                 class="min-w-0 truncate font-medium text-slate-100 hover:text-cyan-300">
+                {{ profile.display_name if profile and profile.display_name else r.user.username }}
+              </a>
+              {% if r.uma_name %}<span class="min-w-0 truncate text-xs text-slate-500">{{ r.uma_name }}</span>{% endif %}
+              {% if loop.first and latest_race.scheduled_at %}
+                <span class="ml-auto shrink-0 text-xs text-slate-500"
+                      data-countdown
+                      data-utc-iso="{{ latest_race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+                  <span data-relative>{{ latest_race.scheduled_at.strftime('%b %d') }}</span>
+                </span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% elif latest_race %}
+        <p class="mt-3 text-sm text-slate-500">No podium recorded.</p>
+      {% else %}
+        <p class="mt-3 text-sm text-slate-500">No races completed yet.</p>
+      {% endif %}
+    {% endcall %}
+
+    {% call card(class="p-5") %}
+      <div class="flex items-baseline justify-between gap-3">
+        <h2 class="text-sm font-semibold text-slate-100">Recent drafts</h2>
+        <a class="shrink-0 text-xs text-cyan-300 hover:text-cyan-200"
+           href="{{ url_for('rankings.index', mode='draft') }}">Draft ladder →</a>
+      </div>
+      {% if recent_drafts %}
+        <ul class="mt-3">
+          {% for d in recent_drafts %}
+            <li class="flex items-center gap-2 border-t border-slate-800/70 py-2 text-sm">
+              <a href="{{ url_for('draft.detail', match_id=d.match_id) }}"
+                 class="min-w-0 truncate">
+                <span class="font-medium text-slate-100">{{ d.winner_username }}</span>
+                <span class="text-slate-500">def.</span>
+                <span class="text-slate-300">{{ d.loser_username }}</span>
+              </a>
+              <span class="shrink-0 text-xs text-slate-500">· {{ d.umas_per_player }} uma</span>
+              {% if d.winner_delta is not none %}
+                <span class="ml-auto shrink-0 font-mono text-xs font-semibold text-emerald-300">+{{ d.winner_delta }}</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="mt-3 text-sm text-slate-500">
+          No drafts yet
+          {%- if current_user.is_authenticated %} — <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.new') }}">start one</a>
+          {%- else %} — <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">how drafts work</a>{% endif %}.
+        </p>
+      {% endif %}
+    {% endcall %}
+  </section>
 
   {# Champions Meeting · upcoming — admin-managed schedule, visible to everyone #}
   {% if upcoming_cms %}
@@ -145,99 +374,6 @@
     </section>
   {% endif %}
 
-  {# Upcoming official races — visible to everyone, drives registration #}
-  {% if upcoming_official %}
-    <section class="mt-6">
-      {% call card(class="p-5") %}
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="label-eyebrow">Official · upcoming</p>
-            <h2 class="mt-1 text-lg font-semibold text-slate-100">Sign-ups open</h2>
-          </div>
-          <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('official.index') }}">All races →</a>
-        </div>
-        <ul class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {% for race, reg_count in upcoming_official %}
-            <li class="rounded-lg border border-slate-800 bg-slate-900/40 p-3 transition hover:border-amber-500/40 hover:bg-slate-900/70">
-              <a href="{{ url_for('official.detail', race_id=race.id) }}" class="block">
-                <div class="flex items-start justify-between gap-2">
-                  <div class="min-w-0">
-                    <p class="truncate text-sm font-medium text-slate-100">{{ race.name }}</p>
-                    {% if race.preset %}
-                      <p class="mt-0.5 truncate text-xs text-slate-400">
-                        {{ race.preset.venue }} · {{ race.preset.distance_meters }}m {{ race.preset.surface }}
-                      </p>
-                    {% endif %}
-                  </div>
-                  <span class="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-200">{{ race.status.replace('_', ' ') }}</span>
-                </div>
-                <p class="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                  <span>
-                    <span class="text-slate-300">{{ reg_count }}</span>
-                    {%- if race.max_players %} / {{ race.max_players }}{% endif %} registered
-                  </span>
-                  {% if race.scheduled_at %}
-                    <span class="text-slate-700">·</span>
-                    {# PR-T2 — relative time replaces absolute UTC.
-                       Same shared [data-countdown] handler used on
-                       the race detail Scheduled block. #}
-                    <span class="inline-flex items-center gap-1 text-amber-300"
-                          data-countdown
-                          data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
-                      {{ icon_clock(class="h-3 w-3") }}
-                      <span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
-                    </span>
-                  {% endif %}
-                </p>
-              </a>
-            </li>
-          {% endfor %}
-        </ul>
-      {% endcall %}
-    </section>
-  {% endif %}
-
-  {# Main content grid #}
-  <section class="mt-6 grid gap-4 lg:grid-cols-2">
-    {# Official top 5 — auto-refresh every 30s #}
-    {% call card(class="p-5") %}
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="label-eyebrow">Official ladder</p>
-          <h2 class="mt-1 text-lg font-semibold text-slate-100">Top 5</h2>
-        </div>
-        <div class="flex items-center gap-2">
-          {{ live_dot("30s") }}
-          {% if active_season %}
-            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('rankings.index', season=active_season.id, mode='official') }}">Full →</a>
-          {% endif %}
-        </div>
-      </div>
-      <div class="mt-3" hx-get="{{ url_for('dashboard.partial_official_top5') }}" hx-trigger="every 30s" hx-swap="outerHTML">
-        {% include "dashboard/_partial_official_top5.html" %}
-      </div>
-    {% endcall %}
-
-    {# Draft top 5 — auto-refresh every 30s #}
-    {% call card(class="p-5") %}
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="label-eyebrow">Draft Elo</p>
-          <h2 class="mt-1 text-lg font-semibold text-slate-100">Top 5</h2>
-        </div>
-        <div class="flex items-center gap-2">
-          {{ live_dot("30s") }}
-          {% if active_season %}
-            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('rankings.index', season=active_season.id, mode='draft') }}">Full →</a>
-          {% endif %}
-        </div>
-      </div>
-      <div class="mt-3" hx-get="{{ url_for('dashboard.partial_draft_top5') }}" hx-trigger="every 30s" hx-swap="outerHTML">
-        {% include "dashboard/_partial_draft_top5.html" %}
-      </div>
-    {% endcall %}
-  </section>
-
   {# My matches block #}
   {% if current_user.is_authenticated and my_matches %}
     <section class="mt-6">
@@ -247,7 +383,10 @@
             <p class="label-eyebrow">My drafts</p>
             <h2 class="mt-1 text-lg font-semibold text-slate-100">Recent &amp; active</h2>
           </div>
-          <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">All →</a>
+          <div class="flex items-center gap-3 text-xs">
+            <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.new') }}">+ New match</a>
+            <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">All →</a>
+          </div>
         </div>
         <ul class="mt-3 grid gap-2 md:grid-cols-2">
           {% for m in my_matches %}
@@ -270,5 +409,12 @@
       {% endcall %}
     </section>
   {% endif %}
+
+  <p class="mt-10 text-center text-xs text-slate-600">
+    Community-run ladder for Uma Musume: Pretty Derby. Organized races and 1v1 drafts.
+    {% if not current_user.is_authenticated %}
+      <a class="text-slate-400 hover:text-cyan-300" href="{{ url_for('auth.register') }}">Create an account</a> to race.
+    {% endif %}
+  </p>
 
 {% endblock %}

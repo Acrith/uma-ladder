@@ -1024,6 +1024,42 @@ def list_upcoming_races(
     return visible
 
 
+def list_upcoming_races_for_user(
+    user_id: int, *, limit: int | None = None
+) -> Sequence[OfficialRace]:
+    """Upcoming races this user is actually signed up for.
+
+    Distinct from ``list_upcoming_races``, which answers "what could
+    you join". The member dashboard scopes by participation rather
+    than by club: ``UserProfile.club_id`` is mirrored from uma.moe and
+    is frequently NULL, and Public races cross club lines anyway — so
+    club membership would both under- and over-select.
+
+    Visibility is still applied: a race you're registered for is one
+    you can see, but the filter keeps the rule in one place.
+    """
+    far_future = datetime(9999, 1, 1, tzinfo=UTC)
+    stmt = (
+        select(OfficialRace)
+        .join(
+            OfficialRaceRegistration,
+            OfficialRaceRegistration.official_race_id == OfficialRace.id,
+        )
+        .where(OfficialRaceRegistration.user_id == user_id)
+        .where(OfficialRaceRegistration.status == RegistrationStatus.REGISTERED)
+        .where(OfficialRace.status.in_(_UPCOMING_STATUSES))
+        .order_by(
+            func.coalesce(OfficialRace.scheduled_at, far_future).asc(),
+            OfficialRace.created_at.desc(),
+        )
+    )
+    rows = list(db.session.scalars(stmt))
+    visible = [r for r in rows if user_can_view_race(r, user_id=user_id)]
+    if limit is not None:
+        visible = visible[:limit]
+    return visible
+
+
 def get_race(race_id: int) -> OfficialRace:
     return _get_race(race_id)
 

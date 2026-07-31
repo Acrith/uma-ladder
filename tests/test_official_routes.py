@@ -245,7 +245,7 @@ def test_dashboard_shows_top5_block(client: FlaskClient, app: Flask) -> None:
     _make_season(app)
     resp = client.get("/")
     assert resp.status_code == 200
-    assert b"Official ladder" in resp.data
+    assert b"Season leader" in resp.data
 
 
 def test_new_form_renders_preset_dropdown_with_data_source(
@@ -382,7 +382,7 @@ def test_dashboard_shows_upcoming_official_races(
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode()
-    assert "Sign-ups open" in body
+    assert "registration open" in body
     assert "Tonight 8pm" in body
     # Registration count rendered "0 / 12".
     assert "/ 12" in body

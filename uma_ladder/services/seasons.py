@@ -6,7 +6,14 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from ..extensions import db
-from ..models import Season, SeasonStatus
+from ..models import (
+    DraftMatch,
+    DraftMatchStatus,
+    OfficialRace,
+    OfficialRaceResult,
+    Season,
+    SeasonStatus,
+)
 
 
 def list_seasons(*, status: str | None = None) -> Sequence[Season]:
@@ -28,6 +35,46 @@ def get_active_season(*, now: datetime | None = None) -> Season | None:
         .limit(1)
     )
     return db.session.scalars(stmt).first()
+
+
+def season_has_results(season_id: int) -> bool:
+    """True when the season has anything worth putting on a leaderboard."""
+    official = (
+        select(OfficialRaceResult.id)
+        .join(OfficialRace, OfficialRace.id == OfficialRaceResult.official_race_id)
+        .where(OfficialRace.season_id == season_id)
+        .limit(1)
+    )
+    if db.session.scalars(official).first() is not None:
+        return True
+    draft = (
+        select(DraftMatch.id)
+        .where(DraftMatch.season_id == season_id)
+        .where(DraftMatch.status == DraftMatchStatus.COMPLETED)
+        .limit(1)
+    )
+    return db.session.scalars(draft).first() is not None
+
+
+def get_headline_season(*, now: datetime | None = None) -> Season | None:
+    """The season public surfaces should *display*.
+
+    Distinct from ``get_active_season``, which answers "which season do
+    new results belong to" and must keep naming the current season even
+    while it's empty. Display surfaces need the opposite: the day a new
+    season opens, the active one has no results, and defaulting to it
+    blanks the dashboard, the rankings and every profile — hiding the
+    standings visitors actually came to read. So prefer the active
+    season once it has results, and otherwise fall back to the most
+    recent season that does.
+    """
+    active = get_active_season(now=now)
+    if active is not None and season_has_results(active.id):
+        return active
+    for season in list_seasons():
+        if season_has_results(season.id):
+            return season
+    return active
 
 
 def create_season(

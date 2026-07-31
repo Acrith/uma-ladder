@@ -23,6 +23,7 @@ from ..models import Season, UserProfile
 from ..services import clubs as clubs_service
 from ..services import draft as draft_service
 from ..services import official as official_service
+from ..services import profiles as profiles_service
 from ..services import seasons as seasons_service
 
 bp = Blueprint("rankings", __name__, template_folder="templates")
@@ -36,10 +37,13 @@ _PAGE_SIZE = 25
 def _resolve_season(season_arg: str | None) -> Season | None:
     """Resolve the ``?season=`` query param to a Season row.
 
-    Falls back to the active season when nothing is given. Returns
-    ``None`` when the requested season doesn't exist OR there's no
-    active season — the template renders an empty state in either
-    case so the user can pick from the dropdown.
+    Falls back to the headline season when nothing is given — the
+    active season once it has results, else the most recent season
+    that does, so a freshly-opened season doesn't render an empty
+    board over the standings people came to read. Returns ``None``
+    when the requested season doesn't exist OR there are no seasons
+    at all — the template renders an empty state in either case so
+    the user can pick from the dropdown.
     """
     if season_arg:
         try:
@@ -47,18 +51,11 @@ def _resolve_season(season_arg: str | None) -> Season | None:
         except ValueError:
             return None
         return db.session.get(Season, sid)
-    return seasons_service.get_active_season()
+    return seasons_service.get_headline_season()
 
 
 def _profiles_by_user_id(user_ids: Sequence[int]) -> dict[int, UserProfile]:
-    """Batch-fetch UserProfile rows so the table can render avatars
-    + display names + oshi without N+1ing across the whole page."""
-    if not user_ids:
-        return {}
-    rows = db.session.scalars(
-        select(UserProfile).where(UserProfile.user_id.in_(user_ids))
-    ).all()
-    return {p.user_id: p for p in rows}
+    return profiles_service.profiles_by_user_id(user_ids)
 
 
 def _viewer_club_id() -> int | None:

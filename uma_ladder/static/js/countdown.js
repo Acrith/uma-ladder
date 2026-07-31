@@ -97,6 +97,10 @@
       futureClass:
         el.getAttribute("data-class-future") || "text-amber-300",
       pastClass: el.getAttribute("data-class-past") || "text-slate-400",
+      // Size/weight classes applied alongside the tone class. The
+      // dashboard next-race panel renders its countdown as the
+      // panel's headline number; everything else keeps text-xs.
+      sizeClass: el.getAttribute("data-class-size") || "text-xs",
     };
 
     bucketsByInterval[interval] = bucketsByInterval[interval] || [];
@@ -108,12 +112,12 @@
     if (diff > 0) {
       ctx.relEl.textContent =
         ctx.futurePrefix + " " + fmtDelta(diff, ctx.granularity);
-      ctx.relEl.className = "text-xs " + ctx.futureClass;
+      ctx.relEl.className = ctx.sizeClass + " " + ctx.futureClass;
     } else {
       ctx.relEl.textContent =
         ctx.pastPrefix + " " + fmtDelta(diff, ctx.granularity) +
         (ctx.pastSuffix ? " " + ctx.pastSuffix : "");
-      ctx.relEl.className = "text-xs " + ctx.pastClass;
+      ctx.relEl.className = ctx.sizeClass + " " + ctx.pastClass;
     }
   }
 

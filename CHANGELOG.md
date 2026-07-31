@@ -4,6 +4,50 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-07-31
+
+### Home page
+
+- **The home page now leads with the season, not a slogan
+  (PR-U2).** The "Race. Rank. Repeat." hero and the four stat
+  tiles are gone. The page opens on the season itself — name,
+  live status, "week N of M" and the site's running counts in
+  one line — followed by a champion panel (the current leader
+  with their oshi art and the top-3 standings), a next-race
+  panel with a countdown, track chips and the Register button,
+  and an activity feed showing the latest race's podium and
+  recent draft results with Elo deltas. Signed in, your
+  invites, upcoming races and drafts keep their cards around
+  the same skeleton. The two auto-refreshing "Top 5" cards are
+  gone — the champion panel links straight to the full
+  rankings.
+
+## 2026-07-27
+
+### Rankings + profiles
+
+- **A newly-opened season no longer hides the season people
+  actually raced (PR-U1).** The dashboard ladders, the default
+  `/rankings` view and every profile hero used to follow the
+  *active* season. The day 2026 Summer opened, that meant the
+  front page showed a board where everyone had one race, the
+  full 10-race Spring league was reachable only through the
+  season dropdown, and the reigning champion's profile read
+  "0 / 0 / 0 · 1 race this season". Display surfaces now show
+  the most recent season that has results, and each ladder card
+  is labelled with the season it's showing. The "Active season"
+  tile still names the live season — that's still where a new
+  race gets registered. Asking for a season explicitly
+  (`/rankings/?season=<id>`) is unchanged and still renders an
+  empty season as empty.
+
+### Home page
+
+- **New "You're racing" card.** Signed-in players get their own
+  upcoming races surfaced at the top, scoped by what you're
+  actually registered for — so it works for public races and
+  doesn't depend on your club being synced from uma.moe.
+
 ## 2026-05-19
 
 ### Official races
