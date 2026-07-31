@@ -26,6 +26,22 @@ log for the full history.
 - **Direction reads as words again on the home page CM card**
   (↻ Clockwise, not a bare arrow).
 
+### Draft matches
+
+- **Invite links work end to end.** The inbox notification sends
+  you to the match page, and that page now offers Accept / Decline
+  to the invitee (it used to show the host's "send the join code"
+  copy with no way in). Anyone else logged in sees a one-click
+  "Join this match" button while a seat is open.
+- **The lobby no longer resets your uma-ban picking.** The 5-second
+  refresh only reloads the page when the opponent actually did
+  something (joined, readied, banned, set the room code) — quiet
+  polls leave your scroll position, search text and tile selection
+  alone.
+- **Creating a match is two taps.** The "type 2 or 3" field became
+  a 2-umas / 3-umas picker, and the track pool explains what it
+  controls.
+
 ### List pages catch up with the new look
 
 - **Race schedule is a dense list.** One row per race — name,

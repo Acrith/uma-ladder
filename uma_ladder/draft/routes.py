@@ -12,7 +12,13 @@ from flask import (
 from flask_login import current_user, login_required
 
 from ..extensions import db, limiter
-from ..models import DraftBanType, DraftMatchStatus, OcrParseAttempt, UmaOutfit
+from ..models import (
+    DraftBanType,
+    DraftMatchInvite,
+    DraftMatchStatus,
+    OcrParseAttempt,
+    UmaOutfit,
+)
 from ..models.enums import VENUES, Direction, DistanceCategory, Surface
 from ..services import draft as draft_service
 from ..services import ocr as ocr_service
@@ -225,7 +231,14 @@ def detail(match_id: int) -> object:
     except draft_service.DraftNotFoundError:
         abort(404)
     bans = draft_service.list_bans(match_id)
-    should_poll = _should_poll(match, bans)
+    # Poll on every live status; the client only reloads when the
+    # visible state-token below actually changes, so polling while a
+    # form is mid-fill is safe (no swap, no scroll reset).
+    should_poll = match.status not in (
+        DraftMatchStatus.COMPLETED,
+        DraftMatchStatus.CANCELLED,
+        DraftMatchStatus.RANDOMIZATION_FAILED,
+    )
 
     # PR-J6 — uma ban is blind by design (template line ~365 even
     # says "Pick one costume to ban — opponent can still race the
@@ -329,6 +342,39 @@ def detail(match_id: int) -> object:
         if match.status == DraftMatchStatus.COMPLETED
         else []
     )
+    # PR-W1 — the invite notification links straight here, so the
+    # page itself must offer Accept/Decline to the invitee (before
+    # this the invitee saw the host's "send the join code" copy with
+    # no way in).
+    my_invite = None
+    if (
+        current_user.is_authenticated
+        and match.status == DraftMatchStatus.WAITING_FOR_OPPONENT
+    ):
+        from sqlalchemy import select as _sel
+
+        my_invite = db.session.scalars(
+            _sel(DraftMatchInvite)
+            .where(DraftMatchInvite.draft_match_id == match.id)
+            .where(DraftMatchInvite.invitee_user_id == current_user.id)
+            .where(DraftMatchInvite.status == "pending")
+        ).first()
+
+    # Composite of everything the page renders that an opponent can
+    # change remotely. Built from VISIBLE bans so the blind uma-ban
+    # phase doesn't leak (or trigger reloads on) the opponent's pick.
+    state_token = ":".join(
+        [
+            str(match.status),
+            str(bool(match.host_ready)),
+            str(bool(match.opponent_ready)),
+            str(match.opponent_user_id or 0),
+            str(len(visible_bans)),
+            match.room_code or "",
+            str(match.selected_preset_id or 0),
+        ]
+    )
+
     outgoing_invites = (
         draft_service.list_outgoing_invites_for_match(match.id)
         if match.status == DraftMatchStatus.WAITING_FOR_OPPONENT
@@ -346,6 +392,8 @@ def detail(match_id: int) -> object:
         characters=list_enabled_characters(),
         track_ban_options=track_ban_options,
         should_poll=should_poll,
+        state_token=state_token,
+        my_invite=my_invite,
         all_outfits=all_outfits,
         oshi_outfit_ids=oshi_outfit_ids,
         banned_outfit_ids=banned_outfit_ids,
@@ -354,37 +402,6 @@ def detail(match_id: int) -> object:
         completed_screenshots=completed_screenshots,
         outgoing_invites=outgoing_invites,
     )
-
-
-def _should_poll(match, bans) -> bool:
-    """Only poll when the user has nothing to fill out — otherwise the swap
-    nukes mid-typing values. After the user submits their pending action,
-    polling resumes so they see the opponent's action land."""
-    status = match.status
-    if status == DraftMatchStatus.WAITING_FOR_OPPONENT:
-        return True
-    me = current_user.id
-    if status == DraftMatchStatus.READY_CHECK:
-        if me == match.host_user_id:
-            return bool(match.host_ready)
-        if me == match.opponent_user_id:
-            return bool(match.opponent_ready)
-        return False
-    if status == DraftMatchStatus.TRACK_BAN_PHASE:
-        return any(
-            b.user_id == me and b.ban_type in {
-                DraftBanType.VENUE,
-                DraftBanType.DIRECTION,
-                DraftBanType.DISTANCE_CATEGORY,
-                DraftBanType.SURFACE,
-            }
-            for b in bans
-        )
-    if status == DraftMatchStatus.UMA_BAN_PHASE:
-        return any(
-            b.user_id == me and b.ban_type == DraftBanType.UMA for b in bans
-        )
-    return False
 
 
 # ---------- HTMX partials ----------

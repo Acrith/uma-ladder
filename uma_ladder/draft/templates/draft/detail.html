@@ -30,16 +30,13 @@
        'distance_category':  'Dt',
   } %}
 
-  <div
-    {% if should_poll %}
-      hx-get="{{ url_for('draft.detail', match_id=match.id) }}"
-      hx-trigger="every 5s"
-      hx-select="#draft-detail-body"
-      hx-target="#draft-detail-body"
-      hx-swap="outerHTML"
-    {% endif %}
-  >
-  <div id="draft-detail-body" class="space-y-4">
+  {# PR-W1 — polling is a lightweight state probe now, not an htmx
+     body swap: a script at the bottom re-fetches this page every 5s
+     and reloads ONLY when data-state-token changed. Keeps scroll
+     position + form state stable while you're picking (the old swap
+     reset the uma-tile grid to the top every 5 seconds). #}
+  <div>
+  <div id="draft-detail-body" class="space-y-4" data-state-token="{{ state_token }}">
 
     {# ─── TOP INFORMATION LAYER ────────────────────────────────────── #}
     <header class="flex flex-wrap items-start justify-between gap-3">
@@ -47,7 +44,6 @@
         <p class="label-eyebrow">Draft match</p>
         <h1 class="mt-1 text-2xl font-semibold text-slate-100">#{{ match.id }}</h1>
         <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-          {{ chip("Draft", "fuchsia") }}
           {{ draft_status_chip(match.status) }}
           {{ chip("Pool · " + match.preset_pool, "violet") }}
           {{ chip(match.umas_per_player|string + " Umas/player") }}
@@ -265,8 +261,36 @@
         {% if match.status == 'waiting_for_opponent' %}
           {% call card(class="p-5") %}
             <p class="label-eyebrow">Waiting</p>
-            <h2 class="mt-1 text-lg font-semibold text-slate-100">Send the join code to your opponent</h2>
-            <p class="mt-2 text-sm text-slate-400">They'll see your match on their <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">draft page</a> after pasting <span class="text-mono-pill">{{ match.join_code }}</span>.</p>
+            {% if my_invite %}
+              {# PR-W1 — the invite notification links here, so the
+                 page must close the loop for the invitee. #}
+              <h2 class="mt-1 text-lg font-semibold text-slate-100">@{{ match.host.username }} invited you to this match</h2>
+              <p class="mt-2 text-sm text-slate-400">{{ match.umas_per_player }} umas per player · accept to start the ready check.</p>
+              <div class="mt-4 flex items-center gap-3">
+                <form method="post" action="{{ url_for('draft.accept_invite', invite_id=my_invite.id) }}">
+                  {{ csrf_form.hidden_tag() }}
+                  <button class="btn-primary">Accept invite</button>
+                </form>
+                <form method="post" action="{{ url_for('draft.decline_invite', invite_id=my_invite.id) }}">
+                  {{ csrf_form.hidden_tag() }}
+                  <button class="text-sm text-slate-400 hover:text-rose-300">Decline</button>
+                </form>
+              </div>
+            {% elif current_user.is_authenticated and current_user.id != match.host_user_id %}
+              <h2 class="mt-1 text-lg font-semibold text-slate-100">This match needs an opponent</h2>
+              <p class="mt-2 text-sm text-slate-400">{{ match.umas_per_player }} umas per player · joining starts the ready check.</p>
+              <form method="post" action="{{ url_for('draft.join_by_code') }}" class="mt-4">
+                {{ csrf_form.hidden_tag() }}
+                <input type="hidden" name="join_code" value="{{ match.join_code }}" />
+                <button class="btn-primary">Join this match</button>
+              </form>
+            {% elif not current_user.is_authenticated %}
+              <h2 class="mt-1 text-lg font-semibold text-slate-100">This match needs an opponent</h2>
+              <p class="mt-2 text-sm text-slate-400"><a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('auth.login') }}">Log in</a> to join.</p>
+            {% else %}
+              <h2 class="mt-1 text-lg font-semibold text-slate-100">Send the join code to your opponent</h2>
+              <p class="mt-2 text-sm text-slate-400">They'll see your match on their <a class="text-cyan-300 hover:text-cyan-200" href="{{ url_for('draft.index') }}">draft page</a> after pasting <span class="text-mono-pill">{{ match.join_code }}</span> — or just send them this page's link.</p>
+            {% endif %}
 
             {# Layer-A invite (PR-I7): host can also DM-style invite a
                specific user by username — the invitee gets a banner
@@ -328,14 +352,7 @@
             <p class="label-eyebrow">Phase</p>
             <h2 class="mt-1 text-lg font-semibold text-slate-100">Track ban</h2>
             {% if not my_track_ban %}
-              {# hx-preserve keeps this form's live DOM (and the
-                 user's in-progress selections) across the 5s poll
-                 swap. Once the user submits their ban, the
-                 {% if not my_track_ban %} branch stops rendering
-                 server-side so the preserved node naturally falls
-                 out on the next poll. #}
               <form id="draft-track-ban-form"
-                    hx-preserve="true"
                     method="post"
                     action="{{ url_for('draft.track_ban', match_id=match.id) }}"
                     class="mt-3 grid gap-3 md:grid-cols-2">
@@ -395,13 +412,7 @@
                 <span class="text-fuchsia-300">Fuchsia ring</span> = someone's Oshi.
                 Grayed = already banned.
               </p>
-              {# hx-preserve — see the track-ban form above for why.
-                 Uma ban is blind, so opponent's pick must not appear
-                 in our tile state during the phase; the preserved
-                 form keeps the user's tile selection AND the search
-                 box content across the 5s poll. #}
               <form id="draft-uma-ban-form"
-                    hx-preserve="true"
                     method="post"
                     action="{{ url_for('draft.uma_ban', match_id=match.id) }}"
                     class="mt-3 space-y-3">
@@ -934,4 +945,30 @@
 
   </div>
   </div>
+
+  {% if should_poll %}
+    <script>
+      /* PR-W1 — state-token poll. Re-fetch this page every 5s and
+         reload only when the server-rendered data-state-token
+         differs — i.e. the opponent actually did something (joined,
+         readied, banned, set the room code) or the phase advanced.
+         No htmx swap means scroll position, search text and tile
+         selection survive quiet polls. */
+      (function () {
+        var body = document.getElementById('draft-detail-body');
+        if (!body) return;
+        var token = body.getAttribute('data-state-token');
+        setInterval(function () {
+          fetch(window.location.href, { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.text() : null; })
+            .then(function (html) {
+              if (!html) return;
+              var m = html.match(/data-state-token="([^"]*)"/);
+              if (m && m[1] !== token) window.location.reload();
+            })
+            .catch(function () {});
+        }, 5000);
+      })();
+    </script>
+  {% endif %}
 {% endblock %}

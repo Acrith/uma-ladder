@@ -2,22 +2,34 @@
 {% from "_components.html" import card %}
 {% block title %}New draft match · Uma Ladder{% endblock %}
 {% block content %}
-  <p class="label-eyebrow">Draft PvP</p>
-  <h1 class="mt-1 text-2xl font-semibold text-slate-100">Create 1v1 match</h1>
+  <h1 class="text-2xl font-semibold text-slate-100">New draft match</h1>
+  <p class="mt-1 text-xs text-slate-500">1v1 · invite a friend or share the join code after creating.</p>
 
-  {% call card(class="mt-6 p-6 max-w-md") %}
-    <form method="post" class="space-y-4">
+  {% call card(class="mt-5 max-w-md p-6") %}
+    <form method="post" class="space-y-5">
       {{ form.hidden_tag() }}
       <div>
-        <label class="text-sm text-slate-300">Umas per player</label>
-        {{ form.umas_per_player(class="input-base mt-1") }}
-        <p class="mt-1 text-xs text-slate-500">2 or 3.</p>
+        <p class="text-sm text-slate-300">Format</p>
+        {# Segmented picker posting the same umas_per_player field the
+           IntegerField validates — no more "type 2 or 3" free text. #}
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          {% for n, blurb in [(2, "faster to fill"), (3, "fuller field")] %}
+            <label class="cursor-pointer rounded-lg border border-slate-700 bg-slate-900/40 p-3 text-center transition hover:border-cyan-500/50
+                          has-[:checked]:border-cyan-400 has-[:checked]:bg-cyan-500/10 has-[:checked]:shadow-glow-cyan">
+              <input type="radio" name="umas_per_player" value="{{ n }}" class="sr-only" {% if n == 2 %}checked{% endif %} />
+              <span class="block text-lg font-semibold text-slate-100">{{ n }} umas</span>
+              <span class="block text-[11px] text-slate-500">per player · {{ blurb }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        {% for err in form.umas_per_player.errors %}<p class="mt-1 text-xs text-rose-300">{{ err }}</p>{% endfor %}
       </div>
       <div>
-        <label class="text-sm text-slate-300">Preset pool</label>
+        <label class="text-sm text-slate-300">Track pool</label>
         {{ form.preset_pool(class="input-base mt-1") }}
+        <p class="mt-1 text-xs text-slate-500">Which presets the roll can land on after bans — real G1 races, community customs, or both.</p>
       </div>
-      <button class="btn-primary">Create match</button>
+      <button class="btn-primary w-full justify-center">Create match</button>
     </form>
   {% endcall %}
 {% endblock %}

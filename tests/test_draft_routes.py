@@ -905,10 +905,9 @@ def test_track_ban_form_marked_hx_preserve(
 ) -> None:
     """Regression — second-to-ban users were losing their selections
     every 5s because the lobby poll did an outerHTML swap on the
-    whole detail body, re-rendering the form from scratch. The fix
-    is `hx-preserve="true"` on the in-progress form so htmx keeps the
-    live DOM (and the user's mid-edit state) across swaps. If a
-    refactor drops the attribute, this test fails."""
+    whole detail body. PR-W1 replaced the swap with a state-token
+    probe: the page must carry data-state-token and must NOT poll
+    via an htmx body swap, so quiet polls never touch the DOM."""
     _season(app)
     _add_preset(app)
     make_user(username="alice", password="password123")
@@ -935,13 +934,15 @@ def test_track_ban_form_marked_hx_preserve(
         _login(client, username, "password123")
         client.post(f"/draft/{match_id}/ready")
 
-    # alice is logged in and in track-ban phase. Her form must be
-    # tagged hx-preserve so the 5s poll doesn't wipe her input.
+    # alice is logged in and in track-ban phase. The page must use
+    # the state-token probe (no htmx body swap that would wipe her
+    # mid-edit form state).
     resp = client.get(f"/draft/{match_id}")
     assert resp.status_code == 200
     body = resp.data.decode()
     assert 'id="draft-track-ban-form"' in body
-    assert 'hx-preserve="true"' in body
+    assert 'data-state-token="' in body
+    assert 'hx-swap="outerHTML"' not in body
 
 
 def test_uma_ban_form_marked_hx_preserve(
@@ -990,12 +991,14 @@ def test_uma_ban_form_marked_hx_preserve(
     )
     client.post(f"/draft/{match_id}/randomize")
 
-    # bob is in uma_ban_phase — his form must carry hx-preserve.
+    # bob is in uma_ban_phase — same contract: state-token probe,
+    # no htmx body swap.
     resp = client.get(f"/draft/{match_id}")
     assert resp.status_code == 200
     body = resp.data.decode()
     assert 'id="draft-uma-ban-form"' in body
-    assert 'hx-preserve="true"' in body
+    assert 'data-state-token="' in body
+    assert 'hx-swap="outerHTML"' not in body
 
 
 # ---------- PR-I6: room-code phase polish ----------
