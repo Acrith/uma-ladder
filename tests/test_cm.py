@@ -329,5 +329,5 @@ def test_dashboard_omits_card_when_no_cms(
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode()
-    # The eyebrow text only appears when the card renders.
-    assert "Champions Meeting · upcoming" not in body
+    # The card header only appears when the card renders.
+    assert "Champions Meeting" not in body

@@ -307,66 +307,51 @@
     {% endcall %}
   </section>
 
-  {# Champions Meeting · upcoming — admin-managed schedule, visible to everyone #}
+  {# Champions Meeting — admin-managed schedule, visible to everyone.
+     Feed-style rows matching the cards above; game-art season/weather
+     chips instead of text emoji so this card and the next-race panel
+     render conditions the same way. #}
   {% if upcoming_cms %}
     <section class="mt-6">
       {% call card(class="p-5") %}
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="label-eyebrow">Champions Meeting · upcoming</p>
-            <h2 class="mt-1 text-lg font-semibold text-slate-100">Mark your calendar</h2>
-          </div>
+        <div class="flex items-baseline justify-between gap-3">
+          <h2 class="text-sm font-semibold text-slate-100">Champions Meeting</h2>
           {% if current_user.is_authenticated and current_user.role in ('admin', 'superadmin') %}
-            <a class="text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('admin.cm_list') }}">Manage →</a>
+            <a class="shrink-0 text-xs text-cyan-300 hover:text-cyan-200" href="{{ url_for('admin.cm_list') }}">Manage →</a>
           {% endif %}
         </div>
-        <ul class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul class="mt-3">
           {% for cm in upcoming_cms %}
             {% set is_active = cm_is_active(cm) %}
-            <li class="rounded-lg border bg-slate-900/40 p-3 transition
-                       {% if is_active %}border-emerald-500/40 hover:bg-slate-900/70{% else %}border-slate-800 hover:border-fuchsia-500/40 hover:bg-slate-900/70{% endif %}">
-              <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-medium text-slate-100">{{ cm.name }}</p>
-                  <p class="mt-0.5 text-xs text-slate-400">
-                    {% if is_active %}<span class="font-medium text-emerald-300">Live now</span>
-                    {% else %}~Around {{ cm.starts_on.strftime('%b %d, %Y') }}{% endif %}
-                    {% if cm.ends_on and not is_active %}
-                      <span class="text-slate-600">→</span> {{ cm.ends_on.strftime('%b %d') }}
-                    {% endif %}
-                  </p>
-                </div>
-                <span class="shrink-0 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-fuchsia-200">CM</span>
-              </div>
-              <p class="mt-2 text-xs text-slate-300">
-                <span class="text-slate-200">{{ cm.effective_venue }}</span>
-                · {{ cm.effective_distance_meters }}m {{ cm.effective_surface }}
-              </p>
-              <p class="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
-                <span>{{ cm.effective_distance_category }}</span>
-                <span class="text-slate-700">·</span>
-                {% if cm.effective_direction == 'Right' %}<span class="text-amber-300">↻ Clockwise</span>
-                {% elif cm.effective_direction == 'Left' %}<span class="text-cyan-300">↺ Counterclockwise</span>
-                {% else %}<span>{{ cm.effective_direction }}</span>{% endif %}
-                {% if cm.source_url %}
-                  <span class="text-slate-700">·</span>
-                  <a href="{{ cm.source_url }}" target="_blank" rel="noopener" class="text-cyan-300/80 hover:text-cyan-200">source ↗</a>
-                {% endif %}
-              </p>
-              {% if cm.race_season or cm.weather or cm.ground_condition %}
-                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-                  {% if cm.race_season %}<span class="rounded-full border border-slate-700 px-2 py-0.5 text-slate-300">{{ cm.race_season }}</span>{% endif %}
-                  {% if cm.weather %}
-                    {% set weather_icon = {'Sunny': '☀', 'Cloudy': '☁', 'Rainy': '☂', 'Snowy': '❄'}[cm.weather] %}
-                    {% set weather_class = {'Sunny': 'text-amber-300', 'Cloudy': 'text-slate-300', 'Rainy': 'text-cyan-300', 'Snowy': 'text-sky-200'}[cm.weather] %}
-                    <span class="rounded-full border border-slate-700 px-2 py-0.5 {{ weather_class }}">{{ weather_icon }} {{ cm.weather }}</span>
-                  {% endif %}
-                  {% if cm.ground_condition %}
-                    {% set ground_class = {'Firm': 'text-emerald-300', 'Good': 'text-cyan-300', 'Soft': 'text-amber-300', 'Heavy': 'text-rose-300'}[cm.ground_condition] %}
-                    <span class="rounded-full border border-slate-700 px-2 py-0.5 {{ ground_class }}">{{ cm.ground_condition }}</span>
+            <li class="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-slate-800/70 py-2.5">
+              <div class="min-w-0 flex-1 basis-52">
+                <p class="truncate text-sm font-medium text-slate-100">
+                  {{ cm.name }}
+                  {% if cm.source_url %}
+                    <a href="{{ cm.source_url }}" target="_blank" rel="noopener"
+                       class="ml-1 text-xs font-normal text-cyan-300/80 hover:text-cyan-200"
+                       title="Details on GameTora">↗</a>
                   {% endif %}
                 </p>
-              {% endif %}
+                <p class="mt-0.5 truncate text-xs text-slate-400">
+                  {{ cm.effective_venue }} · {{ cm.effective_distance_meters }}m {{ cm.effective_surface }}
+                  · {{ cm.effective_distance_category }}
+                  {% if cm.effective_direction == 'Right' %} · <span class="text-amber-300/90" title="Clockwise">↻</span>
+                  {% elif cm.effective_direction == 'Left' %} · <span class="text-cyan-300/90" title="Counterclockwise">↺</span>
+                  {% elif cm.effective_direction %} · {{ cm.effective_direction }}{% endif %}
+                </p>
+              </div>
+              <div class="flex shrink-0 flex-wrap items-center gap-1.5">
+                {% if cm.race_season %}{{ season_chip(cm.race_season) }}{% endif %}
+                {% if cm.weather %}{{ weather_chip(cm.weather) }}{% endif %}
+                {% if cm.ground_condition %}
+                  {% set ground_tone = {'Firm': 'emerald', 'Good': 'cyan', 'Soft': 'amber', 'Heavy': 'rose'}[cm.ground_condition] %}
+                  {{ chip(cm.ground_condition, ground_tone) }}
+                {% endif %}
+              </div>
+              <p class="ml-auto shrink-0 text-right text-xs {% if is_active %}font-medium text-emerald-300{% else %}text-slate-400{% endif %}">
+                {% if is_active %}Live now{% else %}~ {{ cm.starts_on.strftime('%b %d') }}{% if cm.ends_on %} <span class="text-slate-600">→</span> {{ cm.ends_on.strftime('%b %d') }}{% endif %}{% endif %}
+              </p>
             </li>
           {% endfor %}
         </ul>

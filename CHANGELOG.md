@@ -22,6 +22,12 @@ log for the full history.
   gone — the champion panel links straight to the full
   rankings.
 
+- **The Champions Meeting card matches the new home page.**
+  One row per CM instead of a tile with a redundant "CM" badge,
+  and conditions now use the same in-game season/weather art as
+  the race pages instead of text emoji. A running CM shows
+  "Live now"; upcoming ones show their approximate date range.
+
 ## 2026-07-27
 
 ### Rankings + profiles
