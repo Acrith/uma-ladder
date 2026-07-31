@@ -336,8 +336,8 @@
                 <p class="mt-0.5 truncate text-xs text-slate-400">
                   {{ cm.effective_venue }} · {{ cm.effective_distance_meters }}m {{ cm.effective_surface }}
                   · {{ cm.effective_distance_category }}
-                  {% if cm.effective_direction == 'Right' %} · <span class="text-amber-300/90" title="Clockwise">↻</span>
-                  {% elif cm.effective_direction == 'Left' %} · <span class="text-cyan-300/90" title="Counterclockwise">↺</span>
+                  {% if cm.effective_direction == 'Right' %} · <span class="text-amber-300/90">↻ Clockwise</span>
+                  {% elif cm.effective_direction == 'Left' %} · <span class="text-cyan-300/90">↺ Counterclockwise</span>
                   {% elif cm.effective_direction %} · {{ cm.effective_direction }}{% endif %}
                 </p>
               </div>

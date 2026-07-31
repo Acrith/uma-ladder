@@ -22,6 +22,7 @@ from ..models import (
 from ..services import ocr as ocr_service
 from ..services import official as official_service
 from ..services import presets as presets_service
+from ..services import profiles as user_profiles_service
 from ..services import seasons as seasons_service
 from ..services import track_conditions as track_conditions_service
 from ..services.permissions import PermissionDeniedError, min_role_required
@@ -252,9 +253,17 @@ def detail(race_id: int) -> object:
     )
     green_buffs_by_result = passive_buffs_by_result(results, race)
 
+    # Batch profiles for everyone shown with an avatar (registrants +
+    # result rows) so the template renders avatar + oshi without N+1s.
+    profiles = user_profiles_service.profiles_by_user_id(
+        [r.user_id for r in registrations]
+        + [res.user_id for res in results if res.user_id is not None]
+    )
+
     return render_template(
         "official/detail.html",
         race=race,
+        profiles=profiles,
         registrations=registrations,
         invitees=invitees,
         results=results,

@@ -1,19 +1,79 @@
 {% extends "base.html" %}
 {% from "_components.html" import card, chip, grade_letter_badge, official_status_chip, rank_score_value, season_chip, stat_rank_value, weather_chip %}
 {% from "_icons.html" import lock as icon_lock, globe as icon_globe, users as icon_users, clock as icon_clock %}
+{% from "_avatar.html" import avatar %}
 {% block title %}{{ race.name }} · Uma Ladder{% endblock %}
+
+{# Result-row layout shared by expandable and plain rows. Column
+   widths must stay in sync with the header row in the Results card.
+   `expandable` controls the caret cell (group-open needs a <details
+   class="group"> ancestor). #}
+{% macro result_row(r, profile, expandable) %}
+  <div class="flex items-center gap-3 py-2 text-sm">
+    <span class="w-7 shrink-0 font-mono text-xs
+                 {% if r.placement == 1 %}text-amber-300{% elif r.placement == 2 %}text-slate-200{% elif r.placement == 3 %}text-orange-300{% else %}text-slate-500{% endif %}">{{ r.placement }}</span>
+    {% if r.user %}
+      {{ avatar(r.user, profile, size_class="h-6 w-6") }}
+    {% else %}
+      <span class="h-6 w-6 shrink-0 rounded-lg border border-slate-800 bg-slate-900"></span>
+    {% endif %}
+    <span class="min-w-0 flex-1">
+      {% if r.user %}
+        {# PR-Q3a — masked_display also handles soft-deleted users;
+           SET NULL'd rows (user removed via hard delete) render @?. #}
+        <a href="{{ url_for('profiles.public', username=r.user.username) }}"
+           class="font-medium text-slate-100 hover:text-cyan-300">{{ r.user | masked_display }}</a>
+      {% else %}
+        <span class="font-medium text-slate-100">@?</span>
+      {% endif %}
+      {% if r.uma_name %}<span class="block truncate text-xs text-slate-500 md:hidden">{{ r.uma_name }}</span>{% endif %}
+    </span>
+    <span class="hidden w-40 truncate text-slate-400 md:block">{{ r.uma_name or "—" }}</span>
+    <span class="hidden w-16 font-mono text-xs text-slate-400 md:block">{{ r.strategy or "—" }}</span>
+    <span class="hidden w-12 font-mono text-xs text-slate-400 md:block">{{ r.gate or "—" }}</span>
+    <span class="hidden w-20 truncate font-mono text-xs text-slate-400 md:block">{{ r.finish_time_or_lengths or "—" }}</span>
+    <span class="hidden w-12 font-mono text-xs text-slate-400 md:block">{% if r.fav_rank %}#{{ r.fav_rank }}{% else %}—{% endif %}</span>
+    <span class="hidden w-28 justify-end md:flex">{% if r.uma_score %}{{ rank_score_value(r.uma_score) }}{% endif %}</span>
+    <span class="w-14 shrink-0 text-right text-[10px] text-slate-500">
+      {% if expandable %}
+        <span class="group-open:hidden">▸ more</span>
+        <span class="hidden group-open:inline">▴ less</span>
+      {% endif %}
+    </span>
+  </div>
+{% endmacro %}
+
 {% block content %}
 
-  {# PR-T1 — header trimmed to identity + status. Track conditions
-     moved to a dedicated card below; destructive + visibility
-     actions collapsed into <details> dropdowns so the eye is drawn
-     to the primary "Open registration" CTA. #}
+  {# ── Header — identity, track line, status + condition chips.
+       The track/conditions card this page used to carry is folded
+       in here; organizer admin (visibility, cancel/delete) stays
+       top-right, while lifecycle actions live in the stage panel. #}
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div class="min-w-0">
-      <p class="label-eyebrow">Official race</p>
-      <h1 class="mt-1 text-2xl font-semibold text-slate-100">{{ race.name }}</h1>
+      <h1 class="text-2xl font-semibold text-slate-100">{{ race.name }}</h1>
+      <p class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-slate-400">
+        {% if race.preset %}
+          <span>
+            {{ race.preset.venue }} {{ race.preset.surface }}
+            · {{ race.preset.distance_meters }}m ({{ race.preset.distance_category }})
+            · {{ race.preset.direction }}{% if race.preset.course_variant %} / {{ race.preset.course_variant }}{% endif %}
+          </span>
+        {% endif %}
+        {% if race.scheduled_at %}
+          {# scheduled_at is stored as naive UTC throughout the app —
+             force a "Z" suffix so JS interprets it correctly. JS fills
+             [data-local] + [data-relative] on load + every 30s. #}
+          <span class="inline-flex items-center gap-1 text-xs"
+                data-countdown
+                data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+            {{ icon_clock(class="h-3 w-3 text-amber-300") }}
+            <span data-local class="text-slate-300">{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+            <span data-relative class="text-xs text-slate-400"></span>
+          </span>
+        {% endif %}
+      </p>
       <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-        {{ chip("Official", "amber") }}
         {{ official_status_chip(race.status) }}
         {# Visibility surfaced as a chip only when non-public —
            public is the implicit default and adds no signal here.
@@ -38,12 +98,15 @@
           {% endif %}
         {% endif %}
         {% if race.season %}{{ chip("Season · " + race.season.name) }}{% endif %}
+        {% if race.race_season %}{{ season_chip(race.race_season) }}{% endif %}
+        {% if race.weather %}{{ weather_chip(race.weather) }}{% endif %}
+        {% if race.ground_condition %}
+          {% set ground_tone = {'Firm': 'emerald', 'Good': 'cyan', 'Soft': 'amber', 'Heavy': 'rose'}[race.ground_condition] %}
+          {{ chip(race.ground_condition, ground_tone) }}
+        {% endif %}
         {# PR-T2 — public room-code expiry countdown. Visible to all
            viewers when the room code is currently active so
-           registered players know how long they have to join
-           without having to chase the Discord webhook. The chip
-           updates every second (room-code windows are short, often
-           5-10 minutes). #}
+           registered players know how long they have to join. #}
         {% if race.status == 'room_code_available' and race.room_code_expires_at %}
           <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-200 border-emerald-500/40"
                 data-countdown
@@ -63,20 +126,6 @@
     </div>
     {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
       <div class="flex flex-wrap items-center gap-2">
-        {# Primary CTA — registration toggle stays prominent. #}
-        {% if race.status == 'draft' or race.status == 'registration_closed' %}
-          <form method="post" action="{{ url_for('official.open_registration', race_id=race.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button class="btn-primary">Open registration</button>
-          </form>
-        {% endif %}
-        {% if race.status == 'registration_open' %}
-          <form method="post" action="{{ url_for('official.close_registration', race_id=race.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button class="btn-ghost">Close registration</button>
-          </form>
-        {% endif %}
-
         {# Visibility dropdown — three-way toggle collapsed into a
            single trigger. Hidden on terminal states (cancelled /
            completed). Switching to a more restrictive visibility
@@ -132,8 +181,7 @@
         {# Actions dropdown — destructive ops kept one click away.
            Cancel = organiser+ on live races; Delete = admin+ always
            (smoke-test only). The dropdown skips rendering entirely
-           when neither action is available so the bar isn't littered
-           with a useless trigger on cancelled/completed pages. #}
+           when neither action is available. #}
         {% set show_cancel = race.status not in ('cancelled', 'completed') %}
         {% set show_delete = current_user.has_at_least('admin') %}
         {% if show_cancel or show_delete %}
@@ -169,55 +217,6 @@
     {% endif %}
   </div>
 
-  {# PR-T1 — Track + conditions card. Mirrors Draft's match-info
-     layout: preset name big, surface/distance/direction chips,
-     weather + ground as a conditions row, scheduled_at as a
-     one-liner with a live local-time + countdown rendered by JS
-     below (data-countdown element). #}
-  {% if race.preset or race.scheduled_at or race.weather or race.ground_condition or race.race_season %}
-    <section class="mt-5">
-      {% call card(class="relative overflow-hidden p-5 border-amber-500/30 shadow-glow-amber") %}
-        {% if race.preset %}
-          <p class="label-eyebrow text-amber-300">Track</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-50">{{ race.preset.name }}</p>
-          <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            {{ chip(race.preset.surface, "violet" if race.preset.surface == "Turf" else "amber") }}
-            {{ chip(race.preset.distance_meters|string + "m · " + race.preset.distance_category) }}
-            {{ chip(race.preset.direction) }}
-            {% if race.preset.course_variant %}{{ chip(race.preset.course_variant) }}{% endif %}
-          </div>
-        {% endif %}
-        {% if race.race_season or race.weather or race.ground_condition %}
-          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span class="label-eyebrow text-slate-500">Conditions</span>
-            {% if race.race_season %}{{ season_chip(race.race_season) }}{% endif %}
-            {% if race.weather %}{{ weather_chip(race.weather) }}{% endif %}
-            {% if race.ground_condition %}
-              {% set ground_tone = {'Firm': 'emerald', 'Good': 'cyan', 'Soft': 'amber', 'Heavy': 'rose'}[race.ground_condition] %}
-              {{ chip(race.ground_condition, ground_tone) }}
-            {% endif %}
-          </div>
-        {% endif %}
-        {% if race.scheduled_at %}
-          {# scheduled_at is stored as naive UTC throughout the app —
-             force a "Z" suffix so JS interprets it correctly across
-             timezones rather than guessing local. JS fills [data-local]
-             and [data-relative] on load + every 30s. #}
-          <div class="mt-4 border-t border-amber-500/20 pt-3"
-               data-countdown
-               data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
-            <p class="label-eyebrow text-slate-500">Scheduled</p>
-            <p class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-              {{ icon_clock(class="h-4 w-4 text-amber-300") }}
-              <span data-local class="font-medium text-slate-100">{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
-              <span data-relative class="text-xs text-slate-400"></span>
-            </p>
-          </div>
-        {% endif %}
-      {% endcall %}
-    </section>
-  {% endif %}
-
   {% if race.status == 'cancelled' %}
     {% call card(class="mt-4 p-5 border-rose-500/30") %}
       <p class="label-eyebrow text-rose-300">Cancelled</p>
@@ -227,18 +226,497 @@
     {% endcall %}
   {% endif %}
 
-  {# PR-O2 — Allowed clubs management card (Club-visibility races
-     only). Sits above the invitee/registration grid because it's
-     a higher-level allowlist than per-user invitees. The
-     organizer's own club is implicit (no row, no UI affordance);
-     additional clubs the organizer wants to allow render below.
-     Visible only when the race is Club-visibility AND the viewer
-     is organizer / senior_organizer+. #}
-  {% if race.visibility == "club" and current_user.is_authenticated and current_user.has_at_least('organizer') %}
-    <section class="mt-6">
+  {# ── Results — the page's payoff once placements are on file.
+       Podium strip leads (with uma art when the character is
+       matched), then a dense table. Per-uma detail (stats /
+       aptitudes / skills) is each row's expanded state, so the
+       table works both sparse (name + gate) and fully enriched. #}
+  {% if results %}
+    <section class="mt-5 grid gap-4 md:grid-cols-3">
+      {% for r in results[:3] %}
+        {% set profile = profiles.get(r.user_id) if r.user_id else None %}
+        {% set art = r.uma_character.image_url if r.uma_character and r.uma_character.image_url else None %}
+        <div class="surface-card relative overflow-hidden p-4 {% if loop.index == 1 %}border-amber-500/30{% endif %}">
+          {% if art %}
+            <img src="{{ art }}"
+                 alt=""
+                 loading="lazy"
+                 referrerpolicy="no-referrer"
+                 class="pointer-events-none absolute -right-2 bottom-0 h-auto max-h-[8.5rem] w-auto max-w-[7rem] object-contain opacity-60"
+                 style="mask-image: linear-gradient(to left, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%); -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%);" />
+          {% endif %}
+          <div class="relative {% if art %}pr-20{% endif %}">
+            <p class="font-mono text-[11px] font-bold tracking-widest
+                      {% if loop.index == 1 %}text-amber-300{% elif loop.index == 2 %}text-slate-200{% else %}text-orange-300{% endif %}">
+              {{ ['1ST', '2ND', '3RD'][loop.index0] }}
+            </p>
+            <p class="mt-1 truncate text-base font-semibold text-slate-50">
+              {% if r.user %}
+                <a href="{{ url_for('profiles.public', username=r.user.username) }}"
+                   class="hover:text-cyan-300">{{ r.user | masked_display }}</a>
+              {% else %}@?{% endif %}
+            </p>
+            <p class="truncate text-xs text-slate-400">
+              {{ r.uma_name or "—" }}{% if r.strategy %} · {{ r.strategy }}{% endif %}
+            </p>
+            {% if r.finish_time_or_lengths or r.gate or r.fav_rank %}
+              <p class="mt-1.5 font-mono text-[11px] text-slate-500">
+                {{ [r.finish_time_or_lengths, ("gate " ~ r.gate) if r.gate else None, ("#" ~ r.fav_rank ~ " fav") if r.fav_rank else None] | select | join(" · ") }}
+              </p>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </section>
+
+    <section class="mt-4">
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold text-slate-100">Race results</h2>
+          <button type="button" data-expand-all class="text-xs text-cyan-300 hover:text-cyan-200">Expand all</button>
+        </div>
+        <div class="mt-3 hidden items-center gap-3 text-[10px] uppercase tracking-wider text-slate-500 md:flex">
+          <span class="w-7 shrink-0">#</span>
+          <span class="h-0 w-6 shrink-0"></span>
+          <span class="min-w-0 flex-1">Trainer</span>
+          <span class="w-40">Uma</span>
+          <span class="w-16">Style</span>
+          <span class="w-12">Gate</span>
+          <span class="w-20">Time</span>
+          <span class="w-12">Fav</span>
+          <span class="w-28 text-right">Score</span>
+          <span class="w-14 shrink-0"></span>
+        </div>
+        <ul class="mt-1" data-results-list>
+          {% for r in results %}
+            {% set profile = profiles.get(r.user_id) if r.user_id else None %}
+            {% set has_rich = r.speed or r.stamina or r.power or r.guts or r.wisdom or r.aptitudes or r.skills %}
+            {% set is_organizer = current_user.is_authenticated and current_user.has_at_least('organizer') %}
+            {% set expandable = has_rich or is_organizer %}
+            <li class="border-t border-slate-800/70">
+              {% if expandable %}
+                <details class="group">
+                  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    {{ result_row(r, profile, true) }}
+                  </summary>
+                  <div class="space-y-3 pb-4 pl-2 md:pl-16">
+                    {# Mobile fallback for the columns hidden at < md. #}
+                    {% if r.strategy or r.gate or r.finish_time_or_lengths or r.fav_rank or r.uma_score %}
+                      <p class="flex flex-wrap items-center gap-1 text-[10px] md:hidden">
+                        {% if r.strategy %}{{ chip(r.strategy, "cyan") }}{% endif %}
+                        {% if r.gate %}{{ chip("Gate " ~ r.gate, "slate") }}{% endif %}
+                        {% if r.finish_time_or_lengths %}{{ chip(r.finish_time_or_lengths, "slate") }}{% endif %}
+                        {% if r.fav_rank %}{{ chip("#" ~ r.fav_rank ~ " fav", "slate") }}{% endif %}
+                        {% if r.uma_score %}<span class="ml-1">{{ rank_score_value(r.uma_score) }}</span>{% endif %}
+                      </p>
+                    {% endif %}
+                    {% if r.speed or r.stamina or r.power or r.guts or r.wisdom %}
+                      {# PR-A2 — 5-col grid with the official Cygames
+                         rank glyph next to each value.
+                         PR-OCR21 — second line shows the aptitude-
+                         adjusted effective stat; PR-SK10 also bakes
+                         in green-skill flat buffs from skills the
+                         catalog confirms will definitely fire.
+                         Colour reflects sign (emerald = buff,
+                         rose = penalty). #}
+                      {% set _green = green_buffs_by_result.get(r.id) %}
+                      {% set _eff = effective_stats(r, race, _green) %}
+                      {% set _eff_map = {
+                          'Speed':   (r.speed, _eff.speed),
+                          'Stamina': (r.stamina, _eff.stamina),
+                          'Power':   (r.power, _eff.power),
+                          'Guts':    (r.guts, _eff.guts),
+                          'Wit':     (r.wisdom, _eff.wisdom),
+                      } %}
+                      <div class="grid max-w-xl grid-cols-5 gap-2 text-xs">
+                        {% for label, val in [
+                            ('Speed', r.speed),
+                            ('Stamina', r.stamina),
+                            ('Power', r.power),
+                            ('Guts', r.guts),
+                            ('Wit', r.wisdom),
+                          ] %}
+                          <div class="rounded border border-slate-800 bg-slate-950/30 px-1.5 py-1">
+                            <p class="text-[9px] uppercase tracking-wider text-slate-500">{{ label }}</p>
+                            <div class="mt-0.5">
+                              {{ stat_rank_value(val) }}
+                            </div>
+                            {% set _pair = _eff_map.get(label) %}
+                            {% if _pair and _pair[1] is not none and val %}
+                              {% set _delta = _pair[1] - val %}
+                              <p class="mt-0.5 text-[10px] font-mono {{ 'text-emerald-300' if _delta > 0 else 'text-rose-300' }}">
+                                eff {{ _pair[1] }}
+                              </p>
+                            {% else %}
+                              <p class="mt-0.5 text-[10px] text-slate-600">—</p>
+                            {% endif %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                    {# PR-A1 — Track / Distance / Style aptitudes as
+                       grade-letter badges (PR-OCR19/20 alignment). #}
+                    {% if r.aptitudes %}
+                      {% set _slot_cols = 4 %}
+                      <div class="grid items-center gap-x-3 gap-y-1 text-xs"
+                           style="grid-template-columns: 5rem repeat({{ _slot_cols }}, minmax(0, max-content));">
+                        {% for cat_key, cat_label, slots in [
+                            ('track', 'Track', ['Turf', 'Dirt']),
+                            ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
+                            ('style', 'Style', ['Front', 'Pace', 'Late', 'End']),
+                          ] %}
+                          {% set cat_data = r.aptitudes.get(cat_key) or {} %}
+                          {% if cat_data %}
+                            <span class="text-[10px] uppercase tracking-wider text-slate-400">{{ cat_label }}</span>
+                            {% for slot in slots %}
+                              <span class="grid grid-cols-[2.5rem_auto] items-center gap-1">
+                                <span class="text-right text-[11px] text-slate-400">{{ slot }}</span>
+                                {{ grade_letter_badge(cat_data.get(slot|lower)) }}
+                              </span>
+                            {% endfor %}
+                            {% for _ in range(_slot_cols - slots|length) %}
+                              <span></span>
+                            {% endfor %}
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                    {% if r.skills %}
+                      {# PR-SK4 — gray out skills whose static
+                         conditions don't match this race; set is
+                         pre-computed in the route (PR-SK5 hotfix:
+                         empty-list default, Jinja has no set()). #}
+                      {% set _inapp = inapplicable_skills_by_result.get(r.id, []) %}
+                      <p class="flex flex-wrap gap-1.5 text-xs">
+                        {% for assoc in r.skills %}
+                          {% set _doesnt_apply = assoc.skill_id in _inapp %}
+                          <span class="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 {% if _doesnt_apply %}border-slate-700 bg-slate-900/30 text-slate-500 opacity-60{% else %}border-cyan-500/30 bg-cyan-500/5 text-cyan-200{% endif %}"
+                                {% if _doesnt_apply %}title="Doesn't apply to this race's conditions"{% endif %}>
+                            {% if assoc.skill and assoc.skill.image_url %}
+                              <img src="{{ assoc.skill.image_url }}"
+                                   alt=""
+                                   loading="lazy"
+                                   referrerpolicy="no-referrer"
+                                   class="h-4 w-4 rounded {% if _doesnt_apply %}grayscale{% endif %}" />
+                            {% endif %}
+                            {% if assoc.skill %}
+                              <span class="{% if _doesnt_apply %}line-through decoration-slate-600{% endif %}">{{ assoc.skill.name_en }}</span>
+                            {% else %}
+                              <span class="text-slate-500" title="raw OCR text — no skill matched">{{ assoc.raw_ocr_text or '?' }}</span>
+                            {% endif %}
+                          </span>
+                        {% endfor %}
+                      </p>
+                    {% endif %}
+                    {% if is_organizer %}
+                      {# PR-OCR5 — per-result uma-sheet upload. Multi-file
+                         + accumulating paste + thumbnail strip via the
+                         shared [data-multi-upload] JS at the bottom of
+                         the page. #}
+                      <form method="post"
+                            action="{{ url_for('official.upload_result_details_screenshot', race_id=race.id, result_id=r.id) }}"
+                            enctype="multipart/form-data"
+                            data-multi-upload
+                            class="max-w-xl rounded-lg border border-slate-800 bg-slate-950/30 p-2 transition">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <div class="flex flex-wrap items-center gap-2">
+                          <input type="file"
+                                 name="image"
+                                 multiple
+                                 accept="image/png,image/jpeg,image/webp"
+                                 data-ocr-input
+                                 class="text-xs text-slate-300 file:mr-2 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-2 file:py-1 file:text-slate-300 hover:file:bg-slate-800" />
+                          <button class="btn-ghost text-xs">Add details from screenshot</button>
+                          <button type="button" data-ocr-arm class="btn-ghost text-xs" title="Click then Ctrl+V to paste clipboard images into this form">📋</button>
+                          <button type="button" data-ocr-clear class="hidden text-[11px] text-slate-400 hover:text-slate-200">Clear</button>
+                        </div>
+                        <div data-ocr-thumbs class="mt-2 hidden flex-wrap gap-2"></div>
+                      </form>
+                    {% endif %}
+                  </div>
+                </details>
+              {% else %}
+                {{ result_row(r, profile, false) }}
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endcall %}
+    </section>
+  {% endif %}
+
+  {# ── Pre-completion layout: who's in (main) + when / lifecycle
+       (rail). On completed races the results above are the page. #}
+  {% if race.status != 'completed' %}
+    <section class="mt-5 grid items-start gap-4 lg:grid-cols-[1fr_21rem]">
+
+      {# Registrations #}
       {% call card(class="p-5") %}
         <div class="flex items-center justify-between">
-          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Allowed clubs</h2>
+          <h2 class="text-sm font-semibold text-slate-100">Registered</h2>
+          <span class="text-xs text-slate-500">{{ registrations|length }}{% if race.max_players %} / {{ race.max_players }}{% endif %}</span>
+        </div>
+        {% if not registrations %}
+          <p class="mt-3 text-sm text-slate-500">No-one registered yet.</p>
+        {% else %}
+          <ul class="mt-2 grid gap-x-6 md:grid-cols-2">
+            {% for r in registrations %}
+              {% set profile = profiles.get(r.user_id) %}
+              <li class="flex items-center gap-2.5 border-t border-slate-800/70 py-2 text-sm">
+                {{ avatar(r.user, profile, size_class="h-7 w-7") }}
+                <span class="min-w-0 flex-1">
+                  {# PR-R1 + PR-Q3a — masked_display returns the
+                     display_name (fallback username) for active
+                     accounts and a partial mask for soft-deleted
+                     ones so raw handles never leak. #}
+                  <a class="block truncate text-slate-200 hover:text-cyan-300"
+                     href="{{ url_for('profiles.public', username=r.user.username) }}">{{ r.user | masked_display }}</a>
+                  {% if profile and profile.oshi %}
+                    <span class="block truncate text-[11px] text-slate-500">{{ profile.oshi.name_en }}</span>
+                  {% endif %}
+                </span>
+                {% if current_user.is_authenticated and current_user.has_at_least('organizer') and race.status not in ('cancelled', 'completed') %}
+                  <form method="post"
+                        action="{{ url_for('official.remove_registration', race_id=race.id, registration_id=r.id) }}"
+                        onsubmit="return confirm('Remove @{{ r.user.username }} from this race?');">
+                    {{ csrf_form.hidden_tag() }}
+                    <button type="submit" class="text-xs text-rose-400 hover:text-rose-300" title="Remove registration">×</button>
+                  </form>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if current_user.is_authenticated and race.status == 'registration_open' %}
+          {% set my_reg = registrations | selectattr('user_id', 'equalto', current_user.id) | first %}
+          {% if my_reg %}
+            <div class="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-200">
+              ✓ You're registered for this race.
+            </div>
+            <form method="post"
+                  action="{{ url_for('official.remove_registration', race_id=race.id, registration_id=my_reg.id) }}"
+                  class="mt-2"
+                  onsubmit="return confirm('Unregister from this race?');">
+              {{ csrf_form.hidden_tag() }}
+              <button class="text-xs text-rose-400 hover:text-rose-300">Unregister</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('official.register', race_id=race.id) }}" class="mt-4">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button class="btn-primary w-full justify-center">Register me</button>
+            </form>
+          {% endif %}
+        {% endif %}
+      {% endcall %}
+
+      <div class="grid gap-4">
+        {# Schedule — the rail's "when" slot for every viewer. #}
+        {% call card(class="p-4") %}
+          <h2 class="text-sm font-semibold text-slate-100">Schedule</h2>
+          {% if race.scheduled_at %}
+            <div class="mt-2"
+                 data-countdown
+                 data-utc-iso="{{ race.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+                 data-class-size="text-xl font-semibold"
+                 data-class-future="text-cyan-300">
+              <p class="font-mono"><span data-relative>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span></p>
+              <p class="mt-0.5 text-xs text-slate-500"><span data-local>{{ race.scheduled_at.strftime('%Y-%m-%d %H:%M UTC') }}</span></p>
+            </div>
+          {% else %}
+            <p class="mt-2 text-sm text-slate-500">Not scheduled yet.</p>
+          {% endif %}
+          {% if race.status == 'room_code_available' %}
+            <p class="mt-2 text-xs text-emerald-200">The room code is out — join from the lobby before it expires.</p>
+          {% endif %}
+        {% endcall %}
+
+        {# Organizer lifecycle panel — the stage track shows where
+           the race is; only the current stage's actions render.
+           Result-submission tools live in their own full-width card
+           below and unlock once registration is done (PR-V1). #}
+        {% if current_user.is_authenticated and current_user.has_at_least('organizer') and race.status != 'cancelled' %}
+          {% set stage_index = {
+              'draft': 0,
+              'registration_open': 0,
+              'registration_closed': 0,
+              'room_code_pending': 1,
+              'room_code_available': 1,
+              'room_code_expired': 1,
+              'results_pending': 2,
+              'results_submitted': 2,
+            }.get(race.status, 0) %}
+          {% call card(class="p-4") %}
+            <h2 class="text-sm font-semibold text-slate-100">Organizer</h2>
+            <p class="mt-2 flex flex-wrap items-center gap-1 font-mono text-[10px] text-slate-500">
+              {% for label in ['registration', 'room code', 'results', 'done'] %}
+                {% if not loop.first %}<span class="text-slate-700">→</span>{% endif %}
+                <span class="rounded-full border px-2 py-0.5 {% if loop.index0 == stage_index %}border-cyan-500/40 bg-cyan-500/10 text-cyan-300{% else %}border-slate-800 text-slate-500{% endif %}">{{ label }}</span>
+              {% endfor %}
+            </p>
+
+            {% if race.status == 'draft' %}
+              <p class="mt-3 text-xs text-slate-400">This race is unpublished — players can't see it yet.</p>
+              <form method="post" action="{{ url_for('official.open_registration', race_id=race.id) }}" class="mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="btn-primary w-full justify-center">Open registration</button>
+              </form>
+            {% elif race.status == 'registration_open' %}
+              <form method="post" action="{{ url_for('official.close_registration', race_id=race.id) }}" class="mt-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="btn-ghost w-full justify-center">Close registration</button>
+              </form>
+            {% elif race.status == 'registration_closed' %}
+              <form method="post" action="{{ url_for('official.open_registration', race_id=race.id) }}" class="mt-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="btn-ghost w-full justify-center">Re-open registration</button>
+              </form>
+            {% endif %}
+
+            {% if race.status in ('registration_open', 'registration_closed', 'room_code_pending', 'room_code_available', 'room_code_expired') %}
+              <div class="mt-4 border-t border-slate-800/70 pt-3">
+                <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Room code</p>
+                {% if race.room_code %}
+                  <p class="mt-2 text-sm">
+                    <span class="text-mono-pill text-base">{{ race.room_code }}</span>
+                    {% if room_code_expired %}
+                      <span class="ml-2 text-xs text-rose-300">expired</span>
+                    {% elif race.room_code_expires_at %}
+                      {# PR-T2 — organizer-side expiry countdown, shown
+                         on every room-code stage. #}
+                      <span class="ml-2 text-xs text-slate-400"
+                            data-countdown
+                            data-utc-iso="{{ race.room_code_expires_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+                            data-update-interval-ms="1000"
+                            data-prefix-future="expires in"
+                            data-prefix-past="expired"
+                            data-suffix-past="ago"
+                            data-class-future="text-slate-400"
+                            data-class-past="text-rose-300">
+                        <span data-relative>expires soon</span>
+                      </span>
+                    {% endif %}
+                  </p>
+                {% endif %}
+                <form method="post" action="{{ url_for('official.room_code', race_id=race.id) }}" class="mt-2 flex gap-2">
+                  {{ room_code_form.hidden_tag() }}
+                  {{ room_code_form.room_code(class="input-base min-w-0 flex-1", placeholder="paste code") }}
+                  <button class="btn-primary">Set</button>
+                </form>
+              </div>
+            {% endif %}
+
+            {% if race.status in ('room_code_available', 'room_code_expired', 'results_pending', 'results_submitted') %}
+              <p class="mt-4 border-t border-slate-800/70 pt-3 text-xs text-slate-400">
+                Race underway? <a href="#submit-results" class="text-cyan-300 hover:text-cyan-200">Submit results below ↓</a>
+              </p>
+            {% endif %}
+          {% endcall %}
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+
+  {# ── Result submission — organizer-only, full width (the manual
+       table needs the room). Stage-gated: hidden while the race is
+       unpublished or registration is still open; locked behind an
+       explicit re-open once completed (PR-OCR18). #}
+  {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+    {% if race.status == 'completed' %}
+      <section class="mt-5">
+        {% call card(class="p-5") %}
+          <h2 class="text-sm font-semibold text-slate-100">Submit results</h2>
+          <p class="mt-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-300">
+            Results are locked. The race has been completed — to
+            correct the saved placements, re-open the race first.
+            Existing per-result detail data (stats / skills /
+            aptitudes / uma score) is preserved across re-submits.
+          </p>
+          <form method="post"
+                action="{{ url_for('official.reopen_results', race_id=race.id) }}"
+                class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn-ghost"
+                    onclick="return confirm('Re-open this completed race for re-submission?');">
+              Re-open results
+            </button>
+          </form>
+        {% endcall %}
+      </section>
+    {% elif race.status in ('registration_closed', 'room_code_pending', 'room_code_available', 'room_code_expired', 'results_pending', 'results_submitted') %}
+      <section class="mt-5" id="submit-results">
+        {% call card(class="p-5") %}
+          <h2 class="text-sm font-semibold text-slate-100">Submit results</h2>
+          {# PR-OCR5 — parity with Draft's OCR upload UX: multi-file
+             picker, accumulating queue, paste-from-clipboard via arm
+             button, thumbnail strip. Falls back to the manual form
+             below when OCR returns nothing useful. #}
+          <form method="post"
+                action="{{ url_for('official.upload_result_screenshot', race_id=race.id) }}"
+                enctype="multipart/form-data"
+                data-multi-upload
+                class="mt-3 rounded-lg border border-slate-800 bg-slate-950/30 p-3 transition">
+            <p class="label-eyebrow">From screenshot</p>
+            <p class="mt-1 text-[11px] text-slate-500">
+              Pick multiple files if the result list scrolled past one screen,
+              or <kbd class="rounded border border-slate-700 bg-slate-900/60 px-1 py-0 text-[10px]">Ctrl+V</kbd>
+              a screenshot from the clipboard (click <em>Paste</em> first to
+              arm this form). We merge parsed rows by placement and keep the
+              highest-confidence row when several screenshots overlap.
+            </p>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <input type="file" name="image" multiple accept="image/png,image/jpeg,image/webp" data-ocr-input class="text-xs text-slate-300 file:mr-3 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-3 file:py-1 file:text-slate-300 hover:file:bg-slate-800" />
+              <button class="btn-ghost">Parse with OCR →</button>
+              <button type="button" data-ocr-arm class="btn-ghost text-xs" title="Click then Ctrl+V to paste clipboard images (multiple pastes accumulate into this form)">📋 Paste</button>
+              <button type="button" data-ocr-clear class="hidden text-[11px] text-slate-400 hover:text-slate-200">Clear</button>
+              <span class="text-xs text-slate-500">You'll review and confirm before any results are saved.</span>
+            </div>
+            <div data-ocr-thumbs class="mt-2 hidden flex-wrap gap-2"></div>
+          </form>
+
+          <p class="mt-4 text-xs text-slate-500">…or enter manually:</p>
+          <form method="post" action="{{ url_for('official.submit_results', race_id=race.id) }}" class="mt-2">
+            {{ results_form.hidden_tag() }}
+            {# PR-SK9 — participant_count drives the gate-bracket math
+               used by Inner / Outer Post Proficiency. Optional but
+               encouraged. #}
+            <div class="mb-3 flex items-center gap-2 text-xs">
+              <label class="text-slate-400">Total participants (players + CPU)</label>
+              <input type="number" min="1" max="18" name="participant_count"
+                     value="{{ race.participant_count or '' }}"
+                     class="input-base w-20" />
+            </div>
+            <table class="w-full text-sm">
+              <thead class="text-xs uppercase tracking-wider text-slate-500">
+                <tr><th class="pr-3 py-1 text-left">Player</th><th class="pr-3 py-1 text-left">Place</th><th class="text-left">Uma</th></tr>
+              </thead>
+              <tbody>
+                {% for r in registrations %}
+                  <tr class="border-t border-slate-800">
+                    <td class="pr-3 py-2 text-slate-200">
+                      <a href="{{ url_for('profiles.public', username=r.user.username) }}"
+                         class="hover:text-cyan-300">{{ r.user | masked_display }}</a>
+                    </td>
+                    <td class="pr-3 py-2"><input type="number" min="1" name="placement_{{ r.id }}" class="input-base w-20" /></td>
+                    <td class="py-2"><input type="text" name="uma_name_{{ r.id }}" class="input-base" /></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <button class="btn-primary mt-4">Save results</button>
+          </form>
+        {% endcall %}
+      </section>
+    {% endif %}
+  {% endif %}
+
+  {# PR-O2 — Allowed clubs management card (Club-visibility races
+     only, organizer+). #}
+  {% if race.visibility == "club" and current_user.is_authenticated and current_user.has_at_least('organizer') %}
+    <section class="mt-5">
+      {% call card(class="p-5") %}
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-100">Allowed clubs</h2>
           <span class="text-xs text-slate-500">
             {{ (allowed_clubs|length) + (1 if club_id else 0) }} club{% if (allowed_clubs|length) + (1 if club_id else 0) != 1 %}s{% endif %}
           </span>
@@ -317,17 +795,14 @@
     </section>
   {% endif %}
 
-  <section class="mt-6 grid gap-4 lg:grid-cols-3">
-
-    {# PR-J13 + PR-L1 — invitee management card. Visible on
-       Private + Club races for organizer / senior_organizer+.
-       On Club races invitees are an *override* on top of
-       club-membership (invite an out-of-club friend or coach
-       without opening the race fully). #}
-    {% if race.visibility in ("private", "club") and current_user.is_authenticated and current_user.has_at_least('organizer') %}
-      {% call card(class="p-5 lg:col-span-2") %}
+  {# PR-J13 + PR-L1 — invitee management card. Visible on Private +
+     Club races for organizer / senior_organizer+. On Club races
+     invitees are an *override* on top of club-membership. #}
+  {% if race.visibility in ("private", "club") and current_user.is_authenticated and current_user.has_at_least('organizer') %}
+    <section class="mt-5">
+      {% call card(class="p-5") %}
         <div class="flex items-center justify-between">
-          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Invitees</h2>
+          <h2 class="text-sm font-semibold text-slate-100">Invitees</h2>
           <span class="text-xs text-slate-500">{{ invitees|length }} invited</span>
         </div>
         <p class="mt-1 text-xs text-slate-500">
@@ -368,426 +843,28 @@
           <p class="mt-3 text-sm text-slate-500">Nobody invited yet.</p>
         {% endif %}
       {% endcall %}
-    {% endif %}
-
-    {# Registrations #}
-    {% call card(class="p-5 lg:col-span-1") %}
-      <div class="flex items-center justify-between">
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Registrations</h2>
-        <span class="text-xs text-slate-500">{{ registrations|length }}{% if race.max_players %} / {{ race.max_players }}{% endif %}</span>
-      </div>
-      {% if not registrations %}
-        <p class="mt-3 text-sm text-slate-500">No-one registered yet.</p>
-      {% else %}
-        <ul class="mt-3 space-y-1.5">
-          {% for r in registrations %}
-            {# PR-R1 + PR-Q3a — `masked_display` filter returns the
-               player's display_name (fallback username) for active
-               accounts, and a fixed-length partial mask
-               `K***************e` for soft-deleted accounts so the
-               raw handle never leaks from historical surfaces. #}
-            <li class="flex items-center gap-2 text-sm">
-              <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
-              <a class="flex-1 text-slate-200 hover:text-cyan-300" href="{{ url_for('profiles.public', username=r.user.username) }}">{{ r.user | masked_display }}</a>
-              {% if current_user.is_authenticated and current_user.has_at_least('organizer') and race.status not in ('cancelled', 'completed') %}
-                <form method="post"
-                      action="{{ url_for('official.remove_registration', race_id=race.id, registration_id=r.id) }}"
-                      onsubmit="return confirm('Remove @{{ r.user.username }} from this race?');">
-                  {{ csrf_form.hidden_tag() }}
-                  <button type="submit" class="text-xs text-rose-400 hover:text-rose-300" title="Remove registration">×</button>
-                </form>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-      {% if current_user.is_authenticated and race.status == 'registration_open' %}
-        {% set my_reg = registrations | selectattr('user_id', 'equalto', current_user.id) | first %}
-        {% if my_reg %}
-          <div class="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-200">
-            ✓ You're registered for this race.
-          </div>
-          <form method="post"
-                action="{{ url_for('official.remove_registration', race_id=race.id, registration_id=my_reg.id) }}"
-                class="mt-2"
-                onsubmit="return confirm('Unregister from this race?');">
-            {{ csrf_form.hidden_tag() }}
-            <button class="text-xs text-rose-400 hover:text-rose-300">Unregister</button>
-          </form>
-        {% else %}
-          <form method="post" action="{{ url_for('official.register', race_id=race.id) }}" class="mt-4">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button class="btn-primary w-full justify-center">Register me</button>
-          </form>
-        {% endif %}
-      {% endif %}
-    {% endcall %}
-
-    {# Room code + results #}
-    {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
-      {% call card(class="p-5 lg:col-span-2") %}
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Room code</h2>
-        {% if race.room_code %}
-          <p class="mt-3 text-sm">
-            <span class="text-mono-pill text-base">{{ race.room_code }}</span>
-            {% if room_code_expired %}
-              <span class="ml-2 text-xs text-rose-300">expired</span>
-            {% elif race.room_code_expires_at %}
-              {# PR-T2 — live countdown to expiry; the header chip
-                 already surfaces this publicly when status is
-                 room_code_available, but the organizer view shows
-                 it even on states like room_code_pending so the
-                 organizer knows their freshly-set code's window. #}
-              <span class="ml-2 text-xs text-slate-400"
-                    data-countdown
-                    data-utc-iso="{{ race.room_code_expires_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
-                    data-update-interval-ms="1000"
-                    data-prefix-future="expires in"
-                    data-prefix-past="expired"
-                    data-suffix-past="ago"
-                    data-class-future="text-slate-400"
-                    data-class-past="text-rose-300">
-                <span data-relative>expires soon</span>
-              </span>
-            {% endif %}
-          </p>
-        {% endif %}
-        <form method="post" action="{{ url_for('official.room_code', race_id=race.id) }}" class="mt-3 flex gap-2">
-          {{ room_code_form.hidden_tag() }}
-          {{ room_code_form.room_code(class="input-base", placeholder="paste code") }}
-          <button class="btn-primary">Set</button>
-        </form>
-
-        <h2 class="mt-6 text-sm font-semibold uppercase tracking-wider text-slate-300">Submit results</h2>
-        {% if race.status == 'completed' %}
-          {# PR-OCR18 — once a race is completed, results are locked
-             behind an explicit re-open step. Stops a stale tab or
-             bookmarked URL from silently overwriting verified data.
-             The Re-open button transitions status back to
-             results_pending; the upload + manual forms then render
-             on the next render. #}
-          <p class="mt-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-300">
-            Results are locked. The race has been completed — to
-            correct the saved placements, re-open the race first.
-            Existing per-result detail data (stats / skills /
-            aptitudes / uma score) is preserved across re-submits.
-          </p>
-          <form method="post"
-                action="{{ url_for('official.reopen_results', race_id=race.id) }}"
-                class="mt-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button class="btn-ghost"
-                    onclick="return confirm('Re-open this completed race for re-submission?');">
-              Re-open results
-            </button>
-          </form>
-        {% else %}
-        {# PR-OCR5 — parity with Draft's OCR upload UX:
-           - multi-file picker (`multiple`)
-           - accumulating queue (re-picking doesn't replace prior)
-           - paste-from-clipboard via arm button (page has multiple
-             upload forms — the per-result enrichment forms below
-             also use [data-multi-upload] — so paste targets the
-             last-armed form rather than a single global one)
-           - thumbnail preview strip with per-file remove
-           Falls back to the manual form below when OCR returns
-           nothing useful. #}
-        <form method="post"
-              action="{{ url_for('official.upload_result_screenshot', race_id=race.id) }}"
-              enctype="multipart/form-data"
-              data-multi-upload
-              class="mt-3 rounded-lg border border-slate-800 bg-slate-950/30 p-3 transition">
-          <p class="label-eyebrow">From screenshot</p>
-          <p class="mt-1 text-[11px] text-slate-500">
-            Pick multiple files if the result list scrolled past one screen,
-            or <kbd class="rounded border border-slate-700 bg-slate-900/60 px-1 py-0 text-[10px]">Ctrl+V</kbd>
-            a screenshot from the clipboard (click <em>Paste</em> first to
-            arm this form). We merge parsed rows by placement and keep the
-            highest-confidence row when several screenshots overlap.
-          </p>
-          <div class="mt-2 flex flex-wrap items-center gap-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <input type="file" name="image" multiple accept="image/png,image/jpeg,image/webp" data-ocr-input class="text-xs text-slate-300 file:mr-3 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-3 file:py-1 file:text-slate-300 hover:file:bg-slate-800" />
-            <button class="btn-ghost">Parse with OCR →</button>
-            <button type="button" data-ocr-arm class="btn-ghost text-xs" title="Click then Ctrl+V to paste clipboard images (multiple pastes accumulate into this form)">📋 Paste</button>
-            <button type="button" data-ocr-clear class="hidden text-[11px] text-slate-400 hover:text-slate-200">Clear</button>
-            <span class="text-xs text-slate-500">You'll review and confirm before any results are saved.</span>
-          </div>
-          <div data-ocr-thumbs class="mt-2 hidden flex-wrap gap-2"></div>
-        </form>
-
-        <p class="mt-4 text-xs text-slate-500">…or enter manually:</p>
-        <form method="post" action="{{ url_for('official.submit_results', race_id=race.id) }}" class="mt-2">
-          {{ results_form.hidden_tag() }}
-          {# PR-SK9 — participant_count drives the gate-bracket math
-             used by Inner / Outer Post Proficiency. Optional but
-             encouraged; leaving blank means post-number-conditional
-             skills stay cyan (we can't compute brackets without
-             total uma count). #}
-          <div class="mb-3 flex items-center gap-2 text-xs">
-            <label class="text-slate-400">Total participants (players + CPU)</label>
-            <input type="number" min="1" max="18" name="participant_count"
-                   value="{{ race.participant_count or '' }}"
-                   class="input-base w-20" />
-          </div>
-          <table class="w-full text-sm">
-            <thead class="text-xs uppercase tracking-wider text-slate-500">
-              <tr><th class="pr-3 py-1 text-left">Player</th><th class="pr-3 py-1 text-left">Place</th><th class="text-left">Uma</th></tr>
-            </thead>
-            <tbody>
-              {% for r in registrations %}
-                <tr class="border-t border-slate-800">
-                  <td class="pr-3 py-2 text-slate-200">
-                    <a href="{{ url_for('profiles.public', username=r.user.username) }}"
-                       class="hover:text-cyan-300">{{ r.user | masked_display }}</a>
-                  </td>
-                  <td class="pr-3 py-2"><input type="number" min="1" name="placement_{{ r.id }}" class="input-base w-20" /></td>
-                  <td class="py-2"><input type="text" name="uma_name_{{ r.id }}" class="input-base" /></td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <button class="btn-primary mt-4">Save results</button>
-        </form>
-        {% endif %}
-      {% endcall %}
-    {% endif %}
-  </section>
-
-  {# ── Race results — visible once results have been saved. Shows what's
-       on file for each placement and lets organisers enrich each row
-       with stats + skills via a per-result OCR upload. ────────────── #}
-  {% if results %}
-    <section class="mt-6">
-      {% call card(class="p-5") %}
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Race results</h2>
-        <ul class="mt-3 space-y-3">
-          {% for r in results %}
-            <li class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="text-sm">
-                    <span class="text-mono-pill mr-1">#{{ r.placement }}</span>
-                    {% if r.user %}
-                      {# PR-Q3a — masked_display also handles
-                         soft-deleted users; SET NULL'd rows (user
-                         removed entirely via hard delete) still
-                         render as @?. #}
-                      <a href="{{ url_for('profiles.public', username=r.user.username) }}"
-                         class="font-medium text-slate-100 hover:text-cyan-300">{{ r.user | masked_display }}</a>
-                    {% else %}
-                      <span class="font-medium text-slate-100">@?</span>
-                    {% endif %}
-                    {% if r.uma_name %}<span class="ml-2 text-slate-400">· {{ r.uma_name }}</span>{% endif %}
-                    {# PR-A6 — overall rank glyph + numeric score
-                       next to the uma name, mirroring the in-game
-                       top-of-sheet rank badge. Rank is computed
-                       from r.uma_score at display time via the
-                       rank_points_index threshold table. #}
-                    {% if r.uma_score %}
-                      <span class="ml-2">{{ rank_score_value(r.uma_score) }}</span>
-                    {% endif %}
-                  </p>
-                  {# PR-A5 — row-parser fields surfaced as a small
-                     pill row under the placement / uma name. Three
-                     facts the OCR pipeline pulls off the result
-                     screen: starting gate, winner's time / gap to
-                     the winner, and pre-race favorite number. Null
-                     fields skip their pill so manual entries don't
-                     render half-empty rows.
-                     PR-OCR17 — strategy (Front / Pace / Late / End)
-                     joins the pill row; populated by race-result
-                     OCR (PR-OCR13) or hand-edited via the per-result
-                     details form. Cyan tint matches the chip on the
-                     confirm page so the connection between "what
-                     OCR saw" and "what got saved" is visible. #}
-                  {% if r.strategy or r.gate or r.finish_time_or_lengths or r.fav_rank %}
-                    <p class="mt-1 flex flex-wrap gap-1 text-[10px]">
-                      {% if r.strategy %}{{ chip(r.strategy, "cyan") }}{% endif %}
-                      {% if r.gate %}{{ chip("Gate " ~ r.gate, "slate") }}{% endif %}
-                      {% if r.finish_time_or_lengths %}{{ chip(r.finish_time_or_lengths, "slate") }}{% endif %}
-                      {% if r.fav_rank %}{{ chip("#" ~ r.fav_rank ~ " fav", "slate") }}{% endif %}
-                    </p>
-                  {% endif %}
-                  {% if r.speed or r.stamina or r.power or r.guts or r.wisdom %}
-                    {# PR-A2 — 5-col grid with the official Cygames
-                       rank glyph (G/G+/F/.../SS+/UG) next to each
-                       value. Asset attribution in
-                       static/img/statusrank/CREDITS.md.
-                       PR-OCR21 — second line shows the aptitude-
-                       adjusted effective stat for the three stats
-                       any aptitude touches (Speed via distance apt,
-                       Power via surface apt, Wisdom via style apt).
-                       PR-SK10 — also bakes in green-skill flat
-                       buffs from skills the catalog confirms will
-                       definitely fire (item 6). Stamina + Guts now
-                       can show eff too when a green skill targets
-                       them (Sunny Days ◎ → +60 Guts etc.). Colour
-                       reflects sign (emerald = buff, rose = penalty). #}
-                    {% set _green = green_buffs_by_result.get(r.id) %}
-                    {% set _eff = effective_stats(r, race, _green) %}
-                    {% set _eff_map = {
-                        'Speed':   (r.speed, _eff.speed),
-                        'Stamina': (r.stamina, _eff.stamina),
-                        'Power':   (r.power, _eff.power),
-                        'Guts':    (r.guts, _eff.guts),
-                        'Wit':     (r.wisdom, _eff.wisdom),
-                    } %}
-                    <div class="mt-2 grid grid-cols-5 gap-2 text-xs">
-                      {% for label, val in [
-                          ('Speed', r.speed),
-                          ('Stamina', r.stamina),
-                          ('Power', r.power),
-                          ('Guts', r.guts),
-                          ('Wit', r.wisdom),
-                        ] %}
-                        <div class="rounded border border-slate-800 bg-slate-950/30 px-1.5 py-1">
-                          <p class="text-[9px] uppercase tracking-wider text-slate-500">{{ label }}</p>
-                          <div class="mt-0.5">
-                            {{ stat_rank_value(val) }}
-                          </div>
-                          {% set _pair = _eff_map.get(label) %}
-                          {% if _pair and _pair[1] is not none and val %}
-                            {% set _delta = _pair[1] - val %}
-                            <p class="mt-0.5 text-[10px] font-mono {{ 'text-emerald-300' if _delta > 0 else 'text-rose-300' }}">
-                              eff {{ _pair[1] }}
-                            </p>
-                          {% elif _pair %}
-                            <p class="mt-0.5 text-[10px] text-slate-600">—</p>
-                          {% else %}
-                            <p class="mt-0.5 text-[10px] text-slate-600">—</p>
-                          {% endif %}
-                        </div>
-                      {% endfor %}
-                    </div>
-                  {% endif %}
-                  {# PR-A1 — Track / Distance / Style aptitudes as
-                     grade-letter badges. Three lines, each with the
-                     category label + slot+badge pairs. Only renders
-                     when the result actually has aptitude data. #}
-                  {% if r.aptitudes %}
-                    {# PR-OCR19 — five-column grid (category label +
-                       four slot positions) so Turf / Sprint / Front
-                       all line up vertically across the three rows.
-                       Track only has 2 slots (Turf, Dirt) so its
-                       row pads with two empty cells, keeping the
-                       grid alignment. Label palette dialled back
-                       from PR-OCR18: category labels and slot labels
-                       both at slate-400, no bold — the colourful
-                       grade glyphs carry the visual weight, the
-                       labels just identify which slot is which. #}
-                    {% set _slot_cols = 4 %}
-                    <div class="mt-3 grid items-center gap-x-3 gap-y-1 text-xs"
-                         style="grid-template-columns: 5rem repeat({{ _slot_cols }}, minmax(0, max-content));">
-                      {% for cat_key, cat_label, slots in [
-                          ('track', 'Track', ['Turf', 'Dirt']),
-                          ('distance', 'Distance', ['Sprint', 'Mile', 'Medium', 'Long']),
-                          ('style', 'Style', ['Front', 'Pace', 'Late', 'End']),
-                        ] %}
-                        {% set cat_data = r.aptitudes.get(cat_key) or {} %}
-                        {% if cat_data %}
-                          <span class="text-[10px] uppercase tracking-wider text-slate-400">{{ cat_label }}</span>
-                          {% for slot in slots %}
-                            {# PR-OCR20 — sub-grid per cell so the
-                               grade glyph always sits in the same
-                               x-position regardless of slot-name
-                               width. Without it "Sprint G" pushes
-                               its grade further right than
-                               "Mile G" / "Pace A", so column 2's
-                               grades zigzag across rows. Fixed
-                               label column (3rem) + auto grade
-                               column = stable cell width =
-                               max-content matches across rows. #}
-                            <span class="grid grid-cols-[2.5rem_auto] items-center gap-1">
-                              <span class="text-right text-[11px] text-slate-400">{{ slot }}</span>
-                              {{ grade_letter_badge(cat_data.get(slot|lower)) }}
-                            </span>
-                          {% endfor %}
-                          {% for _ in range(_slot_cols - slots|length) %}
-                            <span></span>
-                          {% endfor %}
-                        {% endif %}
-                      {% endfor %}
-                    </div>
-                  {% endif %}
-                  {% if r.skills %}
-                    {# PR-SK4 — gray out skills whose static
-                       conditions don't match this race. The set
-                       is pre-computed in the route to avoid an
-                       N+1 SkillCondition lookup. Skills without a
-                       catalog entry render normally (default
-                       permissive — we don't gray out what we
-                       don't have data for). #}
-                    {# PR-SK5 hotfix — Jinja has no `set()` builtin,
-                       so `or set()` would explode when the dict
-                       value is an empty Python set (falsy in
-                       Python AND Jinja). The route always inserts
-                       a value for every result.id, but pass an
-                       empty list as the only-if-missing default
-                       — `skill_id in []` works identically to
-                       `skill_id in set()` for the membership
-                       check below. #}
-                    {% set _inapp = inapplicable_skills_by_result.get(r.id, []) %}
-                    <p class="mt-3 flex flex-wrap gap-1.5 text-xs">
-                      {% for assoc in r.skills %}
-                        {% set _doesnt_apply = assoc.skill_id in _inapp %}
-                        <span class="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 {% if _doesnt_apply %}border-slate-700 bg-slate-900/30 text-slate-500 opacity-60{% else %}border-cyan-500/30 bg-cyan-500/5 text-cyan-200{% endif %}"
-                              {% if _doesnt_apply %}title="Doesn't apply to this race's conditions"{% endif %}>
-                          {% if assoc.skill and assoc.skill.image_url %}
-                            <img src="{{ assoc.skill.image_url }}"
-                                 alt=""
-                                 loading="lazy"
-                                 referrerpolicy="no-referrer"
-                                 class="h-4 w-4 rounded {% if _doesnt_apply %}grayscale{% endif %}" />
-                          {% endif %}
-                          {% if assoc.skill %}
-                            <span class="{% if _doesnt_apply %}line-through decoration-slate-600{% endif %}">{{ assoc.skill.name_en }}</span>
-                          {% else %}
-                            <span class="text-slate-500" title="raw OCR text — no skill matched">{{ assoc.raw_ocr_text or '?' }}</span>
-                          {% endif %}
-                        </span>
-                      {% endfor %}
-                    </p>
-                  {% endif %}
-                </div>
-                {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
-                  {# PR-OCR5 — per-result uma-sheet upload. Multi-file
-                     + accumulating paste + thumbnail strip via the
-                     shared [data-multi-upload] JS at the bottom of
-                     the page. Each result row gets its own form
-                     with isolated queue state. #}
-                  <form method="post"
-                        action="{{ url_for('official.upload_result_details_screenshot', race_id=race.id, result_id=r.id) }}"
-                        enctype="multipart/form-data"
-                        data-multi-upload
-                        class="flex-1 min-w-[18rem] rounded-lg border border-slate-800 bg-slate-950/30 p-2 transition">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                    <div class="flex flex-wrap items-center gap-2">
-                      <input type="file"
-                             name="image"
-                             multiple
-                             accept="image/png,image/jpeg,image/webp"
-                             data-ocr-input
-                             class="text-xs text-slate-300 file:mr-2 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:px-2 file:py-1 file:text-slate-300 hover:file:bg-slate-800" />
-                      <button class="btn-ghost text-xs">Add details from screenshot</button>
-                      <button type="button" data-ocr-arm class="btn-ghost text-xs" title="Click then Ctrl+V to paste clipboard images into this form">📋</button>
-                      <button type="button" data-ocr-clear class="hidden text-[11px] text-slate-400 hover:text-slate-200">Clear</button>
-                    </div>
-                    <div data-ocr-thumbs class="mt-2 hidden flex-wrap gap-2"></div>
-                  </form>
-                {% endif %}
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% endcall %}
     </section>
   {% endif %}
 
-  {# PR-T2 — the Scheduled-block countdown that lived inline here
-     is now in static/js/countdown.js (loaded from base.html). #}
-
   <script>
+    /* Expand/collapse every result row at once — for the players who
+       want the whole sheet open like a spreadsheet. */
+    (function () {
+      var btn = document.querySelector('[data-expand-all]');
+      var list = document.querySelector('[data-results-list]');
+      if (!btn || !list) return;
+      if (list.querySelectorAll('details').length === 0) {
+        btn.classList.add('hidden');
+        return;
+      }
+      btn.addEventListener('click', function () {
+        var details = list.querySelectorAll('details');
+        var anyClosed = Array.prototype.some.call(details, function (d) { return !d.open; });
+        details.forEach(function (d) { d.open = anyClosed; });
+        btn.textContent = anyClosed ? 'Collapse all' : 'Expand all';
+      });
+    })();
+
     /* PR-OCR5 — multi-upload OCR helper.
        Mirrors Draft's race-result OCR UX. Each form tagged
        [data-multi-upload] gets:

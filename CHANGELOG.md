@@ -6,6 +6,26 @@ log for the full history.
 
 ## 2026-07-31
 
+### Official races
+
+- **The race page now follows the race's lifecycle (PR-V1).**
+  Completed races open on the results: a podium strip with the
+  top three (with their uma's art when the character is matched)
+  and a results table that fits the whole field on one screen —
+  trainer, uma, style, gate, time, favorite and score as
+  columns, with each row expanding to the full stat sheet
+  (stats, aptitudes, skills) where that data exists. Upcoming
+  races lead with who's registered — avatars and oshi instead
+  of a bullet list — next to a schedule rail with a live
+  countdown. Organizer tools now appear by stage: an explicit
+  registration → room code → results → done track, with only
+  the current stage's actions shown. The result-submission
+  forms (screenshot OCR + manual table) no longer render on a
+  race that hasn't happened yet.
+
+- **Direction reads as words again on the home page CM card**
+  (↻ Clockwise, not a bare arrow).
+
 ### Home page
 
 - **The home page now leads with the season, not a slogan
