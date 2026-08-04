@@ -541,6 +541,45 @@ def test_replay_series_builds_traces(app: Flask) -> None:
         assert len(first["hp"]) == series["frame_count"]
         # Leader's gap to the leader is zero somewhere by definition.
         assert min(y for _x, y in first["gap"]) == 0
+        # Rank drives the bump chart: a valid position per sample, and
+        # every position occupied at any instant.
+        assert len(first["rank"]) == series["frame_count"]
+        for i in range(0, series["frame_count"], 17):
+            ranks_now = sorted(r["rank"][i] for r in series["runners"])
+            assert ranks_now == list(range(1, series["runner_count"] + 1))
+        # The strip needs own-distance and lane, not just gap.
+        assert len(first["dist"]) == len(first["lane"]) == series["frame_count"]
+        # Phase bands tile the whole course without gaps.
+        bands = series["phases"]
+        assert bands[0]["start"] == 0
+        assert abs(bands[-1]["end"] - series["max_distance"]) < 1
+        for a, b in zip(bands, bands[1:], strict=False):
+            assert abs(a["end"] - b["start"]) < 1
+        assert len(series["x_axis"]) == series["frame_count"]
         # Runners come back in finishing order for a readable legend.
         finishes = [r["finish"] for r in series["runners"] if r["finish"]]
         assert finishes == sorted(finishes)
+
+
+def test_sectionals_read_in_finishing_order(app: Flask) -> None:
+    """The heatmap is only readable if row 1 is the winner — gate order
+    would put a back-marker on top."""
+    replay_file = CAPTURE_DIR / "34408987_800095.withreplay.json"
+    if not replay_file.exists():
+        pytest.skip("no replay-bearing capture archived")
+    payload = json.loads(replay_file.read_text())
+    payload["source"] = "memory_scan"
+    with app.app_context():
+        capture = captures_service.ingest(payload, submitted_by_user_id=None).capture
+        sec = captures_service.replay_series(capture)["sectionals"]
+        finishes = [r["finish"] for r in sec["rows"] if r["finish"]]
+        assert finishes == sorted(finishes)
+        assert finishes[0] == 1
+        # Segments stop at the finish rather than crediting the metres
+        # runners cover past the line.
+        assert sec["edges"][-1] <= int(
+            captures_service.replay_series(capture)["max_distance"]
+        ) + 1
+        assert sec["labels"][-1] == "finish"
+        # Every cell is scored against that segment's field mean.
+        assert len(sec["means"]) == len(sec["labels"])

@@ -1,138 +1,444 @@
-{# Race replay — per-runner traces read out of the game's own parsed
-   telemetry. Three views over one x-axis (metres into the race):
+{# Race replay.
 
-     Positions  gap to the leader, inverted so the leader rides the top
-                edge and the field falls away below. This is the shape
-                of the race: who led, who closed, where it was decided.
-     Stamina    HP remaining — where a runner emptied the tank.
-     Speed      raw m/s.
+   Three views of one race, each doing a job the others can't:
 
-   Inline SVG on purpose: no chart library, nothing to fetch, and it
-   stays legible in both themes. #}
+   1. The strip — a bird's-eye camera on the field. Runners sit at
+      their real distance and lane, so you watch the pack form, split
+      and close. Default camera fits the whole field (it never spreads
+      much more than ~30 m, so nobody gets pushed off-screen); picking
+      a runner pins them to the centre so you can watch your own
+      battle instead of the leader's.
+
+   2. The timeline — the whole race at once: running position, phase
+      bands, and each runner's real last-spurt point.
+
+   3. Sectionals — average speed per 200 m against the field's mean
+      for that same segment. This is how the race is actually read:
+      front-runners burn hot early and cool late, closers the reverse,
+      and the winning move shows up as a bright cell.
+
+   Server-rendered SVG; JS only moves the playhead and re-poses dots. #}
 
 {% set W = 1000 %}
-{% set H = 260 %}
-{% set PAD_L = 46 %}
-{% set PAD_R = 12 %}
-{% set PAD_T = 12 %}
-{% set PAD_B = 26 %}
+{% set H = 300 %}
+{% set PAD_L = 34 %}
+{% set PAD_R = 16 %}
+{% set PAD_T = 16 %}
+{% set PAD_B = 28 %}
+{% set N = replay.runner_count %}
+{% set STRIP_H = 132 %}
 
-{% macro path_for(points, y_max, invert) -%}
+{% macro rank_path(ranks) -%}
   {%- set ns = namespace(d='') -%}
-  {%- for x, y in points -%}
+  {%- for rank in ranks -%}
+    {%- set x = replay.x_axis[loop.index0] -%}
     {%- set px = PAD_L + (x / replay.max_distance) * (W - PAD_L - PAD_R) -%}
-    {%- set ratio = (y / y_max) if y_max else 0 -%}
-    {%- set py = (PAD_T + ratio * (H - PAD_T - PAD_B)) if invert else (H - PAD_B - ratio * (H - PAD_T - PAD_B)) -%}
+    {%- set py = PAD_T + ((rank - 1) / ((N - 1) if N > 1 else 1)) * (H - PAD_T - PAD_B) -%}
     {%- set ns.d = ns.d ~ (' L ' if not loop.first else 'M ') ~ '%.1f'|format(px) ~ ' ' ~ '%.1f'|format(py) -%}
   {%- endfor -%}
   {{- ns.d -}}
 {%- endmacro %}
 
-<section class="mt-4">
+{% macro series_path(points, y_max, height, top) -%}
+  {%- set ns = namespace(d='') -%}
+  {%- for x, y in points -%}
+    {%- set px = PAD_L + (x / replay.max_distance) * (W - PAD_L - PAD_R) -%}
+    {%- set py = top + height - ((y / y_max) if y_max else 0) * height -%}
+    {%- set ns.d = ns.d ~ (' L ' if not loop.first else 'M ') ~ '%.1f'|format(px) ~ ' ' ~ '%.1f'|format(py) -%}
+  {%- endfor -%}
+  {{- ns.d -}}
+{%- endmacro %}
+
+<section class="mt-4" data-replay>
   {% call card(class="p-5") %}
     <div class="flex flex-wrap items-baseline justify-between gap-3">
       <div>
         <h2 class="text-sm font-semibold text-slate-100">Race replay</h2>
         <p class="mt-0.5 text-xs text-slate-500">
-          {{ replay.frame_count }} samples across {{ replay.max_distance | round | int }} m,
-          straight from the race data — not a reconstruction.
+          Read from the race data itself — positions, lanes and speeds as they happened.
         </p>
       </div>
-      <div class="inline-flex rounded-lg border border-slate-700 bg-slate-900/40 p-0.5 text-xs" data-replay-tabs>
-        <button type="button" data-view="gap"
-                class="rounded px-2.5 py-1 bg-slate-800 text-slate-100">Positions</button>
-        <button type="button" data-view="hp"
-                class="rounded px-2.5 py-1 text-slate-400 hover:text-slate-200">Stamina</button>
-        <button type="button" data-view="speed"
-                class="rounded px-2.5 py-1 text-slate-400 hover:text-slate-200">Speed</button>
+      <div class="flex items-center gap-2 text-xs">
+        <button type="button" data-replay-play class="btn-ghost px-2.5 py-1 text-xs">▶ Play</button>
+        <button type="button" data-replay-reset class="text-slate-500 hover:text-slate-300">Reset</button>
       </div>
     </div>
 
-    <div class="mt-3 overflow-x-auto">
-      <svg viewBox="0 0 {{ W }} {{ H }}" class="h-64 w-full min-w-[36rem]" role="img"
-           aria-label="Per-runner race telemetry">
-        {# grid — quarters of the race #}
-        {% for frac in [0, 0.25, 0.5, 0.75, 1.0] %}
-          {% set gx = PAD_L + frac * (W - PAD_L - PAD_R) %}
-          <line x1="{{ gx }}" y1="{{ PAD_T }}" x2="{{ gx }}" y2="{{ H - PAD_B }}"
-                stroke="currentColor" class="text-slate-800" stroke-width="1" />
-          <text x="{{ gx }}" y="{{ H - 8 }}" text-anchor="middle"
-                class="fill-slate-600" style="font-size: 10px;">
-            {{ (replay.max_distance * frac) | round | int }}m
-          </text>
+    {# ── 1. the strip: bird's-eye on the field ─────────────────── #}
+    <div class="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <p class="label-eyebrow">Field</p>
+        <p class="text-[11px] text-slate-500">
+          <span data-camera-label>whole field</span> ·
+          <span data-strip-spread class="font-mono text-slate-400"></span> apart
+        </p>
+      </div>
+      <svg viewBox="0 0 {{ W }} {{ STRIP_H }}" class="mt-1 w-full" role="img"
+           aria-label="Bird's-eye view of the field">
+        {# rails #}
+        <line x1="0" y1="14" x2="{{ W }}" y2="14" stroke="currentColor"
+              class="text-slate-800" stroke-width="1" />
+        <line x1="0" y1="{{ STRIP_H - 14 }}" x2="{{ W }}" y2="{{ STRIP_H - 14 }}"
+              stroke="currentColor" class="text-slate-800" stroke-width="1" />
+        {# metre gridlines, relabelled by JS as the camera moves #}
+        {% for i in range(5) %}
+          <line data-strip-grid="{{ i }}" x1="0" y1="14" x2="0" y2="{{ STRIP_H - 14 }}"
+                stroke="currentColor" class="text-slate-800/70" stroke-width="1" />
+          <text data-strip-gridlabel="{{ i }}" x="0" y="{{ STRIP_H - 3 }}"
+                text-anchor="middle" class="fill-slate-600" style="font-size: 9px;"></text>
         {% endfor %}
-        <line x1="{{ PAD_L }}" y1="{{ H - PAD_B }}" x2="{{ W - PAD_R }}" y2="{{ H - PAD_B }}"
-              stroke="currentColor" class="text-slate-700" stroke-width="1" />
-
-        {% for view, y_max, invert, label in [
-             ('gap',   replay.max_gap,   true,  'metres behind'),
-             ('hp',    replay.max_hp,    false, 'stamina'),
-             ('speed', replay.max_speed, false, 'm/s')] %}
-          <g data-view-group="{{ view }}" {% if view != 'gap' %}style="display:none"{% endif %}>
-            <text x="6" y="{{ PAD_T + 8 }}" class="fill-slate-500" style="font-size: 10px;">{{ label }}</text>
-            {% for r in replay.runners %}
-              <path d="{{ path_for(r[view], y_max, invert) }}"
-                    fill="none"
-                    stroke="{{ r.color }}"
-                    stroke-width="{{ 2.2 if r.finish == 1 else 1.2 }}"
-                    stroke-opacity="{{ 1 if r.finish == 1 else 0.75 }}"
-                    stroke-linejoin="round"
-                    data-runner="{{ r.index }}">
-                <title>{{ r.name }}{% if r.finish %} — finished {{ r.finish }}{% endif %}</title>
-              </path>
-            {% endfor %}
+        {% for r in replay.runners %}
+          <g data-strip-runner="{{ r.index }}" class="cursor-pointer">
+            <circle r="6" fill="{{ r.color }}" fill-opacity="0.9"
+                    stroke="{{ r.color }}" stroke-width="1.5" />
+            <text class="fill-slate-300" style="font-size: 9px;" text-anchor="middle" dy="-10">{{ r.name }}</text>
+            <title>{{ r.name }}</title>
           </g>
         {% endfor %}
       </svg>
     </div>
 
-    {# Legend doubles as the finishing order. #}
-    <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-      {% for r in replay.runners %}
-        <li class="inline-flex items-center gap-1.5 text-slate-400"
-            data-legend="{{ r.index }}">
-          <span class="inline-block h-2 w-2 rounded-full" style="background: {{ r.color }}"></span>
-          {% if r.finish %}<span class="font-mono text-slate-500">{{ r.finish }}</span>{% endif %}
-          <span {% if r.finish == 1 %}class="text-slate-200"{% endif %}>{{ r.name }}</span>
-        </li>
-      {% endfor %}
-    </ul>
+    {# ── 2. the timeline ───────────────────────────────────────── #}
+    <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_13rem]">
+      <div class="min-w-0">
+        <div class="overflow-x-auto">
+          <svg viewBox="0 0 {{ W }} {{ H }}" class="w-full min-w-[34rem]" role="img"
+               aria-label="Running position over the course of the race">
+            {# phase bands behind everything #}
+            {% for band in replay.phases %}
+              {% set bx = PAD_L + (band.start / replay.max_distance) * (W - PAD_L - PAD_R) %}
+              {% set bw = ((band.end - band.start) / replay.max_distance) * (W - PAD_L - PAD_R) %}
+              <rect x="{{ bx }}" y="{{ PAD_T }}" width="{{ bw }}" height="{{ H - PAD_T - PAD_B }}"
+                    fill="currentColor"
+                    class="{{ ['text-slate-700/15','text-slate-700/5','text-cyan-500/5'][loop.index0] }}" />
+              <text x="{{ bx + bw / 2 }}" y="{{ PAD_T + 11 }}" text-anchor="middle"
+                    class="fill-slate-600" style="font-size: 9px; letter-spacing: .08em;">
+                {{ band.label | upper }}
+              </text>
+            {% endfor %}
+
+            {% for pos in range(1, N + 1) %}
+              {% set py = PAD_T + ((pos - 1) / ((N - 1) if N > 1 else 1)) * (H - PAD_T - PAD_B) %}
+              <line x1="{{ PAD_L }}" y1="{{ py }}" x2="{{ W - PAD_R }}" y2="{{ py }}"
+                    stroke="currentColor"
+                    class="{{ 'text-slate-700' if pos == 1 else 'text-slate-800/60' }}" stroke-width="1" />
+              <text x="{{ PAD_L - 8 }}" y="{{ py + 3 }}" text-anchor="end"
+                    class="fill-slate-600" style="font-size: 9px;">{{ pos }}</text>
+            {% endfor %}
+
+            {# last spurt — measured, not inferred #}
+            {% set spurts = replay.runners | map(attribute='spurt') | select | list %}
+            {% if spurts %}
+              {% set sx = PAD_L + ((spurts | sum) / (spurts | length) / replay.max_distance) * (W - PAD_L - PAD_R) %}
+              <line x1="{{ sx }}" y1="{{ PAD_T }}" x2="{{ sx }}" y2="{{ H - PAD_B }}"
+                    stroke="#fbbf24" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="4 3" />
+              <text x="{{ sx + 4 }}" y="{{ H - PAD_B - 5 }}" class="fill-amber-400/80"
+                    style="font-size: 9px;">last spurt</text>
+            {% endif %}
+
+            {% for frac in [0, 0.25, 0.5, 0.75, 1.0] %}
+              <text x="{{ PAD_L + frac * (W - PAD_L - PAD_R) }}" y="{{ H - 8 }}"
+                    text-anchor="middle" class="fill-slate-600" style="font-size: 10px;">
+                {{ (replay.max_distance * frac) | round | int }}m
+              </text>
+            {% endfor %}
+
+            {% for r in replay.runners | reverse %}
+              <path d="{{ rank_path(r.rank) }}" fill="none" stroke="{{ r.color }}"
+                    stroke-width="{{ 2.4 if r.finish == 1 else 1.6 }}"
+                    stroke-opacity="{{ 1 if r.finish == 1 else 0.7 }}"
+                    stroke-linejoin="round" stroke-linecap="round"
+                    data-runner-line="{{ r.index }}" class="cursor-pointer">
+                <title>{{ r.name }}{% if r.finish %} — finished {{ r.finish }}{% endif %}</title>
+              </path>
+            {% endfor %}
+
+            <line data-playhead x1="{{ W - PAD_R }}" y1="{{ PAD_T - 4 }}"
+                  x2="{{ W - PAD_R }}" y2="{{ H - PAD_B }}"
+                  stroke="currentColor" class="text-slate-400" stroke-width="1" stroke-dasharray="3 3" />
+          </svg>
+        </div>
+
+        <div class="mt-1 flex items-center gap-3">
+          <input type="range" data-replay-scrub min="0" max="{{ replay.x_axis | length - 1 }}"
+                 value="{{ replay.x_axis | length - 1 }}"
+                 class="h-1 flex-1 cursor-pointer appearance-none rounded bg-slate-800 accent-cyan-400" />
+          <span data-replay-pos class="w-16 shrink-0 text-right font-mono text-xs text-cyan-300">
+            {{ replay.max_distance | round | int }}m
+          </span>
+        </div>
+      </div>
+
+      <div class="min-w-0">
+        <p class="label-eyebrow">Position <span data-replay-at class="text-slate-400">at the finish</span></p>
+        <ol class="mt-2 space-y-0.5" data-replay-standings>
+          {% for r in replay.runners %}
+            <li data-standing="{{ r.index }}"
+                class="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs transition hover:bg-slate-800/60">
+              <span data-standing-pos class="w-4 shrink-0 text-right font-mono text-slate-500">{{ loop.index }}</span>
+              <span class="h-2 w-2 shrink-0 rounded-full" style="background: {{ r.color }}"></span>
+              <span class="min-w-0 flex-1 truncate {% if r.finish == 1 %}text-slate-100{% else %}text-slate-400{% endif %}">{{ r.name }}</span>
+              <span data-standing-gap class="shrink-0 font-mono text-[10px] text-slate-600"></span>
+            </li>
+          {% endfor %}
+        </ol>
+        <p class="mt-2 text-[11px] text-slate-600">Pick a runner to follow them.</p>
+      </div>
+    </div>
+
+    {# ── focus panel ───────────────────────────────────────────── #}
+    <div data-replay-focus class="mt-4 hidden border-t border-slate-800/70 pt-4">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <p class="text-xs">
+          <span data-focus-name class="font-medium text-slate-100"></span>
+          <span class="ml-2 text-slate-500">stamina (solid) and speed (dashed)</span>
+        </p>
+        <button type="button" data-focus-clear class="text-[11px] text-slate-500 hover:text-slate-300">
+          show everyone
+        </button>
+      </div>
+      <div class="mt-2 overflow-x-auto">
+        <svg viewBox="0 0 {{ W }} 150" class="w-full min-w-[34rem]" role="img"
+             aria-label="Stamina and speed for the selected runner">
+          {% for band in replay.phases %}
+            {% set bx = PAD_L + (band.start / replay.max_distance) * (W - PAD_L - PAD_R) %}
+            {% set bw = ((band.end - band.start) / replay.max_distance) * (W - PAD_L - PAD_R) %}
+            <rect x="{{ bx }}" y="8" width="{{ bw }}" height="122" fill="currentColor"
+                  class="{{ ['text-slate-700/15','text-slate-700/5','text-cyan-500/5'][loop.index0] }}" />
+          {% endfor %}
+          <text x="6" y="20" class="fill-emerald-400/70" style="font-size: 9px;">stamina</text>
+          <text x="6" y="126" class="fill-cyan-400/70" style="font-size: 9px;">speed</text>
+          {% for r in replay.runners %}
+            <g data-focus-group="{{ r.index }}" style="display:none">
+              <path d="{{ series_path(r.hp, replay.max_hp, 110, 12) }}"
+                    fill="none" stroke="#34d399" stroke-width="1.6" stroke-opacity="0.9" />
+              <path d="{{ series_path(r.speed, replay.max_speed, 110, 12) }}"
+                    fill="none" stroke="#22d3ee" stroke-width="1.6" stroke-opacity="0.9"
+                    stroke-dasharray="4 2" />
+              {% if r.spurt %}
+                {% set sx = PAD_L + (r.spurt / replay.max_distance) * (W - PAD_L - PAD_R) %}
+                <line x1="{{ sx }}" y1="8" x2="{{ sx }}" y2="130" stroke="#fbbf24"
+                      stroke-width="1.2" stroke-opacity="0.6" stroke-dasharray="4 3" />
+              {% endif %}
+            </g>
+          {% endfor %}
+          <line data-focus-playhead x1="{{ W - PAD_R }}" y1="8" x2="{{ W - PAD_R }}" y2="130"
+                stroke="currentColor" class="text-slate-500" stroke-width="1" stroke-dasharray="3 3" />
+        </svg>
+      </div>
+    </div>
+
+    {# ── 3. sectionals ─────────────────────────────────────────── #}
+    {% if replay.sectionals %}
+      {% set sec = replay.sectionals %}
+      <div class="mt-4 border-t border-slate-800/70 pt-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <p class="text-xs font-semibold text-slate-100">Sectionals</p>
+          <p class="text-[11px] text-slate-500">
+            average speed per 200 m ·
+            <span class="text-cyan-300">faster</span> /
+            <span class="text-rose-300">slower</span> than the field in that segment
+          </p>
+        </div>
+        <div class="mt-2 overflow-x-auto">
+          <table class="w-full min-w-[32rem] border-separate" style="border-spacing: 2px;">
+            <thead>
+              <tr>
+                <th class="w-32 text-left text-[10px] font-normal uppercase tracking-wider text-slate-600"></th>
+                {% for label in sec.labels %}
+                  <th class="text-center text-[9px] font-normal text-slate-600">{{ label }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in sec.rows %}
+                <tr>
+                  <td class="truncate pr-2 text-[11px] {% if row.finish == 1 %}text-slate-200{% else %}text-slate-400{% endif %}">
+                    <span class="mr-1 font-mono text-slate-600">{{ row.finish or '—' }}</span>{{ row.name }}
+                  </td>
+                  {% for v in row.cells %}
+                    {% set mean = sec.means[loop.index0] %}
+                    {% if v is none or not mean %}
+                      <td class="rounded bg-slate-900/40"></td>
+                    {% else %}
+                      {% set delta = (v - mean) / sec.spread %}
+                      {% set pct = (delta if delta > 0 else -delta) %}
+                      {% set alpha = 0.10 + (pct if pct < 1 else 1) * 0.45 %}
+                      <td class="rounded text-center font-mono text-[10px]"
+                          style="background: rgba({{ '34,211,238' if delta >= 0 else '251,113,133' }}, {{ '%.2f'|format(alpha) }});"
+                          title="{{ row.name }} · {{ v }} m/s vs field {{ mean }} m/s">
+                        <span class="{{ 'text-cyan-100' if delta >= 0 else 'text-rose-100' }}">{{ '%+.1f'|format(v - mean) }}</span>
+                      </td>
+                    {% endif %}
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
   {% endcall %}
 </section>
 
+<script id="replay-data" type="application/json">
+  {{ {
+       "x": replay.x_axis,
+       "runners": replay.runners | map(attribute='index') | list,
+       "names": replay.runners | map(attribute='name') | list,
+       "ranks": replay.runners | map(attribute='rank') | list,
+       "dist": replay.runners | map(attribute='dist') | list,
+       "lane": replay.runners | map(attribute='lane') | list,
+     } | tojson }}
+</script>
 <script>
-  /* View toggle + hover highlight. Kept tiny and dependency-free — the
-     chart is server-rendered SVG, so this only switches which group is
-     visible and dims the other lines when a legend entry is hovered. */
   (function () {
-    var tabs = document.querySelector('[data-replay-tabs]');
-    if (!tabs) return;
-    tabs.addEventListener('click', function (e) {
-      var btn = e.target.closest('[data-view]');
-      if (!btn) return;
-      var view = btn.getAttribute('data-view');
-      tabs.querySelectorAll('[data-view]').forEach(function (b) {
-        var on = b === btn;
-        b.classList.toggle('bg-slate-800', on);
-        b.classList.toggle('text-slate-100', on);
-        b.classList.toggle('text-slate-400', !on);
+    var root = document.querySelector('[data-replay]');
+    var dataEl = document.getElementById('replay-data');
+    if (!root || !dataEl) return;
+    var D = JSON.parse(dataEl.textContent);
+    var W = 1000, PAD_L = 34, PAD_R = 16, STRIP_H = {{ STRIP_H }};
+    var LAST = D.x.length - 1;
+
+    var scrub = root.querySelector('[data-replay-scrub]');
+    var posLabel = root.querySelector('[data-replay-pos]');
+    var atLabel = root.querySelector('[data-replay-at]');
+    var heads = root.querySelectorAll('[data-playhead], [data-focus-playhead]');
+    var list = root.querySelector('[data-replay-standings]');
+    var items = Array.prototype.slice.call(list.querySelectorAll('[data-standing]'));
+    var focusPanel = root.querySelector('[data-replay-focus]');
+    var cameraLabel = root.querySelector('[data-camera-label]');
+    var spreadLabel = root.querySelector('[data-strip-spread]');
+    var selected = null, timer = null;
+
+    function timelineX(x) {
+      return PAD_L + (x / (D.x[LAST] || 1)) * (W - PAD_L - PAD_R);
+    }
+
+    /* The strip camera. Default frames the whole field, so nobody is
+       ever pushed off-screen — the pack rarely spreads past ~30 m.
+       Selecting a runner re-centres on them instead of the leader, so
+       you can watch your own battle. */
+    function drawStrip(i) {
+      var ds = D.dist.map(function (series) { return series[i] || 0; });
+      var leader = Math.max.apply(null, ds);
+      var trail = Math.min.apply(null, ds);
+      var spread = leader - trail;
+      spreadLabel.textContent = spread.toFixed(1) + 'm';
+
+      var anchor = selected === null ? leader : (D.dist[D.runners.indexOf(selected)][i] || 0);
+      // Always show at least 20 m of road, and pad the field by 20%.
+      var half = Math.max(spread * 0.6, 10);
+      var lo = anchor - half, hi = anchor + half;
+      if (selected === null) { lo = leader - Math.max(spread * 1.2, 20); hi = leader + 4; }
+
+      function px(d) { return ((d - lo) / ((hi - lo) || 1)) * W; }
+
+      for (var g = 0; g < 5; g++) {
+        var at = lo + (hi - lo) * (g / 4);
+        var line = root.querySelector('[data-strip-grid="' + g + '"]');
+        var lbl = root.querySelector('[data-strip-gridlabel="' + g + '"]');
+        var gx = px(at);
+        line.setAttribute('x1', gx); line.setAttribute('x2', gx);
+        lbl.setAttribute('x', gx);
+        lbl.textContent = Math.round(at) + 'm';
+      }
+
+      D.runners.forEach(function (idx, k) {
+        var g = root.querySelector('[data-strip-runner="' + idx + '"]');
+        if (!g) return;
+        var x = px(D.dist[k][i] || 0);
+        // Lane is a small normalised offset; spread it across the strip.
+        var y = 26 + (D.lane[k][i] || 0) * (STRIP_H - 60) + 6;
+        g.setAttribute('transform', 'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ')');
+        var dim = selected !== null && selected !== idx;
+        g.setAttribute('opacity', dim ? 0.35 : 1);
       });
-      document.querySelectorAll('[data-view-group]').forEach(function (g) {
-        g.style.display = g.getAttribute('data-view-group') === view ? '' : 'none';
+    }
+
+    function render(i) {
+      var x = D.x[i] !== undefined ? D.x[i] : D.x[LAST];
+      heads.forEach(function (h) {
+        h.setAttribute('x1', timelineX(x)); h.setAttribute('x2', timelineX(x));
       });
+      posLabel.textContent = Math.round(x) + 'm';
+      atLabel.textContent = i >= LAST ? 'at the finish' : 'at ' + Math.round(x) + 'm';
+
+      var ds = D.dist.map(function (series) { return series[i] || 0; });
+      var leader = Math.max.apply(null, ds);
+      var order = D.runners.map(function (idx, k) {
+        return { idx: idx, k: k, rank: D.ranks[k][i] || 99, behind: leader - ds[k] };
+      }).sort(function (a, b) { return a.rank - b.rank; });
+
+      order.forEach(function (o, pos) {
+        var li = items[o.k];
+        li.style.order = String(pos);
+        li.querySelector('[data-standing-pos]').textContent = pos + 1;
+        var gap = li.querySelector('[data-standing-gap]');
+        gap.textContent = o.behind < 0.05 ? '' : '-' + o.behind.toFixed(1) + 'm';
+      });
+      list.style.display = 'flex';
+      list.style.flexDirection = 'column';
+      drawStrip(i);
+    }
+
+    function focus(idx) {
+      selected = idx;
+      cameraLabel.textContent = idx === null
+        ? 'whole field'
+        : 'following ' + (D.names[D.runners.indexOf(idx)] || '');
+      root.querySelectorAll('[data-runner-line]').forEach(function (p) {
+        var mine = p.getAttribute('data-runner-line') === String(idx);
+        p.setAttribute('stroke-opacity', idx === null ? 0.7 : (mine ? 1 : 0.12));
+      });
+      items.forEach(function (li) {
+        li.classList.toggle('bg-slate-800/60', String(idx) === li.getAttribute('data-standing'));
+      });
+      root.querySelectorAll('[data-focus-group]').forEach(function (g) {
+        g.style.display = g.getAttribute('data-focus-group') === String(idx) ? '' : 'none';
+      });
+      if (idx === null) { focusPanel.classList.add('hidden'); }
+      else {
+        focusPanel.classList.remove('hidden');
+        root.querySelector('[data-focus-name]').textContent =
+          D.names[D.runners.indexOf(idx)] || '';
+      }
+      render(+scrub.value);
+    }
+
+    scrub.addEventListener('input', function () { stop(); render(+scrub.value); });
+    items.forEach(function (li) {
+      li.addEventListener('click', function () {
+        var idx = +li.getAttribute('data-standing');
+        focus(selected === idx ? null : idx);
+      });
+    });
+    root.querySelectorAll('[data-runner-line], [data-strip-runner]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var idx = +(el.getAttribute('data-runner-line') || el.getAttribute('data-strip-runner'));
+        focus(selected === idx ? null : idx);
+      });
+    });
+    var clear = root.querySelector('[data-focus-clear]');
+    if (clear) clear.addEventListener('click', function () { focus(null); });
+
+    var playBtn = root.querySelector('[data-replay-play]');
+    function stop() { if (timer) { clearInterval(timer); timer = null; } playBtn.textContent = '▶ Play'; }
+    playBtn.addEventListener('click', function () {
+      if (timer) { stop(); return; }
+      if (+scrub.value >= LAST) { scrub.value = 0; }
+      playBtn.textContent = '❚❚ Pause';
+      timer = setInterval(function () {
+        var next = +scrub.value + 1;
+        if (next > LAST) { stop(); return; }
+        scrub.value = next; render(next);
+      }, 60);
+    });
+    var resetBtn = root.querySelector('[data-replay-reset]');
+    if (resetBtn) resetBtn.addEventListener('click', function () {
+      stop(); scrub.value = LAST; focus(null);
     });
 
-    document.querySelectorAll('[data-legend]').forEach(function (li) {
-      var idx = li.getAttribute('data-legend');
-      function set(dim) {
-        document.querySelectorAll('[data-runner]').forEach(function (p) {
-          var mine = p.getAttribute('data-runner') === idx;
-          p.setAttribute('stroke-opacity', dim ? (mine ? 1 : 0.12) : (mine ? 1 : 0.75));
-          p.setAttribute('stroke-width', dim && mine ? 2.6 : p.getAttribute('stroke-width'));
-        });
-      }
-      li.addEventListener('mouseenter', function () { set(true); });
-      li.addEventListener('mouseleave', function () { set(false); });
-    });
+    render(LAST);
   })();
 </script>

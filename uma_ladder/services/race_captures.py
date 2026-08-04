@@ -700,8 +700,16 @@ def replay_series(capture: RaceCapture) -> dict | None:
                 "gap": [],
                 "hp": [],
                 "speed": [],
+                # Own distance + lane drive the bird's-eye replay strip.
+                "dist": [],
+                "lane": [],
+                # Running position 1..N at each sample. A bump chart of
+                # this reads far better than N overlapping distance
+                # curves: an overtake is a line crossing.
+                "rank": [],
             }
         )
+    x_axis: list[float] = []
 
     max_dist = 0.0
     max_hp = 0.0
@@ -712,9 +720,16 @@ def replay_series(capture: RaceCapture) -> dict | None:
         dists = [row[k].get("Distance") or 0.0 for k in range(n)]
         leader = max(dists)
         max_dist = max(max_dist, leader)
+        x_axis.append(round(leader, 1))
+        # Rank at this instant: furthest along is 1st.
+        order = sorted(range(n), key=lambda i: -dists[i])
+        rank_of = {idx: pos + 1 for pos, idx in enumerate(order)}
         for k in range(n):
+            runners[k]["rank"].append(rank_of[k])
             hp = row[k].get("Hp") or 0.0
             max_hp = max(max_hp, hp)
+            runners[k]["dist"].append(round(dists[k], 2))
+            runners[k]["lane"].append(round(row[k].get("LanePosition") or 0.0, 4))
             runners[k]["gap"].append((round(leader, 1), round(leader - dists[k], 2)))
             runners[k]["hp"].append((round(leader, 1), round(hp, 1)))
             runners[k]["speed"].append(
@@ -726,7 +741,17 @@ def replay_series(capture: RaceCapture) -> dict | None:
     max_gap = max(
         (p[1] for r in runners for p in r["gap"]), default=0.0
     )
+    # The game hands us each runner's real last-spurt point, so this is
+    # measured rather than inferred from a formula.
+    for k, r in enumerate(runners):
+        horse = (sim.get("horses") or [{}] * n)[k] if k < len(sim.get("horses") or []) else {}
+        r["spurt"] = horse.get("LastSpurtStartDistance")
+
     return {
+        "x_axis": x_axis,
+        "runner_count": n,
+        "phases": _phase_bands(max_dist),
+        "sectionals": _sectionals(runners, max_dist),
         "max_distance": max_dist,
         "max_gap": max_gap or 1.0,
         "max_hp": max_hp or 1.0,
@@ -737,6 +762,80 @@ def replay_series(capture: RaceCapture) -> dict | None:
         "runners": sorted(
             runners, key=lambda r: (r["finish"] is None, r["finish"] or 99)
         ),
+    }
+
+
+# Opening / middle / final split at 1/6 and 2/3 of the course. This is
+# the convention the community race simulators use; it is NOT read from
+# game data, so treat the band edges as indicative. The spurt marker
+# beside them *is* game-supplied and exact.
+_PHASE_EDGES = ((0.0, 1 / 6, "Opening"), (1 / 6, 2 / 3, "Middle"), (2 / 3, 1.0, "Final"))
+SECTIONAL_M = 200
+
+
+def _phase_bands(max_distance: float) -> list[dict]:
+    return [
+        {
+            "label": label,
+            "start": round(max_distance * a, 1),
+            "end": round(max_distance * b, 1),
+        }
+        for a, b, label in _PHASE_EDGES
+    ]
+
+
+def _sectionals(runners: list[dict], max_distance: float) -> dict | None:
+    """Average speed per 200 m segment, per runner.
+
+    How racing analysts actually read a race: it shows *where* it was
+    won rather than only who won. Each cell is scored against the
+    field's mean for that same segment, so colour means "faster than
+    everyone else here", not "fast in absolute terms".
+    """
+    if max_distance <= 0 or not runners:
+        return None
+    # Clip to the finish: runners keep going past the line, and binning
+    # that in would credit them for metres that were never part of the
+    # race. The last segment is whatever remains, not a full 200 m.
+    finish = int(max_distance)
+    edges = list(range(0, finish, SECTIONAL_M)) + [finish]
+    if len(edges) < 2:
+        return None
+
+    rows = []
+    for r in runners:
+        cells = []
+        for i in range(len(edges) - 1):
+            lo, hi = edges[i], edges[i + 1]
+            speeds = [
+                sp for d, (_x, sp) in zip(r["dist"], r["speed"], strict=False)
+                if lo <= d < hi
+            ]
+            cells.append(round(sum(speeds) / len(speeds), 2) if speeds else None)
+        rows.append({"index": r["index"], "name": r["name"],
+                     "finish": r["finish"], "color": r["color"], "cells": cells})
+    # Read top-down as the race finished, not in gate order.
+    rows.sort(key=lambda row: (row["finish"] is None, row["finish"] or 99))
+
+    # Per-segment field mean, for the relative colour scale.
+    means = []
+    for i in range(len(edges) - 1):
+        vals = [row["cells"][i] for row in rows if row["cells"][i] is not None]
+        means.append(sum(vals) / len(vals) if vals else None)
+    spread = 0.0
+    for row in rows:
+        for i, v in enumerate(row["cells"]):
+            if v is not None and means[i]:
+                spread = max(spread, abs(v - means[i]))
+    return {
+        "edges": edges,
+        "labels": [
+            ("finish" if i == len(edges) - 2 else f"{edges[i + 1]}m")
+            for i in range(len(edges) - 1)
+        ],
+        "rows": rows,
+        "means": [round(m, 2) if m else None for m in means],
+        "spread": round(spread, 3) or 1.0,
     }
 
 
