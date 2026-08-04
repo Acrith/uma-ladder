@@ -1,0 +1,770 @@
+{
+  "schema": 1,
+  "source": "memory_scan",
+  "captured_at": "2026-08-04T12:38:54.143549+00:00",
+  "room": {
+    "saved_room_id": 85520900,
+    "race_instance_id": 800072,
+    "room_name": "Let's have fun!",
+    "start_time": "2026-05-06 08:44:48",
+    "entry_num": 9,
+    "season": 4,
+    "weather": 2,
+    "ground_condition": 2,
+    "random_seed": 1160211220
+  },
+  "runners": [
+    {
+      "gate": 8,
+      "trainer_name": "Yuuta",
+      "chara_id": 1007,
+      "card_id": 100701,
+      "finish_position": 1,
+      "finish_time_seconds": 223.821,
+      "gap_to_ahead_seconds": 0.0,
+      "running_style": 4,
+      "popularity": 1,
+      "stats": {
+        "speed": 1200,
+        "stamina": 950,
+        "power": 1183,
+        "guts": 704,
+        "wit": 739
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 1,
+        "sprint": 1,
+        "mile": 8,
+        "medium": 7,
+        "long": 8,
+        "front": 1,
+        "pace": 6,
+        "late": 6,
+        "end": 7
+      },
+      "skills": [
+        {
+          "skill_id": 100071,
+          "level": 5
+        },
+        {
+          "skill_id": 200132,
+          "level": 1
+        },
+        {
+          "skill_id": 200331,
+          "level": 1
+        },
+        {
+          "skill_id": 200351,
+          "level": 1
+        },
+        {
+          "skill_id": 200512,
+          "level": 1
+        },
+        {
+          "skill_id": 200642,
+          "level": 1
+        },
+        {
+          "skill_id": 201212,
+          "level": 1
+        },
+        {
+          "skill_id": 201462,
+          "level": 1
+        },
+        {
+          "skill_id": 201481,
+          "level": 1
+        },
+        {
+          "skill_id": 201552,
+          "level": 1
+        },
+        {
+          "skill_id": 201591,
+          "level": 1
+        },
+        {
+          "skill_id": 201661,
+          "level": 1
+        },
+        {
+          "skill_id": 202012,
+          "level": 1
+        },
+        {
+          "skill_id": 210061,
+          "level": 1
+        },
+        {
+          "skill_id": 900211,
+          "level": 1
+        },
+        {
+          "skill_id": 910151,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 9,
+      "trainer_name": "Acrith",
+      "chara_id": 1023,
+      "card_id": 102302,
+      "finish_position": 2,
+      "finish_time_seconds": 224.383,
+      "gap_to_ahead_seconds": 0.5623,
+      "running_style": 2,
+      "popularity": 3,
+      "stats": {
+        "speed": 1200,
+        "stamina": 1054,
+        "power": 1200,
+        "guts": 539,
+        "wit": 675
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 2,
+        "sprint": 2,
+        "mile": 7,
+        "medium": 7,
+        "long": 7,
+        "front": 5,
+        "pace": 7,
+        "late": 6,
+        "end": 3
+      },
+      "skills": [
+        {
+          "skill_id": 110231,
+          "level": 4
+        },
+        {
+          "skill_id": 200011,
+          "level": 1
+        },
+        {
+          "skill_id": 200051,
+          "level": 1
+        },
+        {
+          "skill_id": 200152,
+          "level": 1
+        },
+        {
+          "skill_id": 200182,
+          "level": 1
+        },
+        {
+          "skill_id": 200202,
+          "level": 1
+        },
+        {
+          "skill_id": 200372,
+          "level": 1
+        },
+        {
+          "skill_id": 200462,
+          "level": 1
+        },
+        {
+          "skill_id": 200511,
+          "level": 1
+        },
+        {
+          "skill_id": 200562,
+          "level": 1
+        },
+        {
+          "skill_id": 200572,
+          "level": 1
+        },
+        {
+          "skill_id": 201201,
+          "level": 1
+        },
+        {
+          "skill_id": 201212,
+          "level": 1
+        },
+        {
+          "skill_id": 201312,
+          "level": 1
+        },
+        {
+          "skill_id": 201321,
+          "level": 1
+        },
+        {
+          "skill_id": 201352,
+          "level": 1
+        },
+        {
+          "skill_id": 201532,
+          "level": 1
+        },
+        {
+          "skill_id": 210061,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 3,
+      "trainer_name": "Yuuta",
+      "chara_id": 1021,
+      "card_id": 102101,
+      "finish_position": 3,
+      "finish_time_seconds": 224.441,
+      "gap_to_ahead_seconds": 0.058,
+      "running_style": 4,
+      "popularity": 4,
+      "stats": {
+        "speed": 1197,
+        "stamina": 1070,
+        "power": 1105,
+        "guts": 553,
+        "wit": 638
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 2,
+        "sprint": 1,
+        "mile": 6,
+        "medium": 7,
+        "long": 7,
+        "front": 1,
+        "pace": 7,
+        "late": 7,
+        "end": 7
+      },
+      "skills": [
+        {
+          "skill_id": 100211,
+          "level": 5
+        },
+        {
+          "skill_id": 200012,
+          "level": 1
+        },
+        {
+          "skill_id": 200052,
+          "level": 1
+        },
+        {
+          "skill_id": 200331,
+          "level": 1
+        },
+        {
+          "skill_id": 200351,
+          "level": 1
+        },
+        {
+          "skill_id": 200512,
+          "level": 1
+        },
+        {
+          "skill_id": 200642,
+          "level": 1
+        },
+        {
+          "skill_id": 201182,
+          "level": 1
+        },
+        {
+          "skill_id": 201452,
+          "level": 1
+        },
+        {
+          "skill_id": 201462,
+          "level": 1
+        },
+        {
+          "skill_id": 201612,
+          "level": 1
+        },
+        {
+          "skill_id": 201661,
+          "level": 1
+        },
+        {
+          "skill_id": 210061,
+          "level": 1
+        },
+        {
+          "skill_id": 900071,
+          "level": 1
+        },
+        {
+          "skill_id": 910151,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 1,
+      "trainer_name": "Acrith",
+      "chara_id": 1007,
+      "card_id": 100701,
+      "finish_position": 4,
+      "finish_time_seconds": 224.898,
+      "gap_to_ahead_seconds": 0.4564,
+      "running_style": 4,
+      "popularity": 2,
+      "stats": {
+        "speed": 1200,
+        "stamina": 1174,
+        "power": 1200,
+        "guts": 556,
+        "wit": 592
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 1,
+        "sprint": 1,
+        "mile": 7,
+        "medium": 7,
+        "long": 7,
+        "front": 1,
+        "pace": 6,
+        "late": 6,
+        "end": 7
+      },
+      "skills": [
+        {
+          "skill_id": 100071,
+          "level": 5
+        },
+        {
+          "skill_id": 200011,
+          "level": 1
+        },
+        {
+          "skill_id": 200052,
+          "level": 1
+        },
+        {
+          "skill_id": 200131,
+          "level": 1
+        },
+        {
+          "skill_id": 200381,
+          "level": 1
+        },
+        {
+          "skill_id": 200512,
+          "level": 1
+        },
+        {
+          "skill_id": 200622,
+          "level": 1
+        },
+        {
+          "skill_id": 200632,
+          "level": 1
+        },
+        {
+          "skill_id": 200642,
+          "level": 1
+        },
+        {
+          "skill_id": 201451,
+          "level": 1
+        },
+        {
+          "skill_id": 201461,
+          "level": 1
+        },
+        {
+          "skill_id": 201481,
+          "level": 1
+        },
+        {
+          "skill_id": 201552,
+          "level": 1
+        },
+        {
+          "skill_id": 201591,
+          "level": 1
+        },
+        {
+          "skill_id": 210061,
+          "level": 1
+        },
+        {
+          "skill_id": 900211,
+          "level": 1
+        },
+        {
+          "skill_id": 900711,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 2,
+      "trainer_name": null,
+      "chara_id": 1,
+      "card_id": 0,
+      "finish_position": 5,
+      "finish_time_seconds": 231.48,
+      "gap_to_ahead_seconds": 6.5819,
+      "running_style": 4,
+      "popularity": 7,
+      "stats": {
+        "speed": 1000,
+        "stamina": 1000,
+        "power": 624,
+        "guts": 422,
+        "wit": 860
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 1,
+        "sprint": 1,
+        "mile": 1,
+        "medium": 3,
+        "long": 7,
+        "front": 3,
+        "pace": 4,
+        "late": 3,
+        "end": 7
+      },
+      "skills": [
+        {
+          "skill_id": 201432,
+          "level": 1
+        },
+        {
+          "skill_id": 200072,
+          "level": 1
+        },
+        {
+          "skill_id": 200292,
+          "level": 1
+        },
+        {
+          "skill_id": 201062,
+          "level": 1
+        },
+        {
+          "skill_id": 200122,
+          "level": 1
+        },
+        {
+          "skill_id": 201591,
+          "level": 1
+        },
+        {
+          "skill_id": 201422,
+          "level": 1
+        },
+        {
+          "skill_id": 200172,
+          "level": 1
+        },
+        {
+          "skill_id": 200202,
+          "level": 1
+        },
+        {
+          "skill_id": 200042,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 7,
+      "trainer_name": null,
+      "chara_id": 1,
+      "card_id": 0,
+      "finish_position": 6,
+      "finish_time_seconds": 231.612,
+      "gap_to_ahead_seconds": 0.1326,
+      "running_style": 4,
+      "popularity": 6,
+      "stats": {
+        "speed": 1000,
+        "stamina": 1000,
+        "power": 639,
+        "guts": 431,
+        "wit": 849
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 1,
+        "sprint": 1,
+        "mile": 1,
+        "medium": 3,
+        "long": 7,
+        "front": 3,
+        "pace": 4,
+        "late": 3,
+        "end": 7
+      },
+      "skills": [
+        {
+          "skill_id": 200162,
+          "level": 1
+        },
+        {
+          "skill_id": 201122,
+          "level": 1
+        },
+        {
+          "skill_id": 200152,
+          "level": 1
+        },
+        {
+          "skill_id": 200012,
+          "level": 1
+        },
+        {
+          "skill_id": 200252,
+          "level": 1
+        },
+        {
+          "skill_id": 200432,
+          "level": 1
+        },
+        {
+          "skill_id": 201552,
+          "level": 1
+        },
+        {
+          "skill_id": 201641,
+          "level": 1
+        },
+        {
+          "skill_id": 200262,
+          "level": 1
+        },
+        {
+          "skill_id": 200622,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 4,
+      "trainer_name": null,
+      "chara_id": 1,
+      "card_id": 0,
+      "finish_position": 7,
+      "finish_time_seconds": 231.815,
+      "gap_to_ahead_seconds": 0.203,
+      "running_style": 4,
+      "popularity": 5,
+      "stats": {
+        "speed": 1000,
+        "stamina": 1000,
+        "power": 647,
+        "guts": 428,
+        "wit": 870
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 1,
+        "sprint": 1,
+        "mile": 1,
+        "medium": 3,
+        "long": 7,
+        "front": 1,
+        "pace": 3,
+        "late": 4,
+        "end": 7
+      },
+      "skills": [
+        {
+          "skill_id": 201552,
+          "level": 1
+        },
+        {
+          "skill_id": 200162,
+          "level": 1
+        },
+        {
+          "skill_id": 200152,
+          "level": 1
+        },
+        {
+          "skill_id": 200622,
+          "level": 1
+        },
+        {
+          "skill_id": 201641,
+          "level": 1
+        },
+        {
+          "skill_id": 200262,
+          "level": 1
+        },
+        {
+          "skill_id": 201122,
+          "level": 1
+        },
+        {
+          "skill_id": 200432,
+          "level": 1
+        },
+        {
+          "skill_id": 200012,
+          "level": 1
+        },
+        {
+          "skill_id": 200252,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 5,
+      "trainer_name": null,
+      "chara_id": 1,
+      "card_id": 0,
+      "finish_position": 8,
+      "finish_time_seconds": 234.061,
+      "gap_to_ahead_seconds": 2.2457,
+      "running_style": 1,
+      "popularity": 8,
+      "stats": {
+        "speed": 1000,
+        "stamina": 1000,
+        "power": 640,
+        "guts": 414,
+        "wit": 873
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 1,
+        "sprint": 1,
+        "mile": 1,
+        "medium": 3,
+        "long": 7,
+        "front": 7,
+        "pace": 3,
+        "late": 2,
+        "end": 1
+      },
+      "skills": [
+        {
+          "skill_id": 200112,
+          "level": 1
+        },
+        {
+          "skill_id": 200552,
+          "level": 1
+        },
+        {
+          "skill_id": 200462,
+          "level": 1
+        },
+        {
+          "skill_id": 201142,
+          "level": 1
+        },
+        {
+          "skill_id": 201631,
+          "level": 1
+        },
+        {
+          "skill_id": 200102,
+          "level": 1
+        },
+        {
+          "skill_id": 200212,
+          "level": 1
+        },
+        {
+          "skill_id": 200232,
+          "level": 1
+        },
+        {
+          "skill_id": 200052,
+          "level": 1
+        },
+        {
+          "skill_id": 201272,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "gate": 6,
+      "trainer_name": null,
+      "chara_id": 1,
+      "card_id": 0,
+      "finish_position": 9,
+      "finish_time_seconds": 234.347,
+      "gap_to_ahead_seconds": 0.2865,
+      "running_style": 1,
+      "popularity": 9,
+      "stats": {
+        "speed": 1000,
+        "stamina": 1000,
+        "power": 635,
+        "guts": 426,
+        "wit": 851
+      },
+      "aptitudes": {
+        "turf": 7,
+        "dirt": 1,
+        "sprint": 1,
+        "mile": 1,
+        "medium": 3,
+        "long": 7,
+        "front": 7,
+        "pace": 3,
+        "late": 4,
+        "end": 3
+      },
+      "skills": [
+        {
+          "skill_id": 200112,
+          "level": 1
+        },
+        {
+          "skill_id": 200182,
+          "level": 1
+        },
+        {
+          "skill_id": 201472,
+          "level": 1
+        },
+        {
+          "skill_id": 200032,
+          "level": 1
+        },
+        {
+          "skill_id": 201462,
+          "level": 1
+        },
+        {
+          "skill_id": 201661,
+          "level": 1
+        },
+        {
+          "skill_id": 200082,
+          "level": 1
+        },
+        {
+          "skill_id": 201192,
+          "level": 1
+        },
+        {
+          "skill_id": 200192,
+          "level": 1
+        },
+        {
+          "skill_id": 201052,
+          "level": 1
+        }
+      ]
+    }
+  ]
+}

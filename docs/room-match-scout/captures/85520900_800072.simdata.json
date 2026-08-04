@@ -1,0 +1,146 @@
+{
+  "horseNum": 9,
+  "lastFrameIdx": 206,
+  "lastCalcFrameTime": 185.5392608642578,
+  "horses": [
+    {
+      "FinishOrder": 3,
+      "FinishTime": 224.8977508544922,
+      "FinishTimeRaw": 185.5392608642578,
+      "FinishDiffTime": 0.4564056396484375,
+      "StartDelayTime": 0.06449113041162491,
+      "GutsOrder": 1,
+      "WizOrder": 8,
+      "LastSpurtStartDistance": 2402.2841796875,
+      "RunningStyle": 4,
+      "Defeat": 10
+    },
+    {
+      "FinishOrder": 4,
+      "FinishTime": 231.4796142578125,
+      "FinishTimeRaw": 191.1171112060547,
+      "FinishDiffTime": 6.5818634033203125,
+      "StartDelayTime": 0.005857540760189295,
+      "GutsOrder": 4,
+      "WizOrder": 3,
+      "LastSpurtStartDistance": 2582.42529296875,
+      "RunningStyle": 4,
+      "Defeat": 8
+    },
+    {
+      "FinishOrder": 2,
+      "FinishTime": 224.44134521484375,
+      "FinishTimeRaw": 185.15248107910156,
+      "FinishDiffTime": 0.0580291748046875,
+      "StartDelayTime": 0.09685710817575455,
+      "GutsOrder": 2,
+      "WizOrder": 7,
+      "LastSpurtStartDistance": 2401.58984375,
+      "RunningStyle": 4,
+      "Defeat": 9
+    },
+    {
+      "FinishOrder": 6,
+      "FinishTime": 231.81521606445312,
+      "FinishTimeRaw": 191.40151977539062,
+      "FinishDiffTime": 0.2030487060546875,
+      "StartDelayTime": 0.04409956932067871,
+      "GutsOrder": 6,
+      "WizOrder": 0,
+      "LastSpurtStartDistance": 2401.955810546875,
+      "RunningStyle": 4,
+      "Defeat": 8
+    },
+    {
+      "FinishOrder": 7,
+      "FinishTime": 234.06089782714844,
+      "FinishTimeRaw": 193.3046417236328,
+      "FinishDiffTime": 2.2456817626953125,
+      "StartDelayTime": 0.051703717559576035,
+      "GutsOrder": 8,
+      "WizOrder": 2,
+      "LastSpurtStartDistance": 2941.9326171875,
+      "RunningStyle": 1,
+      "Defeat": 8
+    },
+    {
+      "FinishOrder": 8,
+      "FinishTime": 234.34738159179688,
+      "FinishTimeRaw": 193.54742431640625,
+      "FinishDiffTime": 0.2864837646484375,
+      "StartDelayTime": 0.0704842135310173,
+      "GutsOrder": 7,
+      "WizOrder": 4,
+      "LastSpurtStartDistance": 2821.2666015625,
+      "RunningStyle": 1,
+      "Defeat": 8
+    },
+    {
+      "FinishOrder": 5,
+      "FinishTime": 231.61216735839844,
+      "FinishTimeRaw": 191.2294464111328,
+      "FinishDiffTime": 0.1325531005859375,
+      "StartDelayTime": 0.08115942776203156,
+      "GutsOrder": 5,
+      "WizOrder": 1,
+      "LastSpurtStartDistance": 2432.404541015625,
+      "RunningStyle": 4,
+      "Defeat": 8
+    },
+    {
+      "FinishOrder": 0,
+      "FinishTime": 223.8209991455078,
+      "FinishTimeRaw": 184.62677001953125,
+      "FinishDiffTime": 0,
+      "StartDelayTime": 0.009088761173188686,
+      "GutsOrder": 0,
+      "WizOrder": 5,
+      "LastSpurtStartDistance": 2401.320068359375,
+      "RunningStyle": 4,
+      "Defeat": 1
+    },
+    {
+      "FinishOrder": 1,
+      "FinishTime": 224.38331604003906,
+      "FinishTimeRaw": 185.10330200195312,
+      "FinishDiffTime": 0.56231689453125,
+      "StartDelayTime": 0.06721220165491104,
+      "GutsOrder": 3,
+      "WizOrder": 6,
+      "LastSpurtStartDistance": 2461.84814453125,
+      "RunningStyle": 2,
+      "Defeat": 2
+    }
+  ],
+  "frameCount": 230,
+  "frameFields": [
+    {
+      "name": "Time",
+      "type": "System.Single",
+      "sample": 0
+    },
+    {
+      "name": "HorseDataArray",
+      "type": "Gallop.RaceSimulateHorseFrameData[]",
+      "sample": "<len 9>"
+    }
+  ],
+  "eventCount": 70,
+  "eventFields": [
+    {
+      "name": "frameTime",
+      "type": "System.Single",
+      "sample": 0
+    },
+    {
+      "name": "type",
+      "type": "Gallop.SimulateEventType",
+      "sample": "<obj>"
+    },
+    {
+      "name": "param",
+      "type": "System.Int32[]",
+      "sample": "<len 5>"
+    }
+  ]
+}
