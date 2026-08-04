@@ -1,5 +1,6 @@
 from .achievements import Achievement, UserAchievement
 from .admin_audit import AdminAuditLog
+from .api_tokens import ApiToken
 from .app_settings import AppSetting
 from .auth_identity import AuthIdentity
 from .champions_meeting import ChampionsMeeting
@@ -26,6 +27,8 @@ from .enums import (
     OfficialRaceStatus,
     OfficialRaceVisibility,
     PresetSource,
+    RaceCaptureSource,
+    RaceCaptureStatus,
     RaceSeason,
     RegistrationStatus,
     SeasonStatus,
@@ -46,6 +49,7 @@ from .official_races import (
 )
 from .presets import RacePreset
 from .profiles import UserProfile
+from .race_captures import RaceCapture
 from .reports import Report, ReportStatus
 from .seasons import Season
 from .skill_condition import SkillCondition
@@ -60,6 +64,7 @@ __all__ = [
     "VENUES",
     "Achievement",
     "AdminAuditLog",
+    "ApiToken",
     "AppSetting",
     "AuthIdentity",
     "ChampionsMeeting",
@@ -92,6 +97,9 @@ __all__ = [
     "OfficialRaceStatus",
     "OfficialRaceVisibility",
     "PresetSource",
+    "RaceCapture",
+    "RaceCaptureSource",
+    "RaceCaptureStatus",
     "RacePreset",
     "RaceSeason",
     "RegistrationStatus",

@@ -177,6 +177,37 @@ class OcrParseStatus(StrEnum):
     CONFIRMED = "confirmed"
 
 
+class RaceCaptureSource(StrEnum):
+    """How a race capture was obtained from the game client.
+
+    The ladder is deliberately agnostic here: an ingested payload is
+    normalized to the same result lines whichever tool produced it, so
+    a new community capture method only adds a value to this enum.
+
+    PACKET_CAPTURE — the msgpack response the server sent the client,
+      dumped at the wire by a CarrotJuicer-family tool (the method the
+      wider Umamusume tooling community standardized on).
+    MEMORY_SCAN — live IL2CPP objects read out of the game process by
+      a Frida helper (see docs/room-match-extraction.md).
+    OCR — the legacy screenshot pipeline; kept as the fallback for
+      players who won't run a helper app.
+    """
+
+    PACKET_CAPTURE = "packet_capture"
+    MEMORY_SCAN = "memory_scan"
+    OCR = "ocr"
+    MANUAL = "manual"
+
+
+class RaceCaptureStatus(StrEnum):
+    """A capture never writes to the ladder on its own — a human
+    confirms it first (PROJECT_INTENTIONS §13)."""
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+
 # Canonical venues mentioned in the appendix. Used to validate ban inputs.
 VENUES: tuple[str, ...] = (
     "Sapporo",

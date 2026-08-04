@@ -72,6 +72,7 @@ def create_app(config_object: type[BaseConfig] | str | None = None) -> Flask:
 
 def _register_blueprints(app: Flask) -> None:
     from .admin.routes import bp as admin_bp
+    from .api.routes import bp as api_bp
     from .auth.routes import bp as auth_bp
     from .clubs.routes import bp as clubs_bp
     from .dashboard.routes import bp as dashboard_bp
@@ -98,6 +99,13 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(ocr_bp, url_prefix="/ocr")
     app.register_blueprint(skills_bp, url_prefix="/skills")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    # Machine-facing, bearer-token authenticated (uma-race-extract).
+    # CSRF-exempt on purpose: CSRF defends cookie-based auth, which a
+    # browser attaches automatically. A bearer token never is, so the
+    # attack it protects against cannot happen here — and requiring a
+    # CSRF token would make the endpoint unusable from a desktop tool.
+    csrf.exempt(api_bp)
+    app.register_blueprint(api_bp, url_prefix="/api")
 
 
 def _init_sentry(app: Flask) -> None:

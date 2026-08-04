@@ -419,3 +419,27 @@ def cmd_ocr_backfill_draft_links(window_seconds: int) -> None:
 
 def register_cli(app: Flask) -> None:
     app.cli.add_command(uma_cli)
+
+
+@uma_cli.command("issue-api-token")
+@click.argument("username")
+@click.option("--name", default="race extractor", help="Label for this machine.")
+def cmd_issue_api_token(username: str, name: str) -> None:
+    """Mint a bearer token for the desktop race extractor.
+
+    The plaintext is printed once and cannot be recovered afterwards —
+    only its SHA-256 digest is stored. Paste it into the extractor's
+    uma-race-config.json.
+    """
+    from .services import api_tokens as tokens_service
+    from .services.auth import find_user_by_username
+
+    user = find_user_by_username(username)
+    if user is None:
+        raise click.ClickException(f"no such user: {username}")
+    _row, plaintext = tokens_service.issue_token(user, name=name)
+    click.echo(f"token for {user.username} ({name}):")
+    click.echo(f"  {plaintext}")
+    click.echo("")
+    click.echo("Shown once only. This token is for umaladder.moe —")
+    click.echo("it is NOT valid on training.umaladder.moe.")
