@@ -335,3 +335,87 @@ def test_review_page_is_organizer_gated_for_confirming(
     assert resp.status_code in (302, 403)
     with app.app_context():
         assert db.session.get(RaceCapture, cid).status == RaceCaptureStatus.PENDING
+
+
+def test_confirm_writes_skills_and_aptitudes(app: Flask, make_user) -> None:
+    """The capture carries every runner's full skill list and all ten
+    aptitude grades — far more than a placement. Confirming must push
+    those through the enrichment path so the race page renders them."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import OfficialRaceResult, PresetSource, RacePreset
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="acrith", password="password123", role="organizer")
+    winner = make_user(username="aisha alsadhazi", password="password123")
+
+    with app.app_context():
+        season = seasons_service.create_season(
+            name="enrich season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Enrich Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        payload = _payload()
+        # The capture carries skill *ids*; resolving them to names needs
+        # the catalog, which a bare test DB doesn't have. Seed just the
+        # ids this runner actually used so the id->name path is what's
+        # under test rather than an empty table.
+        from uma_ladder.models import UmaSkill
+
+        winner_row = next(
+            r for r in payload["runners"] if r["trainer_name"] == "Aisha AlSadhazi"
+        )
+        for entry in winner_row["skills"][:6]:
+            db.session.add(
+                UmaSkill(
+                    gametora_id=entry["skill_id"],
+                    name_en=f"Test Skill {entry['skill_id']}",
+                )
+            )
+        db.session.commit()
+
+        capture = captures_service.ingest(
+            payload, submitted_by_user_id=org["id"]
+        ).capture
+        gate = next(
+            m.gate for m in captures_service.match_runners(capture)
+            if m.trainer_name == "Aisha AlSadhazi"
+        )
+        captures_service.confirm(
+            capture.id, race_id=race.id,
+            user_by_gate={gate: winner["id"]}, actor_user_id=org["id"],
+        )
+        result = db.session.scalars(
+            db.select(OfficialRaceResult).where(
+                OfficialRaceResult.official_race_id == race.id
+            )
+        ).unique().one()
+        assert len(result.skills) >= 5, "skill list did not land"
+        assert result.aptitudes, "aptitudes did not land"
+        assert result.aptitudes["track"]["turf"] in set("GFEDCBAS")
+        assert set(result.aptitudes) == {"track", "distance", "style"}
+
+
+def test_aptitude_block_reads_both_payload_shapes() -> None:
+    """Upload payload nests aptitudes; the archive keeps the game's raw
+    `proper_*` field names. Both must normalize identically."""
+    nested = {"gate": 1, "aptitudes": {"turf": 8, "dirt": 4}}
+    raw = {"gate": 1, "proper_ground_turf": 8, "proper_ground_dirt": 4}
+    a = captures_service._runner_rows({"runners": [nested]})[0]["aptitudes"]
+    b = captures_service._runner_rows({"runners": [raw]})[0]["aptitudes"]
+    assert a["turf"] == b["turf"] == 8
+    assert captures_service._aptitude_block(b)["track"]["turf"] == "S"

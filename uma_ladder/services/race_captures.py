@@ -198,6 +198,23 @@ def _merge_payloads(old: dict | None, new: dict) -> dict:
     return merged
 
 
+# Raw game field -> aptitude slot. The archive keeps these at the top
+# level of each runner; the upload payload nests them under
+# `aptitudes`. Normalizing here means every reader sees one shape.
+_RAW_APTITUDE_FIELDS = {
+    "proper_ground_turf": "turf",
+    "proper_ground_dirt": "dirt",
+    "proper_distance_short": "sprint",
+    "proper_distance_mile": "mile",
+    "proper_distance_middle": "medium",
+    "proper_distance_long": "long",
+    "proper_running_style_nige": "front",
+    "proper_running_style_senko": "pace",
+    "proper_running_style_sashi": "late",
+    "proper_running_style_oikomi": "end",
+}
+
+
 def _runner_rows(payload: dict) -> list[dict]:
     """Runner rows with the outcome folded in.
 
@@ -228,6 +245,14 @@ def _runner_rows(payload: dict) -> list[dict]:
             }
             if any(v is not None for v in raw.values()):
                 row["stats"] = raw
+        if not row.get("aptitudes"):
+            apts = {
+                slot: r.get(field)
+                for field, slot in _RAW_APTITUDE_FIELDS.items()
+                if r.get(field) is not None
+            }
+            if apts:
+                row["aptitudes"] = apts
         out.append(row)
     return out
 
@@ -393,6 +418,53 @@ def match_runners(capture: RaceCapture) -> list[RunnerMatch]:
     return out
 
 
+def _skill_names(skill_entries: list) -> tuple[str, ...]:
+    """Capture gives us exact skill_ids; the detail path takes names.
+
+    Going id -> name is a lookup rather than a guess, so unlike the OCR
+    path there is no fuzzy matching here. Ids missing from the catalog
+    are dropped rather than invented.
+    """
+    from ..models import UmaSkill
+
+    ids = [
+        _as_int(s.get("skill_id"))
+        for s in skill_entries or []
+        if _as_int(s.get("skill_id"))
+    ]
+    if not ids:
+        return ()
+    rows = db.session.scalars(
+        select(UmaSkill).where(UmaSkill.gametora_id.in_(ids))
+    ).all()
+    by_id = {r.gametora_id: r.name_en for r in rows}
+    return tuple(by_id[i] for i in ids if i in by_id)
+
+
+def _aptitude_block(raw: dict | None) -> dict | None:
+    """Game aptitudes (1..8 per slot) -> the {track,distance,style}
+    letter-grade shape the race page already renders."""
+    if not raw:
+        return None
+    def grade(key: str) -> str | None:
+        return GAME_APTITUDE.get(_as_int(raw.get(key)) or 0)
+
+    block = {
+        "track": {"turf": grade("turf"), "dirt": grade("dirt")},
+        "distance": {
+            "sprint": grade("sprint"), "mile": grade("mile"),
+            "medium": grade("medium"), "long": grade("long"),
+        },
+        "style": {
+            "front": grade("front"), "pace": grade("pace"),
+            "late": grade("late"), "end": grade("end"),
+        },
+    }
+    # Drop categories the capture didn't carry rather than writing nulls.
+    block = {k: v for k, v in block.items() if any(v.values())}
+    return block or None
+
+
 def _format_finish(seconds: float | None) -> str | None:
     """Race times read as M:SS.s on the result page, matching how the
     OCR path stores them."""
@@ -470,9 +542,38 @@ def confirm(
         for i, line in enumerate(lines)
     ]
 
-    official_service.submit_results(
+    saved = official_service.submit_results(
         race_id, lines, confirmed_by_user_id=actor_user_id, notify=True
     )
+
+    # The capture carries far more than a placement: every runner's
+    # full skill list and all ten aptitude grades. Push those through
+    # the same enrichment path the stat-screen OCR uses, so the race
+    # page renders them exactly as it always has.
+    runner_by_user = {
+        uid: by_gate.get(gate)
+        for gate, uid in user_by_gate.items()
+        if by_gate.get(gate)
+    }
+    for result in saved:
+        runner = runner_by_user.get(result.user_id)
+        if not runner:
+            continue
+        names = _skill_names(runner.get("skills") or [])
+        apts = _aptitude_block(runner.get("aptitudes"))
+        if not names and not apts:
+            continue
+        try:
+            official_service.submit_result_details(
+                result.id,
+                official_service.ResultDetailsUpdate(
+                    skill_names=names, aptitudes=apts
+                ),
+                by_user_id=actor_user_id,
+            )
+        except Exception:  # noqa: BLE001
+            # Enrichment is a bonus; never lose a confirmed result to it.
+            db.session.rollback()
 
     capture.status = RaceCaptureStatus.CONFIRMED
     capture.official_race_id = race_id
