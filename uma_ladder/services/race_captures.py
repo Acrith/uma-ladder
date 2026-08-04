@@ -394,6 +394,32 @@ def _resolve_uma(card_id: int | None, chara_id: int | None) -> tuple[int | None,
     return None, None
 
 
+def _uma_image(card_id: int | None, chara_id: int | None) -> str | None:
+    """Portrait for a runner. Prefers the exact costume, falls back to
+    any costume of the same character — same bridge the podium art
+    uses (UmaOutfit.costume_id is the game's card_id)."""
+    from ..models import UmaCharacter, UmaOutfit
+
+    if card_id:
+        outfit = db.session.scalars(
+            select(UmaOutfit).where(UmaOutfit.costume_id == card_id)
+        ).first()
+        if outfit is not None and outfit.image_url:
+            return outfit.image_url
+    if chara_id:
+        outfit = db.session.scalars(
+            select(UmaOutfit)
+            .where(UmaOutfit.costume_id.between(chara_id * 100, chara_id * 100 + 99))
+            .where(UmaOutfit.image_url.is_not(None))
+        ).first()
+        if outfit is not None:
+            return outfit.image_url
+        char = db.session.get(UmaCharacter, chara_id)
+        if char is not None and char.image_url:
+            return char.image_url
+    return None
+
+
 def match_runners(capture: RaceCapture) -> list[RunnerMatch]:
     """Resolve each captured runner against ladder accounts + the uma
     catalog. Suggestions only — the reviewer confirms or corrects."""
@@ -713,6 +739,7 @@ def replay_series(capture: RaceCapture) -> dict | None:
 
     max_dist = 0.0
     max_hp = 0.0
+    t_axis: list[float] = []
     for frame in frames:
         row = frame.get("h") or []
         if len(row) < n:
@@ -721,6 +748,7 @@ def replay_series(capture: RaceCapture) -> dict | None:
         leader = max(dists)
         max_dist = max(max_dist, leader)
         x_axis.append(round(leader, 1))
+        t_axis.append(round(frame.get("t") or 0.0, 3))
         # Rank at this instant: furthest along is 1st.
         order = sorted(range(n), key=lambda i: -dists[i])
         rank_of = {idx: pos + 1 for pos, idx in enumerate(order)}
@@ -743,12 +771,21 @@ def replay_series(capture: RaceCapture) -> dict | None:
     )
     # The game hands us each runner's real last-spurt point, so this is
     # measured rather than inferred from a formula.
+    rows_by_gate = {
+        (_as_int(r.get("gate")) or 0) - 1: r for r in _runner_rows(payload)
+    }
     for k, r in enumerate(runners):
         horse = (sim.get("horses") or [{}] * n)[k] if k < len(sim.get("horses") or []) else {}
         r["spurt"] = horse.get("LastSpurtStartDistance")
+        src = rows_by_gate.get(k) or {}
+        r["image"] = _uma_image(
+            _as_int(src.get("card_id")), _as_int(src.get("chara_id"))
+        )
 
     return {
         "x_axis": x_axis,
+        "t_axis": t_axis,
+        "duration": t_axis[-1] if t_axis else 0.0,
         "runner_count": n,
         "phases": _phase_bands(max_dist),
         "sectionals": _sectionals(runners, max_dist),
