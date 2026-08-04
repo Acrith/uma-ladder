@@ -181,3 +181,157 @@ def test_service_maps_every_game_enum_value() -> None:
     assert set(captures_service.GAME_GROUND) == {1, 2, 3, 4}
     assert set(captures_service.GAME_RUNNING_STYLE) == {1, 2, 3, 4}
     assert set(captures_service.GAME_APTITUDE) == set(range(1, 9))
+
+
+# ─── review + confirm ────────────────────────────────────────────────
+
+def _archive_payload() -> dict:
+    """The on-disk archive shape: results live in a separate array and
+    stats use the game's own field names."""
+    return json.loads((CAPTURE_DIR / "34408987_800095.full.json").read_text())
+
+
+def test_runner_rows_tolerates_the_archive_shape() -> None:
+    """The extractor's upload payload folds the outcome into each
+    runner; the archive keeps it separate. Both must read the same, or
+    a capture silently looks like it has no result."""
+    rows = captures_service._runner_rows(_archive_payload())
+    assert rows, "archive payload produced no runners"
+    assert all(r.get("finish_position") for r in rows)
+    # pow/wiz normalized into the nested stats shape
+    assert rows[0]["stats"]["power"] is not None
+    assert rows[0]["stats"]["wit"] is not None
+
+
+def test_merge_keeps_the_richer_capture(app: Flask, client: FlaskClient, token: str) -> None:
+    """A second upload of the same room may be poorer — the scenario
+    may have failed to decode. It must not erase a good first capture."""
+    good = _payload()
+    client.post("/api/race-captures", json=good, headers=_auth(token))
+    poor = _payload()
+    for r in poor["runners"]:
+        r["finish_position"] = None
+    client.post("/api/race-captures", json=poor, headers=_auth(token))
+    with app.app_context():
+        capture = db.session.query(RaceCapture).one()
+        rows = captures_service._runner_rows(capture.payload_json)
+        assert any(r.get("finish_position") for r in rows), "richer capture was lost"
+
+
+def test_match_runners_finds_accounts_by_username_and_display_name(
+    app: Flask, make_user
+) -> None:
+    from uma_ladder.models import User
+    from uma_ladder.services.profiles import get_or_create_profile
+
+    make_user(username="acrith", password="password123")
+    shown = make_user(username="kezuke", password="password123")
+    with app.app_context():
+        u = db.session.get(User, shown["id"])
+        get_or_create_profile(u).display_name = "Shizu"
+        db.session.commit()
+        result = captures_service.ingest(_payload(), submitted_by_user_id=None)
+        matches = captures_service.match_runners(result.capture)
+        by_name = {m.trainer_name: m for m in matches}
+        assert by_name["Acrith"].match_confidence == "exact"
+        assert by_name["Acrith"].user_label == "acrith"
+        # game name "Kezuke" == that account's username, not its display
+        assert by_name["Kezuke"].user_id is not None
+        # nobody on the ladder is called this
+        assert by_name["Trubber"].user_id is None
+        assert by_name["Trubber"].match_confidence == "none"
+
+
+def test_confirm_writes_results_and_reranks(app: Flask, make_user) -> None:
+    """Runners that aren't ladder members are skipped, and the rest are
+    re-ranked 1..N so the race sees a dense finishing order."""
+    from uma_ladder.models import OfficialRaceResult, PresetSource, RacePreset
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="acrith", password="password123", role="organizer")
+    a = make_user(username="aisha alsadhazi", password="password123")
+    b = make_user(username="electricfire", password="password123")
+
+    with app.app_context():
+        from datetime import UTC, datetime, timedelta
+
+        season = seasons_service.create_season(
+            name="cap season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Cap Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        capture = captures_service.ingest(
+            _payload(), submitted_by_user_id=org["id"]
+        ).capture
+        # Aisha finished 1st and StarlitFire 2nd; only they are mapped.
+        rows = {m.trainer_name: m.gate for m in captures_service.match_runners(capture)}
+        captures_service.confirm(
+            capture.id,
+            race_id=race.id,
+            user_by_gate={rows["Aisha AlSadhazi"]: a["id"],
+                          rows["StarlitFire"]: b["id"]},
+            actor_user_id=org["id"],
+        )
+
+        results = list(
+            db.session.scalars(
+                db.select(OfficialRaceResult).where(
+                    OfficialRaceResult.official_race_id == race.id
+                )
+            ).unique()
+        )
+        assert len(results) == 2
+        assert sorted(r.placement for r in results) == [1, 2]
+        winner = next(r for r in results if r.placement == 1)
+        assert winner.user_id == a["id"]
+        # rich detail carried across, not just placement
+        assert winner.speed and winner.gate and winner.strategy
+        assert winner.finish_time_or_lengths
+
+        refreshed = db.session.get(RaceCapture, capture.id)
+        assert refreshed.status == RaceCaptureStatus.CONFIRMED
+        assert refreshed.official_race_id == race.id
+
+
+def test_confirm_refuses_twice(app: Flask, make_user) -> None:
+    org = make_user(username="acrith", password="password123", role="organizer")
+    with app.app_context():
+        capture = captures_service.ingest(
+            _payload(), submitted_by_user_id=org["id"]
+        ).capture
+        capture.status = RaceCaptureStatus.CONFIRMED
+        db.session.commit()
+        with pytest.raises(captures_service.CaptureError):
+            captures_service.confirm(
+                capture.id, race_id=1, user_by_gate={1: org["id"]},
+                actor_user_id=org["id"],
+            )
+
+
+def test_review_page_is_organizer_gated_for_confirming(
+    app: Flask, client: FlaskClient, make_user
+) -> None:
+    make_user(username="plain", password="password123")
+    with app.app_context():
+        capture = captures_service.ingest(_payload(), submitted_by_user_id=None).capture
+        cid = capture.id
+    client.post("/auth/login", data={"username": "plain", "password": "password123"})
+    # A non-organizer cannot push a capture into the ladder.
+    resp = client.post(f"/captures/{cid}/confirm", data={"race_id": 1})
+    assert resp.status_code in (302, 403)
+    with app.app_context():
+        assert db.session.get(RaceCapture, cid).status == RaceCaptureStatus.PENDING

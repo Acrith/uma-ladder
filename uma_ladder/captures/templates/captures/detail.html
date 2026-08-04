@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip, season_chip, weather_chip %}
+{% block title %}Captured race · Uma Ladder{% endblock %}
+{% block content %}
+
+  {# ── Header — what was captured, and where it came from ── #}
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-slate-100">
+        {{ capture.room_name or "Room " ~ capture.saved_room_id }}
+      </h1>
+      <p class="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-slate-400">
+        <span>{{ capture.participant_count or summary.runners|length }} runners</span>
+        {% if capture.started_at %}
+          <span>· {{ capture.started_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+        {% endif %}
+        {% if capture.submitted_by %}
+          <span>· uploaded by {{ capture.submitted_by.username }}</span>
+        {% endif %}
+      </p>
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        {% if capture.status == 'pending' %}{{ chip("Needs review", "amber") }}
+        {% elif capture.status == 'confirmed' %}{{ chip("Saved to ladder", "emerald") }}
+        {% else %}{{ chip("Rejected", "rose") }}{% endif %}
+        {{ chip(capture.source.replace('_', ' ')) }}
+        {% if summary.race_season %}{{ season_chip(summary.race_season) }}{% endif %}
+        {% if summary.weather %}{{ weather_chip(summary.weather) }}{% endif %}
+        {% if summary.ground_condition %}
+          {% set tone = {'Firm': 'emerald', 'Good': 'cyan', 'Soft': 'amber', 'Heavy': 'rose'}[summary.ground_condition] %}
+          {{ chip(summary.ground_condition, tone) }}
+        {% endif %}
+        {% if frame_count %}{{ chip(frame_count ~ " replay frames", "violet") }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if capture.status == 'confirmed' %}
+    {% call card(class="mt-5 p-4 border-emerald-500/30") %}
+      <p class="text-sm text-emerald-200">
+        Saved to
+        <a class="font-medium underline decoration-dotted"
+           href="{{ url_for('official.detail', race_id=capture.official_race_id) }}">race #{{ capture.official_race_id }}</a>
+        {%- if capture.confirmed_by %} by {{ capture.confirmed_by.username }}{% endif %}
+        {%- if capture.confirmed_at %} on {{ capture.confirmed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}.
+      </p>
+    {% endcall %}
+  {% elif capture.status == 'rejected' %}
+    {% call card(class="mt-5 p-4 border-rose-500/30") %}
+      <p class="text-sm text-rose-200">
+        Rejected{% if capture.rejected_reason %} — {{ capture.rejected_reason }}{% endif %}.
+      </p>
+    {% endcall %}
+  {% endif %}
+
+  <form method="post"
+        action="{{ url_for('captures.confirm', capture_id=capture.id) }}"
+        class="mt-5 space-y-4">
+    {{ csrf_form.hidden_tag() }}
+
+    {# ── Which race is this? We ask rather than guess: attaching a
+         result to the wrong race is worse than one extra click. ── #}
+    {% if can_confirm and capture.status == 'pending' %}
+      {% call card(class="p-5") %}
+        <h2 class="text-sm font-semibold text-slate-100">Which race is this?</h2>
+        <p class="mt-1 text-xs text-slate-500">
+          The captured room name was
+          <span class="text-slate-300">{{ capture.room_name or "(none)" }}</span>.
+        </p>
+        {% if races %}
+          <select name="race_id" class="input-base mt-3" required>
+            <option value="">— pick the race —</option>
+            {% for r in races %}
+              <option value="{{ r.id }}"
+                      {% if capture.room_name and r.name and r.name.strip().lower() in capture.room_name.strip().lower() %}selected{% endif %}>
+                {{ r.name }}{% if r.season %} · {{ r.season.name }}{% endif %}
+                {%- if r.scheduled_at %} · {{ r.scheduled_at.strftime('%Y-%m-%d') }}{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <p class="mt-3 text-sm text-amber-200">
+            No open races to attach this to. Create the race first, then come back.
+          </p>
+        {% endif %}
+      {% endcall %}
+    {% endif %}
+
+    {# ── The runners. Auto-matched where the game name lines up with
+         a ladder account; every row stays editable. ── #}
+    {% call card(class="p-5") %}
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="text-sm font-semibold text-slate-100">Runners</h2>
+        <p class="text-xs text-slate-500">
+          {{ matched_count }} of {{ matches|length }} matched to ladder accounts
+        </p>
+      </div>
+
+      <div class="mt-3 hidden items-center gap-3 text-[10px] uppercase tracking-wider text-slate-500 md:flex">
+        <span class="w-8 shrink-0">#</span>
+        <span class="w-36">In game</span>
+        <span class="min-w-0 flex-1">Ladder account</span>
+        <span class="w-36">Uma</span>
+        <span class="w-16">Style</span>
+        <span class="w-20 text-right">Time</span>
+      </div>
+
+      <ul class="mt-1">
+        {% for m in matches %}
+          <li class="border-t border-slate-800/70">
+            <div class="flex flex-wrap items-center gap-3 py-2 text-sm md:flex-nowrap">
+              <span class="w-8 shrink-0 font-mono text-xs
+                           {% if m.finish_position == 1 %}text-amber-300
+                           {% elif m.finish_position == 2 %}text-slate-200
+                           {% elif m.finish_position == 3 %}text-orange-300
+                           {% else %}text-slate-500{% endif %}">{{ m.finish_position or "—" }}</span>
+
+              <span class="w-36 shrink-0 truncate text-slate-300" title="{{ m.trainer_name }}">
+                {{ m.trainer_name or "—" }}
+              </span>
+
+              <span class="min-w-0 flex-1">
+                {% if can_confirm and capture.status == 'pending' %}
+                  <select name="user_for_gate_{{ m.gate }}" class="input-base py-1 text-xs">
+                    <option value="">— skip (not on the ladder) —</option>
+                    {% for u in all_users %}
+                      <option value="{{ u.id }}" {% if m.user_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                    {% endfor %}
+                  </select>
+                {% else %}
+                  <span class="text-slate-300">{{ m.user_label or "—" }}</span>
+                {% endif %}
+                {% if m.match_confidence == 'display' %}
+                  <span class="ml-1 text-[10px] text-amber-300/80" title="Matched on display name, not username">matched by display name</span>
+                {% elif m.match_confidence == 'none' %}
+                  <span class="ml-1 text-[10px] text-slate-600">no match</span>
+                {% endif %}
+              </span>
+
+              <span class="w-36 shrink-0 truncate text-xs text-slate-400">{{ m.uma_name or "—" }}</span>
+              <span class="w-16 shrink-0 font-mono text-xs text-slate-400">{{ m.strategy or "—" }}</span>
+              <span class="w-20 shrink-0 text-right font-mono text-xs text-slate-400">
+                {%- if m.finish_time_seconds %}{{ "%.2f"|format(m.finish_time_seconds) }}s{% else %}—{% endif -%}
+              </span>
+            </div>
+
+            {% if m.stats %}
+              <p class="-mt-1 pb-2 pl-11 text-[11px] text-slate-500">
+                {% for k, label in [('speed','SPD'), ('stamina','STA'), ('power','POW'), ('guts','GUT'), ('wit','WIT')] %}
+                  {%- if m.stats.get(k) %}<span class="mr-2">{{ label }} <span class="font-mono text-slate-400">{{ m.stats[k] }}</span></span>{% endif -%}
+                {% endfor %}
+                {%- if m.skills %}<span class="text-slate-600">· {{ m.skills|length }} skills</span>{% endif -%}
+              </p>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+
+      {% if can_confirm and capture.status == 'pending' %}
+        <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-800/70 pt-4">
+          <button class="btn-primary">Save results to the race</button>
+          <span class="text-xs text-slate-500">
+            Runners left unmatched are skipped; the rest are re-ranked 1..N.
+          </span>
+        </div>
+      {% endif %}
+    {% endcall %}
+  </form>
+
+  {% if can_confirm and capture.status == 'pending' %}
+    <form method="post"
+          action="{{ url_for('captures.reject', capture_id=capture.id) }}"
+          class="mt-3 flex flex-wrap items-center gap-2"
+          onsubmit="return confirm('Reject this capture? It stays stored but will not reach the ladder.');">
+      {{ csrf_form.hidden_tag() }}
+      <input name="reason" class="input-base w-64 py-1 text-xs" placeholder="reason (optional)" />
+      <button class="text-xs text-rose-400 hover:text-rose-300">Reject capture</button>
+    </form>
+  {% endif %}
+
+{% endblock %}

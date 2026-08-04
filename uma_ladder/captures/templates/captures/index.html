@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_components.html" import card, chip %}
+{% block title %}Captured races · Uma Ladder{% endblock %}
+{% block content %}
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-100">Captured races</h1>
+      <p class="mt-1 text-xs text-slate-500">
+        Uploaded straight from the game by the desktop recorder.
+        {%- if pending_count %} {{ pending_count }} waiting for review.{% endif %}
+      </p>
+    </div>
+  </div>
+
+  {% if not captures %}
+    <div class="surface-card mt-6 px-6 py-10 text-center">
+      <p class="text-slate-400">No captures yet.</p>
+      <p class="mt-2 text-xs text-slate-500">
+        Run <span class="text-mono-pill">uma-race-extract</span> after a Room Match
+        and it will appear here for review.
+      </p>
+    </div>
+  {% else %}
+    <div class="surface-card mt-5 px-5 py-2">
+      <ul>
+        {% for c in captures %}
+          <li class="{% if not loop.first %}border-t border-slate-800/70{% endif %}">
+            <a href="{{ url_for('captures.detail', capture_id=c.id) }}"
+               class="group flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+              <span class="min-w-0 flex-1 basis-56">
+                <span class="block truncate text-sm font-medium text-slate-100 group-hover:text-cyan-300">
+                  {{ c.room_name or "Room " ~ c.saved_room_id }}
+                </span>
+                <span class="block truncate text-xs text-slate-400">
+                  {{ c.participant_count or "?" }} runners
+                  {%- if c.started_at %} · {{ c.started_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}
+                  {%- if c.submitted_by %} · from {{ c.submitted_by.username }}{% endif %}
+                </span>
+              </span>
+              {% if c.official_race_id %}
+                <span class="shrink-0 text-xs text-slate-500">→ race #{{ c.official_race_id }}</span>
+              {% endif %}
+              <span class="shrink-0">
+                {% if c.status == 'pending' %}{{ chip("Needs review", "amber") }}
+                {% elif c.status == 'confirmed' %}{{ chip("Saved to ladder", "emerald") }}
+                {% else %}{{ chip("Rejected", "rose") }}{% endif %}
+              </span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+{% endblock %}

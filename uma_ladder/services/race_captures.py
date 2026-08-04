@@ -148,10 +148,7 @@ def ingest(payload: Any, *, submitted_by_user_id: int | None) -> IngestResult:
     ).first()
     if existing is not None:
         if existing.status == RaceCaptureStatus.PENDING:
-            # Refresh the blob — a later capture may carry replay data
-            # the first one lacked (RaceSimulateData is only live while
-            # a replay is open).
-            existing.payload_json = payload
+            existing.payload_json = _merge_payloads(existing.payload_json, payload)
             db.session.commit()
         return IngestResult(capture=existing, created=False)
 
@@ -171,6 +168,70 @@ def ingest(payload: Any, *, submitted_by_user_id: int | None) -> IngestResult:
     return IngestResult(capture=capture, created=True)
 
 
+def _scored(payload: dict | None) -> int:
+    """How much usable outcome a payload carries. Used to decide which
+    of two captures of the same room to keep."""
+    if not payload:
+        return 0
+    runners = _runner_rows(payload)
+    return sum(1 for r in runners if r.get("finish_position") is not None)
+
+
+def _merge_payloads(old: dict | None, new: dict) -> dict:
+    """Union of two captures of the same room.
+
+    A second upload can be richer (a replay was open, so it carries
+    telemetry) or poorer (the scenario failed to decode, so it has no
+    finishing order). Keep whichever runner list actually resolved the
+    outcome, and take replay data from whichever has it.
+    """
+    if not old:
+        return new
+    merged = dict(new)
+    if _scored(old) > _scored(new):
+        merged["runners"] = old.get("runners") or new.get("runners")
+        if old.get("results"):
+            merged["results"] = old["results"]
+    for key in ("sim", "scenario"):
+        if not merged.get(key) and old.get(key):
+            merged[key] = old[key]
+    return merged
+
+
+def _runner_rows(payload: dict) -> list[dict]:
+    """Runner rows with the outcome folded in.
+
+    The extractor's upload payload already merges finishing order into
+    each runner, but the on-disk archive keeps `results` separate. Accept
+    both so a capture is never silently shown as having no result.
+    """
+    by_gate = {r.get("gate"): r for r in payload.get("results") or []}
+    out = []
+    for r in payload.get("runners") or []:
+        gate = r.get("gate", r.get("frame_order"))
+        res = by_gate.get(gate) or {}
+        row = dict(r)
+        row.setdefault("gate", gate)
+        for key in ("finish_position", "finish_time_seconds", "gap_to_ahead_seconds"):
+            if row.get(key) is None and res.get(key) is not None:
+                row[key] = res[key]
+        # The archive keeps the game's own field names at the top level
+        # (pow / wiz); the upload payload nests them under `stats`.
+        # Normalize to `stats` so every reader sees one shape.
+        if not row.get("stats"):
+            raw = {
+                "speed": r.get("speed"),
+                "stamina": r.get("stamina"),
+                "power": r.get("power", r.get("pow")),
+                "guts": r.get("guts"),
+                "wit": r.get("wit", r.get("wiz")),
+            }
+            if any(v is not None for v in raw.values()):
+                row["stats"] = raw
+        out.append(row)
+    return out
+
+
 def summarize(capture: RaceCapture) -> dict:
     """Human-facing view of a capture, for the review page and the API
     response. Translates the game's integers into the words used
@@ -178,7 +239,7 @@ def summarize(capture: RaceCapture) -> dict:
     payload = capture.payload_json or {}
     room = payload.get("room") or {}
     runners = []
-    for r in payload.get("runners") or []:
+    for r in _runner_rows(payload):
         style = _as_int(r.get("running_style"))
         runners.append(
             {
@@ -226,3 +287,208 @@ def list_pending_for_user(user_id: int, *, limit: int = 25) -> list[RaceCapture]
             .limit(limit)
         )
     )
+
+
+# ─── review: turning a capture into ladder results ───────────────────
+
+@dataclass(frozen=True)
+class RunnerMatch:
+    """One capture row, resolved as far as we can against the ladder."""
+
+    gate: int | None
+    trainer_name: str | None
+    finish_position: int | None
+    finish_time_seconds: float | None
+    strategy: str | None
+    user_id: int | None          # suggested ladder account, None if unknown
+    user_label: str | None
+    match_confidence: str        # "exact" | "display" | "none"
+    uma_character_id: int | None
+    uma_name: str | None
+    stats: dict
+    skills: list
+
+
+def _index_users() -> tuple[dict, dict]:
+    """(username → user, display_name → user), both lowercased."""
+    from ..models import User, UserProfile
+
+    users = list(db.session.scalars(select(User).where(User.disabled_at.is_(None))))
+    by_username = {u.username.lower(): u for u in users}
+    by_display: dict[str, object] = {}
+    profiles = db.session.scalars(
+        select(UserProfile).where(
+            UserProfile.user_id.in_([u.id for u in users] or [0])
+        )
+    )
+    by_id = {u.id: u for u in users}
+    for p in profiles:
+        if p.display_name:
+            by_display.setdefault(p.display_name.strip().lower(), by_id.get(p.user_id))
+    return by_username, by_display
+
+
+def _resolve_uma(card_id: int | None, chara_id: int | None) -> tuple[int | None, str | None]:
+    """Game card_id → the ladder's UmaCharacter.
+
+    `UmaOutfit.costume_id` *is* the game's card_id, so the outfit table
+    is the reliable bridge. Falls back to chara_id (= card_id // 100)
+    when that particular costume isn't in the catalog yet.
+    """
+    from ..models import UmaCharacter, UmaOutfit
+
+    if card_id:
+        outfit = db.session.scalars(
+            select(UmaOutfit).where(UmaOutfit.costume_id == card_id)
+        ).first()
+        if outfit is not None and outfit.character is not None:
+            return outfit.character.id, outfit.character.name_en
+    if chara_id:
+        outfit = db.session.scalars(
+            select(UmaOutfit).where(UmaOutfit.costume_id.between(chara_id * 100, chara_id * 100 + 99))
+        ).first()
+        if outfit is not None and outfit.character is not None:
+            return outfit.character.id, outfit.character.name_en
+        char = db.session.get(UmaCharacter, chara_id)
+        if char is not None:
+            return char.id, char.name_en
+    return None, None
+
+
+def match_runners(capture: RaceCapture) -> list[RunnerMatch]:
+    """Resolve each captured runner against ladder accounts + the uma
+    catalog. Suggestions only — the reviewer confirms or corrects."""
+    by_username, by_display = _index_users()
+    payload = capture.payload_json or {}
+    out: list[RunnerMatch] = []
+    for r in _runner_rows(payload):
+        name = (r.get("trainer_name") or "").strip()
+        key = name.lower()
+        user = by_username.get(key)
+        confidence = "exact" if user else "none"
+        if user is None and key in by_display:
+            user = by_display[key]
+            confidence = "display"
+        style = _as_int(r.get("running_style"))
+        char_id, uma_name = _resolve_uma(
+            _as_int(r.get("card_id")), _as_int(r.get("chara_id"))
+        )
+        out.append(
+            RunnerMatch(
+                gate=_as_int(r.get("gate")),
+                trainer_name=name or None,
+                finish_position=_as_int(r.get("finish_position")),
+                finish_time_seconds=r.get("finish_time_seconds"),
+                strategy=GAME_RUNNING_STYLE.get(style) if style else None,
+                user_id=user.id if user else None,
+                user_label=(user.username if user else None),
+                match_confidence=confidence,
+                uma_character_id=char_id,
+                uma_name=uma_name,
+                stats=r.get("stats") or {},
+                skills=r.get("skills") or [],
+            )
+        )
+    out.sort(key=lambda m: (m.finish_position is None, m.finish_position or 0))
+    return out
+
+
+def _format_finish(seconds: float | None) -> str | None:
+    """Race times read as M:SS.s on the result page, matching how the
+    OCR path stores them."""
+    if not isinstance(seconds, (int, float)) or seconds <= 0:
+        return None
+    minutes, rest = divmod(float(seconds), 60)
+    return f"{int(minutes)}:{rest:04.1f}" if minutes else f"{rest:.1f}"
+
+
+def confirm(
+    capture_id: int,
+    *,
+    race_id: int,
+    user_by_gate: dict[int, int],
+    actor_user_id: int,
+) -> RaceCapture:
+    """Write a reviewed capture through to the ladder.
+
+    Deliberately reuses the same `official_service.submit_results` path
+    the screenshot flow uses, so a capture-sourced result is
+    indistinguishable downstream — points, Elo, achievements and the
+    results table all behave exactly as before.
+    """
+    from . import official as official_service
+
+    capture = db.session.get(RaceCapture, capture_id)
+    if capture is None:
+        raise CaptureError("capture not found")
+    if capture.status == RaceCaptureStatus.CONFIRMED:
+        raise CaptureError("this capture has already been confirmed")
+
+    payload = capture.payload_json or {}
+    by_gate = {_as_int(r.get("gate")): r for r in _runner_rows(payload)}
+
+    lines: list = []
+    for gate, user_id in sorted(user_by_gate.items()):
+        runner = by_gate.get(gate)
+        if runner is None or not user_id:
+            continue
+        placement = _as_int(runner.get("finish_position"))
+        if placement is None:
+            continue
+        stats = runner.get("stats") or {}
+        style = _as_int(runner.get("running_style"))
+        char_id, uma_name = _resolve_uma(
+            _as_int(runner.get("card_id")), _as_int(runner.get("chara_id"))
+        )
+        lines.append(
+            official_service.ResultLine(
+                user_id=user_id,
+                placement=placement,
+                uma_character_id=char_id,
+                uma_name=uma_name,
+                strategy=GAME_RUNNING_STYLE.get(style) if style else None,
+                speed=_as_int(stats.get("speed")),
+                stamina=_as_int(stats.get("stamina")),
+                power=_as_int(stats.get("power")),
+                guts=_as_int(stats.get("guts")),
+                wisdom=_as_int(stats.get("wit")),
+                finish_time_or_lengths=_format_finish(runner.get("finish_time_seconds")),
+                gate=gate,
+                fav_rank=_as_int(runner.get("popularity")),
+            )
+        )
+
+    if not lines:
+        raise CaptureError("no runners were matched to ladder accounts")
+
+    # Placements must be dense for the race: if only some runners are
+    # ladder members, re-rank the ones we keep so the ladder sees
+    # 1..N without gaps.
+    lines.sort(key=lambda x: x.placement)
+    lines = [
+        official_service.ResultLine(**{**line.__dict__, "placement": i + 1})
+        for i, line in enumerate(lines)
+    ]
+
+    official_service.submit_results(
+        race_id, lines, confirmed_by_user_id=actor_user_id, notify=True
+    )
+
+    capture.status = RaceCaptureStatus.CONFIRMED
+    capture.official_race_id = race_id
+    capture.confirmed_by_user_id = actor_user_id
+    capture.confirmed_at = datetime.now(UTC)
+    db.session.commit()
+    return capture
+
+
+def reject(capture_id: int, *, actor_user_id: int, reason: str | None = None) -> RaceCapture:
+    capture = db.session.get(RaceCapture, capture_id)
+    if capture is None:
+        raise CaptureError("capture not found")
+    capture.status = RaceCaptureStatus.REJECTED
+    capture.rejected_reason = (reason or "").strip()[:500] or None
+    capture.confirmed_by_user_id = actor_user_id
+    capture.confirmed_at = datetime.now(UTC)
+    db.session.commit()
+    return capture
