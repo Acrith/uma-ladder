@@ -150,6 +150,20 @@ def ingest(payload: Any, *, submitted_by_user_id: int | None) -> IngestResult:
         if existing.status == RaceCaptureStatus.PENDING:
             existing.payload_json = _merge_payloads(existing.payload_json, payload)
             db.session.commit()
+        elif existing.status == RaceCaptureStatus.CONFIRMED:
+            # Already on the ladder, so results are settled — but a
+            # later capture taken with the replay open can still add
+            # telemetry. Accept only that, never anything that could
+            # move a placement.
+            stored = dict(existing.payload_json or {})
+            gained = False
+            for key in ("sim", "scenario"):
+                if not stored.get(key) and payload.get(key):
+                    stored[key] = payload[key]
+                    gained = True
+            if gained:
+                existing.payload_json = stored
+                db.session.commit()
         return IngestResult(capture=existing, created=False)
 
     capture = RaceCapture(
@@ -571,6 +585,7 @@ def confirm(
                 ),
                 by_user_id=actor_user_id,
             )
+            _stamp_activations(result.id, runner.get("skills") or [])
         except Exception:  # noqa: BLE001
             # Enrichment is a bonus; never lose a confirmed result to it.
             db.session.rollback()
@@ -583,6 +598,43 @@ def confirm(
     return capture
 
 
+def _stamp_activations(result_id: int, skill_entries: list) -> None:
+    """Record which of a result's skills actually fired.
+
+    Only a memory capture knows this, so it is applied after the shared
+    enrichment path rather than by widening its contract. Skills the
+    scenario doesn't track keep `activated = None`, which the UI shows
+    as "unknown" rather than "didn't fire".
+    """
+    from ..models import OfficialRaceResultSkill, UmaSkill
+
+    verdicts = {
+        _as_int(e.get("skill_id")): e.get("activated")
+        for e in skill_entries
+        if e.get("activated") is not None
+    }
+    if not verdicts:
+        return
+    rows = db.session.scalars(
+        select(OfficialRaceResultSkill).where(
+            OfficialRaceResultSkill.official_race_result_id == result_id
+        )
+    ).all()
+    catalog_ids = {
+        r.id: r.gametora_id
+        for r in db.session.scalars(
+            select(UmaSkill).where(
+                UmaSkill.id.in_([row.skill_id for row in rows if row.skill_id] or [0])
+            )
+        )
+    }
+    for row in rows:
+        game_id = catalog_ids.get(row.skill_id)
+        if game_id in verdicts:
+            row.activated = bool(verdicts[game_id])
+    db.session.commit()
+
+
 def reject(capture_id: int, *, actor_user_id: int, reason: str | None = None) -> RaceCapture:
     capture = db.session.get(RaceCapture, capture_id)
     if capture is None:
@@ -593,3 +645,107 @@ def reject(capture_id: int, *, actor_user_id: int, reason: str | None = None) ->
     capture.confirmed_at = datetime.now(UTC)
     db.session.commit()
     return capture
+
+
+# ─── replay ──────────────────────────────────────────────────────────
+
+# Enough distinct hues for a full field; the winner is drawn last and
+# highlighted, so ordering here only needs to be stable.
+_REPLAY_COLORS = (
+    "#22d3ee", "#e879f9", "#fbbf24", "#34d399", "#fb7185", "#a78bfa",
+    "#60a5fa", "#f97316", "#4ade80", "#f472b6", "#2dd4bf", "#facc15",
+    "#818cf8", "#fb923c", "#38bdf8", "#c084fc", "#f87171", "#a3e635",
+)
+
+
+def replay_series(capture: RaceCapture) -> dict | None:
+    """Chart-ready per-runner traces from a captured replay.
+
+    Returns None unless the capture carries `sim` — telemetry only
+    exists when a replay was open at capture time, so most captures
+    won't have it and the page simply omits the chart.
+
+    Produces three views over the same x-axis (race progress in
+    metres): gap to the leader, stamina remaining, and speed.
+    """
+    payload = capture.payload_json or {}
+    sim = payload.get("sim") or {}
+    frames = sim.get("frames") or []
+    if not frames:
+        return None
+
+    names_by_index: dict[int, str] = {}
+    for idx, r in enumerate(_runner_rows(payload)):
+        gate = _as_int(r.get("gate"))
+        names_by_index[gate - 1 if gate else idx] = (
+            r.get("trainer_name") or f"gate {gate or idx + 1}"
+        )
+    finish_by_index = {
+        (_as_int(r.get("gate")) or 0) - 1: _as_int(r.get("finish_position"))
+        for r in _runner_rows(payload)
+    }
+
+    n = min(len(frames[0].get("h") or []), len(names_by_index) or 99)
+    if not n:
+        return None
+
+    runners: list[dict] = []
+    for k in range(n):
+        runners.append(
+            {
+                "index": k,
+                "name": names_by_index.get(k, f"runner {k + 1}"),
+                "finish": finish_by_index.get(k),
+                "color": _REPLAY_COLORS[k % len(_REPLAY_COLORS)],
+                "gap": [],
+                "hp": [],
+                "speed": [],
+            }
+        )
+
+    max_dist = 0.0
+    max_hp = 0.0
+    for frame in frames:
+        row = frame.get("h") or []
+        if len(row) < n:
+            continue
+        dists = [row[k].get("Distance") or 0.0 for k in range(n)]
+        leader = max(dists)
+        max_dist = max(max_dist, leader)
+        for k in range(n):
+            hp = row[k].get("Hp") or 0.0
+            max_hp = max(max_hp, hp)
+            runners[k]["gap"].append((round(leader, 1), round(leader - dists[k], 2)))
+            runners[k]["hp"].append((round(leader, 1), round(hp, 1)))
+            runners[k]["speed"].append(
+                (round(leader, 1), round(row[k].get("Speed") or 0.0, 2))
+            )
+
+    if max_dist <= 0:
+        return None
+    max_gap = max(
+        (p[1] for r in runners for p in r["gap"]), default=0.0
+    )
+    return {
+        "max_distance": max_dist,
+        "max_gap": max_gap or 1.0,
+        "max_hp": max_hp or 1.0,
+        "max_speed": max(
+            (p[1] for r in runners for p in r["speed"]), default=1.0
+        ),
+        "frame_count": len(frames),
+        "runners": sorted(
+            runners, key=lambda r: (r["finish"] is None, r["finish"] or 99)
+        ),
+    }
+
+
+def replay_for_race(race_id: int) -> dict | None:
+    """Replay traces for a race, if any confirmed capture carries them."""
+    capture = db.session.scalars(
+        select(RaceCapture)
+        .where(RaceCapture.official_race_id == race_id)
+        .where(RaceCapture.status == RaceCaptureStatus.CONFIRMED)
+        .order_by(RaceCapture.confirmed_at.desc())
+    ).first()
+    return replay_series(capture) if capture else None

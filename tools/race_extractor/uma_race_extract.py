@@ -302,10 +302,28 @@ def capture(pid: int) -> dict | None:
     if state["raw"] and p.get("scenario_key"):
         try:
             sys.path.insert(0, str(BASE_DIR))
-            from scenario_decode import decode
+            from scenario_decode import (
+                decode,
+                inflate_scenario,
+                parse_skill_activations,
+            )
 
             full["results"] = [r.__dict__ for r in
                                decode(state["raw"], p["scenario_key"], len(p["runners"]))]
+            # Which of each runner's skills actually fired. Decoded
+            # here rather than server-side so the site never needs the
+            # binary format.
+            plain = inflate_scenario(state["raw"], p["scenario_key"])
+            equipped = [
+                {s["skill_id"] for s in (r.get("skills") or [])}
+                for r in p["runners"]
+            ]
+            acts = parse_skill_activations(plain, equipped)
+            for idx, runner in enumerate(full["runners"]):
+                for entry in runner.get("skills") or []:
+                    verdict = acts.get((idx, entry.get("skill_id")))
+                    if verdict is not None:
+                        entry["activated"] = verdict
         except Exception as exc:  # noqa: BLE001
             print(f"[!] could not decode the finishing order ({exc}); "
                   "the raw scenario is archived so it can be decoded later")

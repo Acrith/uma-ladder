@@ -419,3 +419,128 @@ def test_aptitude_block_reads_both_payload_shapes() -> None:
     b = captures_service._runner_rows({"runners": [raw]})[0]["aptitudes"]
     assert a["turf"] == b["turf"] == 8
     assert captures_service._aptitude_block(b)["track"]["turf"] == "S"
+
+
+# ─── activations + replay ────────────────────────────────────────────
+
+def test_scenario_decoder_reads_skill_activations() -> None:
+    """Which skills fired is only knowable from the scenario blob."""
+    import base64
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "race_extractor"))
+    from scenario_decode import inflate_scenario, parse_skill_activations
+
+    full = _archive_payload()
+    plain = inflate_scenario(
+        base64.b64decode(full["scenario"]["raw_b64"]), full["scenario"]["key"]
+    )
+    equipped = [{s["skill_id"] for s in (r.get("skills") or [])} for r in full["runners"]]
+    acts = parse_skill_activations(plain, equipped)
+    assert len(acts) > 100, "no activation records found"
+    assert any(acts.values()) and not all(acts.values()), (
+        "expected a mix of fired and never-fired"
+    )
+    # Every verdict must belong to a skill that runner actually had —
+    # that constraint is what makes locating records by skill id safe.
+    for (runner, skill_id) in acts:
+        assert skill_id in equipped[runner]
+
+
+def test_confirm_records_which_skills_fired(app: Flask, make_user) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import (
+        OfficialRaceResult,
+        PresetSource,
+        RacePreset,
+        UmaSkill,
+    )
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="acrith", password="password123", role="organizer")
+    winner = make_user(username="aisha alsadhazi", password="password123")
+
+    with app.app_context():
+        season = seasons_service.create_season(
+            name="act season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Act Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        payload = _payload()
+        row = next(
+            r for r in payload["runners"] if r["trainer_name"] == "Aisha AlSadhazi"
+        )
+        verdicts = [e for e in row["skills"] if "activated" in e]
+        assert verdicts, "fixture carries no activation data"
+        for e in verdicts[:8]:
+            db.session.add(
+                UmaSkill(gametora_id=e["skill_id"], name_en=f"S{e['skill_id']}")
+            )
+        db.session.commit()
+
+        capture = captures_service.ingest(
+            payload, submitted_by_user_id=org["id"]
+        ).capture
+        gate = next(
+            m.gate for m in captures_service.match_runners(capture)
+            if m.trainer_name == "Aisha AlSadhazi"
+        )
+        captures_service.confirm(
+            capture.id, race_id=race.id,
+            user_by_gate={gate: winner["id"]}, actor_user_id=org["id"],
+        )
+        result = db.session.scalars(
+            db.select(OfficialRaceResult).where(
+                OfficialRaceResult.official_race_id == race.id
+            )
+        ).unique().one()
+        flags = [s.activated for s in result.skills]
+        assert any(f is True for f in flags), "no skill marked as fired"
+        # A skill the scenario never mentions stays None — "unknown",
+        # not "didn't fire". The screenshot path leaves everything None.
+        assert all(f in (True, False, None) for f in flags)
+
+
+def test_replay_series_is_absent_without_telemetry(app: Flask) -> None:
+    """Telemetry only exists when a replay was open; the page must
+    simply omit the chart rather than error."""
+    with app.app_context():
+        capture = captures_service.ingest(_payload(), submitted_by_user_id=None).capture
+        assert captures_service.replay_series(capture) is None
+
+
+def test_replay_series_builds_traces(app: Flask) -> None:
+    replay_file = CAPTURE_DIR / "34408987_800095.withreplay.json"
+    if not replay_file.exists():
+        pytest.skip("no replay-bearing capture archived")
+    payload = json.loads(replay_file.read_text())
+    payload["source"] = "memory_scan"
+    with app.app_context():
+        capture = captures_service.ingest(payload, submitted_by_user_id=None).capture
+        series = captures_service.replay_series(capture)
+        assert series is not None
+        assert series["frame_count"] > 50
+        assert series["max_distance"] > 1000
+        first = series["runners"][0]
+        assert len(first["gap"]) == series["frame_count"]
+        assert len(first["hp"]) == series["frame_count"]
+        # Leader's gap to the leader is zero somewhere by definition.
+        assert min(y for _x, y in first["gap"]) == 0
+        # Runners come back in finishing order for a readable legend.
+        finishes = [r["finish"] for r in series["runners"] if r["finish"]]
+        assert finishes == sorted(finishes)

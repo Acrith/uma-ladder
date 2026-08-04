@@ -1,0 +1,138 @@
+{# Race replay — per-runner traces read out of the game's own parsed
+   telemetry. Three views over one x-axis (metres into the race):
+
+     Positions  gap to the leader, inverted so the leader rides the top
+                edge and the field falls away below. This is the shape
+                of the race: who led, who closed, where it was decided.
+     Stamina    HP remaining — where a runner emptied the tank.
+     Speed      raw m/s.
+
+   Inline SVG on purpose: no chart library, nothing to fetch, and it
+   stays legible in both themes. #}
+
+{% set W = 1000 %}
+{% set H = 260 %}
+{% set PAD_L = 46 %}
+{% set PAD_R = 12 %}
+{% set PAD_T = 12 %}
+{% set PAD_B = 26 %}
+
+{% macro path_for(points, y_max, invert) -%}
+  {%- set ns = namespace(d='') -%}
+  {%- for x, y in points -%}
+    {%- set px = PAD_L + (x / replay.max_distance) * (W - PAD_L - PAD_R) -%}
+    {%- set ratio = (y / y_max) if y_max else 0 -%}
+    {%- set py = (PAD_T + ratio * (H - PAD_T - PAD_B)) if invert else (H - PAD_B - ratio * (H - PAD_T - PAD_B)) -%}
+    {%- set ns.d = ns.d ~ (' L ' if not loop.first else 'M ') ~ '%.1f'|format(px) ~ ' ' ~ '%.1f'|format(py) -%}
+  {%- endfor -%}
+  {{- ns.d -}}
+{%- endmacro %}
+
+<section class="mt-4">
+  {% call card(class="p-5") %}
+    <div class="flex flex-wrap items-baseline justify-between gap-3">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-100">Race replay</h2>
+        <p class="mt-0.5 text-xs text-slate-500">
+          {{ replay.frame_count }} samples across {{ replay.max_distance | round | int }} m,
+          straight from the race data — not a reconstruction.
+        </p>
+      </div>
+      <div class="inline-flex rounded-lg border border-slate-700 bg-slate-900/40 p-0.5 text-xs" data-replay-tabs>
+        <button type="button" data-view="gap"
+                class="rounded px-2.5 py-1 bg-slate-800 text-slate-100">Positions</button>
+        <button type="button" data-view="hp"
+                class="rounded px-2.5 py-1 text-slate-400 hover:text-slate-200">Stamina</button>
+        <button type="button" data-view="speed"
+                class="rounded px-2.5 py-1 text-slate-400 hover:text-slate-200">Speed</button>
+      </div>
+    </div>
+
+    <div class="mt-3 overflow-x-auto">
+      <svg viewBox="0 0 {{ W }} {{ H }}" class="h-64 w-full min-w-[36rem]" role="img"
+           aria-label="Per-runner race telemetry">
+        {# grid — quarters of the race #}
+        {% for frac in [0, 0.25, 0.5, 0.75, 1.0] %}
+          {% set gx = PAD_L + frac * (W - PAD_L - PAD_R) %}
+          <line x1="{{ gx }}" y1="{{ PAD_T }}" x2="{{ gx }}" y2="{{ H - PAD_B }}"
+                stroke="currentColor" class="text-slate-800" stroke-width="1" />
+          <text x="{{ gx }}" y="{{ H - 8 }}" text-anchor="middle"
+                class="fill-slate-600" style="font-size: 10px;">
+            {{ (replay.max_distance * frac) | round | int }}m
+          </text>
+        {% endfor %}
+        <line x1="{{ PAD_L }}" y1="{{ H - PAD_B }}" x2="{{ W - PAD_R }}" y2="{{ H - PAD_B }}"
+              stroke="currentColor" class="text-slate-700" stroke-width="1" />
+
+        {% for view, y_max, invert, label in [
+             ('gap',   replay.max_gap,   true,  'metres behind'),
+             ('hp',    replay.max_hp,    false, 'stamina'),
+             ('speed', replay.max_speed, false, 'm/s')] %}
+          <g data-view-group="{{ view }}" {% if view != 'gap' %}style="display:none"{% endif %}>
+            <text x="6" y="{{ PAD_T + 8 }}" class="fill-slate-500" style="font-size: 10px;">{{ label }}</text>
+            {% for r in replay.runners %}
+              <path d="{{ path_for(r[view], y_max, invert) }}"
+                    fill="none"
+                    stroke="{{ r.color }}"
+                    stroke-width="{{ 2.2 if r.finish == 1 else 1.2 }}"
+                    stroke-opacity="{{ 1 if r.finish == 1 else 0.75 }}"
+                    stroke-linejoin="round"
+                    data-runner="{{ r.index }}">
+                <title>{{ r.name }}{% if r.finish %} — finished {{ r.finish }}{% endif %}</title>
+              </path>
+            {% endfor %}
+          </g>
+        {% endfor %}
+      </svg>
+    </div>
+
+    {# Legend doubles as the finishing order. #}
+    <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+      {% for r in replay.runners %}
+        <li class="inline-flex items-center gap-1.5 text-slate-400"
+            data-legend="{{ r.index }}">
+          <span class="inline-block h-2 w-2 rounded-full" style="background: {{ r.color }}"></span>
+          {% if r.finish %}<span class="font-mono text-slate-500">{{ r.finish }}</span>{% endif %}
+          <span {% if r.finish == 1 %}class="text-slate-200"{% endif %}>{{ r.name }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endcall %}
+</section>
+
+<script>
+  /* View toggle + hover highlight. Kept tiny and dependency-free — the
+     chart is server-rendered SVG, so this only switches which group is
+     visible and dims the other lines when a legend entry is hovered. */
+  (function () {
+    var tabs = document.querySelector('[data-replay-tabs]');
+    if (!tabs) return;
+    tabs.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-view]');
+      if (!btn) return;
+      var view = btn.getAttribute('data-view');
+      tabs.querySelectorAll('[data-view]').forEach(function (b) {
+        var on = b === btn;
+        b.classList.toggle('bg-slate-800', on);
+        b.classList.toggle('text-slate-100', on);
+        b.classList.toggle('text-slate-400', !on);
+      });
+      document.querySelectorAll('[data-view-group]').forEach(function (g) {
+        g.style.display = g.getAttribute('data-view-group') === view ? '' : 'none';
+      });
+    });
+
+    document.querySelectorAll('[data-legend]').forEach(function (li) {
+      var idx = li.getAttribute('data-legend');
+      function set(dim) {
+        document.querySelectorAll('[data-runner]').forEach(function (p) {
+          var mine = p.getAttribute('data-runner') === idx;
+          p.setAttribute('stroke-opacity', dim ? (mine ? 1 : 0.12) : (mine ? 1 : 0.75));
+          p.setAttribute('stroke-width', dim && mine ? 2.6 : p.getAttribute('stroke-width'));
+        });
+      }
+      li.addEventListener('mouseenter', function () { set(true); });
+      li.addEventListener('mouseleave', function () { set(false); });
+    });
+  })();
+</script>

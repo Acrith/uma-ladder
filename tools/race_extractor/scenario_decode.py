@@ -190,3 +190,58 @@ if __name__ == "__main__":  # pragma: no cover - manual verification
     ]
     got = [names[r.gate - 1] for r in sorted(results, key=lambda x: x.finish_position)]
     print("\nmatches the ladder's recorded order:", got == expected)
+
+
+# ─── skill activations ───────────────────────────────────────────────
+#
+# After the result table the scenario carries one record per runner per
+# equipped skill, recording whether it fired. Records are ~32 bytes but
+# not uniformly so (skill ids land on four different residues mod 32),
+# so this locates each record by its skill id rather than striding.
+#
+# Layout, relative to the skill id:
+#     -4   i32   runner index (0-based, gate order)
+#      0   i32   skill_id
+#     +4   i32   -1 = never fired, otherwise fired
+#
+# Validated on a live capture: every one of 154 records named a skill
+# the runner in question had actually equipped.
+
+_ACT_RUNNER_OFF = -4
+_ACT_FIRED_OFF = 4
+_NEVER_FIRED = -1
+
+
+def parse_skill_activations(
+    plain: bytes, equipped_by_runner: list[set[int]]
+) -> dict[tuple[int, int], bool]:
+    """Which equipped skills fired, keyed by ``(runner_index, skill_id)``.
+
+    `equipped_by_runner` comes from the capture itself
+    (`RaceHorseData.skill_array`), and doubles as the validation: a
+    record is only accepted when the skill it names is one that runner
+    actually had. That constraint is what makes locating records by
+    skill id safe.
+    """
+    if not equipped_by_runner:
+        return {}
+    known = set().union(*equipped_by_runner) if equipped_by_runner else set()
+    if not known:
+        return {}
+
+    out: dict[tuple[int, int], bool] = {}
+    for off in range(4, len(plain) - 8):
+        (skill_id,) = struct.unpack_from("<I", plain, off)
+        if skill_id not in known:
+            continue
+        (runner,) = struct.unpack_from("<i", plain, off + _ACT_RUNNER_OFF)
+        if not (0 <= runner < len(equipped_by_runner)):
+            continue
+        if skill_id not in equipped_by_runner[runner]:
+            continue
+        (marker,) = struct.unpack_from("<i", plain, off + _ACT_FIRED_OFF)
+        fired = marker != _NEVER_FIRED
+        # First record wins: a later coincidental byte match must not
+        # flip an already-established result.
+        out.setdefault((runner, skill_id), fired)
+    return out

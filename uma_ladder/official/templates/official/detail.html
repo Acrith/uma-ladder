@@ -271,6 +271,10 @@
       {% endfor %}
     </section>
 
+    {% if replay %}
+      {% include "official/_replay_chart.html" %}
+    {% endif %}
+
     <section class="mt-4">
       {% call card(class="p-5") %}
         <div class="flex items-center justify-between gap-3">
@@ -389,26 +393,47 @@
                          pre-computed in the route (PR-SK5 hotfix:
                          empty-list default, Jinja has no set()). #}
                       {% set _inapp = inapplicable_skills_by_result.get(r.id, []) %}
+                      {# Three distinct states, deliberately not one
+                         "dimmed" bucket:
+                           struck through = cannot fire here at all
+                             (track/ground/style rules out)
+                           dimmed         = could have fired, didn't
+                           full colour    = fired, or unknown (the
+                             screenshot path never knows) #}
                       <p class="flex flex-wrap gap-1.5 text-xs">
                         {% for assoc in r.skills %}
                           {% set _doesnt_apply = assoc.skill_id in _inapp %}
-                          <span class="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 {% if _doesnt_apply %}border-slate-700 bg-slate-900/30 text-slate-500 opacity-60{% else %}border-cyan-500/30 bg-cyan-500/5 text-cyan-200{% endif %}"
-                                {% if _doesnt_apply %}title="Doesn't apply to this race's conditions"{% endif %}>
+                          {% set _idle = (not _doesnt_apply) and assoc.activated is sameas false %}
+                          <span class="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5
+                                       {% if _doesnt_apply %}border-slate-800 bg-slate-900/30 text-slate-600
+                                       {% elif _idle %}border-slate-700 bg-slate-900/40 text-slate-400
+                                       {% else %}border-cyan-500/30 bg-cyan-500/5 text-cyan-200{% endif %}"
+                                {% if _doesnt_apply %}title="Can't activate on this track — conditions rule it out"
+                                {% elif _idle %}title="Was eligible but never activated in this race"
+                                {% elif assoc.activated %}title="Activated during the race"{% endif %}>
                             {% if assoc.skill and assoc.skill.image_url %}
                               <img src="{{ assoc.skill.image_url }}"
                                    alt=""
                                    loading="lazy"
                                    referrerpolicy="no-referrer"
-                                   class="h-4 w-4 rounded {% if _doesnt_apply %}grayscale{% endif %}" />
+                                   class="h-4 w-4 rounded {% if _doesnt_apply %}grayscale opacity-50{% elif _idle %}grayscale{% endif %}" />
                             {% endif %}
                             {% if assoc.skill %}
                               <span class="{% if _doesnt_apply %}line-through decoration-slate-600{% endif %}">{{ assoc.skill.name_en }}</span>
                             {% else %}
-                              <span class="text-slate-500" title="raw OCR text — no skill matched">{{ assoc.raw_ocr_text or '?' }}</span>
+                              <span class="text-slate-500" title="raw text — no skill matched">{{ assoc.raw_ocr_text or '?' }}</span>
                             {% endif %}
                           </span>
                         {% endfor %}
                       </p>
+                      {% set _fired = r.skills | selectattr('activated') | list | length %}
+                      {% if _fired %}
+                        <p class="text-[11px] text-slate-500">
+                          <span class="text-cyan-300/80">{{ _fired }}</span> of {{ r.skills|length }} skills activated
+                          · <span class="text-slate-600">struck through</span> = impossible here
+                          · <span class="text-slate-400">dimmed</span> = never fired
+                        </p>
+                      {% endif %}
                     {% endif %}
                     {% if is_organizer %}
                       {# PR-OCR5 — per-result uma-sheet upload. Multi-file

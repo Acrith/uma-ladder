@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -224,6 +225,11 @@ class OfficialRaceResultSkill(db.Model):
     )
     raw_ocr_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # PR-X6 — did this skill actually fire during the race? Only a
+    # memory capture knows; the screenshot path leaves it NULL, which
+    # renders as "unknown" rather than "didn't fire". A skill the
+    # scenario doesn't track at all also stays NULL.
+    activated: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

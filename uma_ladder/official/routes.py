@@ -283,11 +283,19 @@ def detail(race_id: int) -> object:
         if art_url:
             podium_art[res.id] = art_url
 
+    # Replay telemetry, when a confirmed capture for this race carried
+    # it. Absent for OCR-era races and for captures taken without a
+    # replay open — the page just omits the chart.
+    from ..services import race_captures as captures_service
+
+    replay = captures_service.replay_for_race(race_id)
+
     return render_template(
         "official/detail.html",
         race=race,
         profiles=profiles,
         podium_art=podium_art,
+        replay=replay,
         registrations=registrations,
         invitees=invitees,
         results=results,

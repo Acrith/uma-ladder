@@ -93,35 +93,43 @@
         },
         {
           "skill_id": 200011,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200152,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200331,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200431,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200452,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200531,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200542,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200552,
@@ -129,15 +137,18 @@
         },
         {
           "skill_id": 200681,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201041,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201242,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201262,
@@ -145,7 +156,8 @@
         },
         {
           "skill_id": 201522,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 201601,
@@ -153,7 +165,8 @@
         },
         {
           "skill_id": 201611,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201662,
@@ -165,7 +178,8 @@
         },
         {
           "skill_id": 910261,
-          "level": 1
+          "level": 1,
+          "activated": true
         }
       ]
     },
@@ -234,31 +248,38 @@
         },
         {
           "skill_id": 200131,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200152,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200331,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200462,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200482,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200582,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200681,
@@ -266,11 +287,13 @@
         },
         {
           "skill_id": 201031,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201041,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201052,
@@ -278,15 +301,18 @@
         },
         {
           "skill_id": 201312,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201322,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201591,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201901,
@@ -306,7 +332,8 @@
         },
         {
           "skill_id": 910031,
-          "level": 1
+          "level": 1,
+          "activated": true
         }
       ]
     },
@@ -375,7 +402,8 @@
         },
         {
           "skill_id": 200152,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200292,
@@ -383,27 +411,33 @@
         },
         {
           "skill_id": 200331,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200342,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200432,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200462,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200572,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200582,
@@ -411,7 +445,8 @@
         },
         {
           "skill_id": 200851,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201052,
@@ -419,15 +454,18 @@
         },
         {
           "skill_id": 201312,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201322,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201372,
@@ -435,23 +473,28 @@
         },
         {
           "skill_id": 201611,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201651,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201662,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202372,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202472,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202502,
@@ -532,19 +575,23 @@
         },
         {
           "skill_id": 200332,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200502,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200581,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200702,
@@ -552,31 +599,38 @@
         },
         {
           "skill_id": 201052,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201072,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201311,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201342,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201662,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201902,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210071,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 900681,
@@ -584,7 +638,8 @@
         },
         {
           "skill_id": 910151,
-          "level": 1
+          "level": 1,
+          "activated": true
         }
       ]
     },
@@ -649,27 +704,33 @@
       "skills": [
         {
           "skill_id": 100091,
-          "level": 3
+          "level": 3,
+          "activated": true
         },
         {
           "skill_id": 200132,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200152,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200332,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200431,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200512,
@@ -677,15 +738,18 @@
         },
         {
           "skill_id": 200682,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201042,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201072,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201242,
@@ -693,39 +757,48 @@
         },
         {
           "skill_id": 201252,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201262,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201271,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201522,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 201601,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 201611,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201662,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210052,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210072,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 900201,
@@ -794,63 +867,78 @@
       "skills": [
         {
           "skill_id": 100021,
-          "level": 3
+          "level": 3,
+          "activated": true
         },
         {
           "skill_id": 200131,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200181,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200431,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200531,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200542,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200551,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201052,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201241,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201271,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201282,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201651,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210071,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 900201,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 910261,
-          "level": 1
+          "level": 1,
+          "activated": true
         }
       ]
     },
@@ -919,7 +1007,8 @@
         },
         {
           "skill_id": 200342,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200462,
@@ -927,19 +1016,23 @@
         },
         {
           "skill_id": 200512,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200592,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200601,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201072,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201382,
@@ -947,7 +1040,8 @@
         },
         {
           "skill_id": 201412,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201592,
@@ -955,7 +1049,8 @@
         },
         {
           "skill_id": 201651,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201662,
@@ -967,19 +1062,23 @@
         },
         {
           "skill_id": 202152,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202402,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210032,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210101,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 900051,
@@ -1052,35 +1151,43 @@
       "skills": [
         {
           "skill_id": 110261,
-          "level": 4
+          "level": 4,
+          "activated": true
         },
         {
           "skill_id": 200152,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200182,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200331,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200431,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200532,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200541,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200552,
@@ -1088,31 +1195,38 @@
         },
         {
           "skill_id": 201042,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201242,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201252,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201271,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201522,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 201601,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 201651,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201662,
@@ -1189,15 +1303,18 @@
       "skills": [
         {
           "skill_id": 100441,
-          "level": 4
+          "level": 4,
+          "activated": true
         },
         {
           "skill_id": 200011,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200132,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200331,
@@ -1205,11 +1322,13 @@
         },
         {
           "skill_id": 200352,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200492,
@@ -1217,43 +1336,53 @@
         },
         {
           "skill_id": 200512,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200642,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200692,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200702,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201461,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201511,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201552,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 201611,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202021,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202161,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 900271,
@@ -1326,23 +1455,28 @@
         },
         {
           "skill_id": 200132,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200181,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 200331,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200352,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200492,
@@ -1350,11 +1484,13 @@
         },
         {
           "skill_id": 200572,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200582,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201052,
@@ -1362,11 +1498,13 @@
         },
         {
           "skill_id": 201311,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201321,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201662,
@@ -1374,27 +1512,33 @@
         },
         {
           "skill_id": 201902,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202161,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 202371,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 202472,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210032,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210072,
-          "level": 1
+          "level": 1,
+          "activated": true
         }
       ]
     },
@@ -1463,19 +1607,23 @@
         },
         {
           "skill_id": 200331,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200342,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200362,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200461,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 200491,
@@ -1487,11 +1635,13 @@
         },
         {
           "skill_id": 201031,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201451,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 201591,
@@ -1499,19 +1649,23 @@
         },
         {
           "skill_id": 201641,
-          "level": 1
+          "level": 1,
+          "activated": false
         },
         {
           "skill_id": 202021,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210011,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 210052,
-          "level": 1
+          "level": 1,
+          "activated": true
         },
         {
           "skill_id": 900271,

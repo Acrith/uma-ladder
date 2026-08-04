@@ -991,13 +991,14 @@ def test_race_detail_grays_out_non_applicable_skill(
     # Both skill names render.
     assert "Left-Handed Test ◎" in body
     assert "Right-Handed Test ◎" in body
-    # The doesn't-apply title shows somewhere (attached to the
-    # Right-Handed chip on this Left-direction race).
-    assert "Doesn't apply to this race" in body
-    # The cyan styling stays on the applying chip; the rose-free
-    # gray treatment shows the rendered template took the
-    # inapplicable branch at least once.
-    assert "opacity-60" in body
+    # The can't-activate title shows somewhere (attached to the
+    # Right-Handed chip on this Left-direction race). PR-X6 reworded
+    # this from "Doesn't apply..." when the third skill state (fired /
+    # never fired) arrived and "doesn't apply" became ambiguous.
+    assert "Can't activate on this track" in body
+    # Struck through is reserved for impossible-here; the rendered
+    # template must have taken the inapplicable branch at least once.
+    assert "line-through" in body
     assert "line-through" in body
 
 
