@@ -562,6 +562,34 @@ def reopen_results(
     return race
 
 
+def revert_to_registration(
+    race_id: int, *, by_user_id: int | None = None
+) -> OfficialRace:
+    """One step back in the lifecycle: a room-code-stage race returns
+    to open registration and the code is cleared. Exists because a
+    pasted code closes registration as a side effect — an organizer
+    who pastes a day early would otherwise lock the race with no way
+    back (InyanyaCup #2, 2026-08-01)."""
+    race = _get_race(race_id)
+    if by_user_id is not None:
+        from .permissions import assert_can_act_on_race
+
+        assert_can_act_on_race(race, by_user_id=by_user_id)
+    if race.status not in (
+        OfficialRaceStatus.ROOM_CODE_PENDING,
+        OfficialRaceStatus.ROOM_CODE_AVAILABLE,
+        OfficialRaceStatus.ROOM_CODE_EXPIRED,
+    ):
+        raise InvalidRaceStateError(
+            f"cannot revert to registration from {race.status}"
+        )
+    race.room_code = None
+    race.room_code_expires_at = None
+    race.status = OfficialRaceStatus.REGISTRATION_OPEN
+    db.session.commit()
+    return race
+
+
 def close_registration(
     race_id: int, *, by_user_id: int | None = None
 ) -> OfficialRace:

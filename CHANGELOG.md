@@ -6,6 +6,11 @@ log for the full history.
 
 ## 2026-08-01
 
+- **Organizers can step back a race stage.** Pasting a room code
+  closes registration as a side effect — if it happens a day early,
+  the new "Back a step" action in the organizer panel clears the
+  code and re-opens registration, keeping everyone's registrations.
+
 - **Invite-only mode says so out loud.** When registration is
   gated, the register page states it up front and the home page's
   footer line tells visitors to message Acrith on Discord for a

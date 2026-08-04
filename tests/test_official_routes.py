@@ -1872,3 +1872,33 @@ def test_change_visibility_public_to_club_works_with_allowlist_empty(
         # racer's club != 100 → should be on invitee list now.
         invitees = official_service.list_invitees(race_id)
         assert any(inv.user_id == racer["id"] for inv in invitees)
+
+
+def test_organizer_can_step_back_from_room_code(
+    client: FlaskClient, app: Flask, make_user
+) -> None:
+    """A code pasted too early closes registration as a side effect;
+    the step-back clears it and re-opens registration."""
+    sid = _make_season(app)
+    pid = _make_preset(app)
+    make_user(username="org", password="password123", role=Role.ORGANIZER)
+    _login(client, "org", "password123")
+    resp = client.post(
+        "/official/new",
+        data={"season_id": sid, "name": "Early", "preset_id": pid},
+        follow_redirects=False,
+    )
+    race_id = int(resp.headers["Location"].rsplit("/", 1)[-1])
+    client.post(f"/official/{race_id}/open")
+    client.post(f"/official/{race_id}/room-code", data={"room_code": "OOPS-1"})
+
+    resp = client.post(f"/official/{race_id}/revert-to-registration")
+    assert resp.status_code == 302
+
+    from uma_ladder.models import OfficialRace
+
+    with app.app_context():
+        race = db.session.get(OfficialRace, race_id)
+        assert race.status == "registration_open"
+        assert race.room_code is None
+        assert race.room_code_expires_at is None

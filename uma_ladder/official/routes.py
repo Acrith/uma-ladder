@@ -462,6 +462,25 @@ def open_registration(race_id: int) -> object:
     return redirect(url_for("official.detail", race_id=race_id))
 
 
+@bp.post("/<int:race_id>/revert-to-registration")
+@min_role_required(Role.ORGANIZER)
+def revert_to_registration(race_id: int) -> object:
+    """Step back from a room-code stage: clear the code, re-open
+    registration."""
+    try:
+        official_service.revert_to_registration(
+            race_id, by_user_id=current_user.id
+        )
+        flash("Room code cleared — registration is open again.")
+    except official_service.RaceNotFoundError:
+        abort(404)
+    except PermissionDeniedError:
+        abort(403)
+    except official_service.InvalidRaceStateError as exc:
+        flash(str(exc))
+    return redirect(url_for("official.detail", race_id=race_id))
+
+
 @bp.post("/<int:race_id>/close")
 @min_role_required(Role.ORGANIZER)
 def close_registration(race_id: int) -> object:

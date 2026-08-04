@@ -450,7 +450,7 @@
   {# ── Pre-completion layout: who's in (main) + when / lifecycle
        (rail). On completed races the results above are the page. #}
   {% if race.status != 'completed' %}
-    <section class="mt-5 grid items-start gap-4 lg:grid-cols-[1fr_21rem]">
+    <section class="mt-5 grid gap-4 lg:grid-cols-[1fr_21rem]">
 
       {# Registrations #}
       {% call card(class="p-5") %}
@@ -511,7 +511,7 @@
         {% endif %}
       {% endcall %}
 
-      <div class="grid gap-4">
+      <div class="flex flex-col gap-4">
         {# Schedule — the rail's "when" slot for every viewer. #}
         {% call card(class="p-4") %}
           <h2 class="text-sm font-semibold text-slate-100">Schedule</h2>
@@ -547,7 +547,7 @@
               'results_pending': 2,
               'results_submitted': 2,
             }.get(race.status, 0) %}
-          {% call card(class="p-4") %}
+          {% call card(class="p-4 flex-1") %}
             <h2 class="text-sm font-semibold text-slate-100">Organizer</h2>
             <p class="mt-2 flex flex-wrap items-center gap-1 font-mono text-[10px] text-slate-500">
               {% for label in ['registration', 'room code', 'results', 'done'] %}
@@ -599,6 +599,17 @@
                     {% endif %}
                   </p>
                 {% endif %}
+                {% if race.status in ('room_code_pending', 'room_code_available', 'room_code_expired') %}
+                  {# One step back — a code pasted too early closes
+                     registration as a side effect; this undoes it. #}
+                  <form method="post"
+                        action="{{ url_for('official.revert_to_registration', race_id=race.id) }}"
+                        class="mt-2"
+                        onsubmit="return confirm('Clear the room code and re-open registration? Players keep their registrations.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button class="text-xs text-slate-500 hover:text-amber-300" title="Clears the room code and re-opens registration — registrations are kept.">← Back a step</button>
+                  </form>
+                {% endif %}
                 <form method="post" action="{{ url_for('official.room_code', race_id=race.id) }}" class="mt-2 flex gap-2">
                   {{ room_code_form.hidden_tag() }}
                   {{ room_code_form.room_code(class="input-base min-w-0 flex-1", placeholder="paste code") }}
@@ -607,11 +618,6 @@
               </div>
             {% endif %}
 
-            {% if race.status in ('room_code_available', 'room_code_expired', 'results_pending', 'results_submitted') %}
-              <p class="mt-4 border-t border-slate-800/70 pt-3 text-xs text-slate-400">
-                Race underway? <a href="#submit-results" class="text-cyan-300 hover:text-cyan-200">Submit results below ↓</a>
-              </p>
-            {% endif %}
           {% endcall %}
         {% endif %}
       </div>
