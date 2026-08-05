@@ -182,8 +182,7 @@
         </div>
 
         <div class="mt-1 flex items-center gap-3">
-          <input type="range" data-replay-scrub min="0" max="{{ replay.x_axis | length - 1 }}"
-                 value="{{ replay.x_axis | length - 1 }}"
+          <input type="range" data-replay-scrub min="0" max="1000" step="1" value="1000"
                  class="h-1 flex-1 cursor-pointer appearance-none rounded bg-slate-800 accent-cyan-400" />
           <span data-replay-pos class="w-16 shrink-0 text-right font-mono text-xs text-cyan-300">
             {{ replay.max_distance | round | int }}m
@@ -318,13 +317,22 @@
      } | tojson }}
 </script>
 <script>
+  /* Playback interpolates between samples instead of stepping them.
+     The capture is uneven and sparse in the middle — roughly 15 samples
+     a second off the gate, then about one a second — so advancing
+     sample-by-sample teleports a runner ~20 m at a time. Instead we
+     hold a race clock, render on requestAnimationFrame, and for any
+     given moment take the two samples either side and blend them.
+     Distance is monotonic and speed near-constant across a one-second
+     window, so a straight lerp is faithful, not invented motion. */
   (function () {
     var root = document.querySelector('[data-replay]');
     var dataEl = document.getElementById('replay-data');
     if (!root || !dataEl) return;
     var D = JSON.parse(dataEl.textContent);
-    var W = 1000, PAD_L = 34, PAD_R = 16, STRIP_H = {{ STRIP_H }};
-    var LAST = D.x.length - 1;
+    var W = 1000, PAD_L = 34, PAD_R = 16;
+    var T = D.t, LASTT = T.length ? T[T.length - 1] : 0;
+    var SPEED = 1.35;
 
     var scrub = root.querySelector('[data-replay-scrub]');
     var posLabel = root.querySelector('[data-replay-pos]');
@@ -335,93 +343,101 @@
     var focusPanel = root.querySelector('[data-replay-focus]');
     var cameraLabel = root.querySelector('[data-camera-label]');
     var spreadLabel = root.querySelector('[data-strip-spread]');
-    var selected = null, timer = null;
-
-    function timelineX(x) {
-      return PAD_L + (x / (D.x[LAST] || 1)) * (W - PAD_L - PAD_R);
-    }
-
-    /* The strip camera. Default frames the whole field, so nobody is
-       ever pushed off-screen — the pack rarely spreads past ~30 m.
-       Selecting a runner re-centres on them instead of the leader, so
-       you can watch your own battle. */
     var strip = root.querySelector('[data-strip]');
-    function drawStrip(i) {
-      var ds = D.dist.map(function (series) { return series[i] || 0; });
+    var progress = root.querySelector('[data-progress]');
+    var phaseLabel = root.querySelector('[data-phase-label]');
+    var playBtn = root.querySelector('[data-replay-play]');
+    var selected = null, raf = null, clock = LASTT, wall = 0;
+
+    function seek(rt) {
+      // index of the last sample at or before rt
+      var lo = 0, hi = T.length - 1;
+      while (lo < hi) {
+        var mid = (lo + hi + 1) >> 1;
+        if (T[mid] <= rt) lo = mid; else hi = mid - 1;
+      }
+      return lo;
+    }
+    function lerp(series, i, a) {
+      var v0 = series[i], v1 = series[Math.min(i + 1, series.length - 1)];
+      return v0 + (v1 - v0) * a;
+    }
+    function timelineX(x) { return PAD_L + (x / (D.maxd || 1)) * (W - PAD_L - PAD_R); }
+
+    function render(rt) {
+      rt = Math.max(0, Math.min(rt, LASTT));
+      var i = seek(rt);
+      var span = (T[i + 1] !== undefined ? T[i + 1] - T[i] : 0);
+      var a = span > 0 ? (rt - T[i]) / span : 0;
+
+      var ds = D.dist.map(function (ser) { return lerp(ser, i, a); });
+      var lanes = D.lane.map(function (ser) { return lerp(ser, i, a); });
+      var spds = D.spd.map(function (ser) {
+        var s0 = (ser[i] || [0, 0])[1], s1 = (ser[Math.min(i + 1, ser.length - 1)] || [0, 0])[1];
+        return s0 + (s1 - s0) * a;
+      });
       var leader = Math.max.apply(null, ds);
       var trail = Math.min.apply(null, ds);
       var spread = leader - trail;
-      spreadLabel.textContent = spread.toFixed(1) + 'm';
 
-      var anchor = selected === null ? leader : (D.dist[D.runners.indexOf(selected)][i] || 0);
+      heads.forEach(function (h) {
+        h.setAttribute('x1', timelineX(leader)); h.setAttribute('x2', timelineX(leader));
+      });
+      posLabel.textContent = Math.round(leader) + 'm';
+      atLabel.textContent = rt >= LASTT ? 'at the finish' : 'at ' + Math.round(leader) + 'm';
+      spreadLabel.textContent = spread.toFixed(1) + 'm';
+      if (progress) progress.style.left = ((leader / D.maxd) * 100).toFixed(2) + '%';
+      if (phaseLabel) {
+        var ph = D.phases[D.phases.length - 1];
+        for (var b = 0; b < D.phases.length; b++) {
+          if (leader < D.phases[b].end) { ph = D.phases[b]; break; }
+        }
+        phaseLabel.textContent = ph.label.toLowerCase();
+      }
+
+      // camera: whole field, or centred on whoever you're following
+      var anchor = selected === null ? leader : ds[D.runners.indexOf(selected)];
       var half = Math.max(spread * 0.6, 10);
       var lo = anchor - half, hi = anchor + half;
       if (selected === null) { lo = leader - Math.max(spread * 1.2, 20); hi = leader + 6; }
-
       function pct(d) { return ((d - lo) / ((hi - lo) || 1)) * 100; }
 
       for (var g = 0; g < 5; g++) {
         var at = lo + (hi - lo) * (g / 4);
         var line = root.querySelector('[data-strip-grid="' + g + '"]');
         var lbl = root.querySelector('[data-strip-gridlabel="' + g + '"]');
-        line.style.left = pct(at) + '%';
-        lbl.style.left = pct(at) + '%';
-        lbl.textContent = Math.round(at) + 'm';
+        if (line) line.style.left = pct(at) + '%';
+        if (lbl) { lbl.style.left = pct(at) + '%'; lbl.textContent = Math.round(at) + 'm'; }
       }
 
       D.runners.forEach(function (idx, k) {
         var el = root.querySelector('[data-strip-runner="' + idx + '"]');
         if (!el) return;
-        var x = pct(D.dist[k][i] || 0);
-        // Lane is a small normalised offset; spread it down the strip.
-        var y = 22 + (D.lane[k][i] || 0) * 46;
-        el.style.left = x + '%';
-        el.style.top = y + '%';
+        el.style.left = pct(ds[k]) + '%';
+        el.style.top = (22 + lanes[k] * 46) + '%';
         el.style.opacity = (selected !== null && selected !== idx) ? 0.3 : 1;
         el.style.zIndex = selected === idx ? 20 : 10;
         var nm = el.querySelector('[data-strip-name]');
         if (nm) nm.style.opacity = (selected === idx) ? 1 : '';
         var sp = el.querySelector('[data-strip-speed]');
-        var v = (D.spd[k][i] || [0, 0])[1];
-        sp.textContent = v ? v.toFixed(1) : '';
+        if (sp) sp.textContent = spds[k] ? spds[k].toFixed(1) : '';
       });
 
-      // Where we are on the course, and which phase that is.
-      var progress = root.querySelector('[data-progress]');
-      if (progress) progress.style.left = ((leader / D.maxd) * 100).toFixed(2) + '%';
-      var phase = D.phases[D.phases.length - 1];
-      for (var b = 0; b < D.phases.length; b++) {
-        if (leader < D.phases[b].end) { phase = D.phases[b]; break; }
-      }
-      var phaseLabel = root.querySelector('[data-phase-label]');
-      if (phaseLabel) phaseLabel.textContent = phase.label.toLowerCase();
-    }
-
-    function render(i) {
-      var x = D.x[i] !== undefined ? D.x[i] : D.x[LAST];
-      heads.forEach(function (h) {
-        h.setAttribute('x1', timelineX(x)); h.setAttribute('x2', timelineX(x));
-      });
-      posLabel.textContent = Math.round(x) + 'm';
-      atLabel.textContent = i >= LAST ? 'at the finish' : 'at ' + Math.round(x) + 'm';
-
-      var ds = D.dist.map(function (series) { return series[i] || 0; });
-      var leader = Math.max.apply(null, ds);
+      // standings ordered by interpolated distance, so they change
+      // exactly when a pass happens rather than on the next sample
       var order = D.runners.map(function (idx, k) {
-        return { idx: idx, k: k, rank: D.ranks[k][i] || 99, behind: leader - ds[k] };
-      }).sort(function (a, b) { return a.rank - b.rank; });
-
+        return { k: k, d: ds[k] };
+      }).sort(function (x, y) { return y.d - x.d; });
       order.forEach(function (o, pos) {
         var li = items[o.k];
         li.style.order = String(pos);
         li.querySelector('[data-standing-pos]').textContent = pos + 1;
         var gap = li.querySelector('[data-standing-gap]');
-        gap.textContent = o.behind < 0.05 ? '' : '-' + o.behind.toFixed(1) + 'm';
-
+        var behind = leader - o.d;
+        gap.textContent = behind < 0.05 ? '' : '-' + behind.toFixed(1) + 'm';
       });
       list.style.display = 'flex';
       list.style.flexDirection = 'column';
-      drawStrip(i);
     }
 
     function focus(idx) {
@@ -439,16 +455,46 @@
       root.querySelectorAll('[data-focus-group]').forEach(function (g) {
         g.style.display = g.getAttribute('data-focus-group') === String(idx) ? '' : 'none';
       });
-      if (idx === null) { focusPanel.classList.add('hidden'); }
+      if (idx === null) focusPanel.classList.add('hidden');
       else {
         focusPanel.classList.remove('hidden');
         root.querySelector('[data-focus-name]').textContent =
           D.names[D.runners.indexOf(idx)] || '';
       }
-      render(+scrub.value);
+      render(clock);
     }
 
-    scrub.addEventListener('input', function () { stop(); render(+scrub.value); });
+    function stop() {
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      playBtn.textContent = '▶ Play';
+    }
+    function tick(now) {
+      var dt = (now - wall) / 1000;
+      wall = now;
+      clock += dt * SPEED;
+      if (clock >= LASTT) { clock = LASTT; render(clock); syncScrub(); stop(); return; }
+      render(clock); syncScrub();
+      raf = requestAnimationFrame(tick);
+    }
+    function syncScrub() { scrub.value = Math.round((clock / (LASTT || 1)) * 1000); }
+
+    scrub.addEventListener('input', function () {
+      stop();
+      clock = (+scrub.value / 1000) * LASTT;
+      render(clock);
+    });
+    playBtn.addEventListener('click', function () {
+      if (raf) { stop(); return; }
+      if (clock >= LASTT) clock = 0;
+      playBtn.textContent = '❚❚ Pause';
+      wall = performance.now();
+      raf = requestAnimationFrame(tick);
+    });
+    var resetBtn = root.querySelector('[data-replay-reset]');
+    if (resetBtn) resetBtn.addEventListener('click', function () {
+      stop(); clock = LASTT; syncScrub(); focus(null);
+    });
+
     items.forEach(function (li) {
       li.addEventListener('click', function () {
         var idx = +li.getAttribute('data-standing');
@@ -464,36 +510,6 @@
     var clear = root.querySelector('[data-focus-clear]');
     if (clear) clear.addEventListener('click', function () { focus(null); });
 
-    var playBtn = root.querySelector('[data-replay-play]');
-    /* Playback follows the race's own clock rather than a fixed tick.
-       Sampling is uneven — ~15/s off the gate, ~1/s mid-race — so a
-       constant interval made the start crawl and the middle sprint.
-       SPEED is a slight nudge above real time, not a fast-forward. */
-    var SPEED = 1.35;
-    function stop() {
-      if (timer) { clearTimeout(timer); timer = null; }
-      playBtn.textContent = '▶ Play';
-    }
-    function step() {
-      var cur = +scrub.value;
-      if (cur >= LAST) { stop(); return; }
-      var next = cur + 1;
-      scrub.value = next;
-      render(next);
-      var dt = (D.t[next] - D.t[cur]) || 0.1;
-      timer = setTimeout(step, Math.max(16, (dt * 1000) / SPEED));
-    }
-    playBtn.addEventListener('click', function () {
-      if (timer) { stop(); return; }
-      if (+scrub.value >= LAST) { scrub.value = 0; render(0); }
-      playBtn.textContent = '❚❚ Pause';
-      timer = setTimeout(step, 16);
-    });
-    var resetBtn = root.querySelector('[data-replay-reset]');
-    if (resetBtn) resetBtn.addEventListener('click', function () {
-      stop(); scrub.value = LAST; focus(null);
-    });
-
-    render(LAST);
+    render(clock);
   })();
 </script>
