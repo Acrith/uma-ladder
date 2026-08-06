@@ -64,6 +64,22 @@ py -3 uma_race_extract.py --no-upload
 
 Needs `frida`, and `vendor/il2cpp_bridge.js` beside the script.
 
+## Building the exe
+
+On Windows Python (the same one that has frida):
+
+```
+py -3 -m pip install pyinstaller
+py -3 -m PyInstaller build_exe.spec --noconfirm
+```
+
+Result: `dist/uma-race-extract.exe` (~48 MB — frida's runtime; UPX is
+deliberately off, see the note in `build_exe.spec`). Build from a
+Windows-local copy of this directory, not over `\\wsl.localhost` —
+PyInstaller and UNC paths don't mix. The bridge JS and
+`scenario_decode.py` are bundled inside; config and `captures/` are
+created beside the exe wherever it lives.
+
 ## How it works
 
 `Gallop.WorkRoomMatchData._savedRaceResultInfo` holds the saved result.

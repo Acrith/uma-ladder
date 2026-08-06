@@ -13,13 +13,11 @@ from flask import Flask
 from flask.testing import FlaskClient
 
 from uma_ladder.extensions import db
-from uma_ladder.models import AuthIdentity, User, UserProfile
+from uma_ladder.models import AuthIdentity, User
 from uma_ladder.models.users import Role
 from uma_ladder.services import admin as admin_service
-from uma_ladder.services import auth as auth_service
 from uma_ladder.services import auth_identities as identity_service
 from uma_ladder.services import profiles as profiles_service
-from uma_ladder.services.auth import RegistrationRequest, register_user
 from uma_ladder.services.oauth import ProviderProfile
 
 

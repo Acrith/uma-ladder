@@ -1,10 +1,14 @@
 # See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
 
 name: Fly Deploy
+# Deliberately NOT on push. Releases regularly carry Alembic
+# migrations, and this project's rule is that any deploy adding or
+# altering tables gets a manual Fly snapshot taken first (a migration
+# once wiped prod — see PR-J10). An auto-deploy on merge would run
+# migrations before anyone had the chance. Trigger it by hand from the
+# Actions tab, after the snapshot.
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 jobs:
   deploy:
     name: Deploy app

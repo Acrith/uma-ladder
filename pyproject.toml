@@ -38,6 +38,14 @@ include = ["uma_ladder*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Not application code, and linting it has only ever produced noise:
+#   migrations/  — Alembic-generated revisions, shaped by its template
+#   docs/        — one-off Frida scout scripts, kept as a research record
+#                  rather than maintained code
+exclude = [
+    "migrations",
+    "docs",
+]
 
 [tool.ruff.lint]
 select = [

@@ -1,0 +1,76 @@
+# Builds uma-race-extract.exe on a Windows runner.
+#
+# The recorder reads the game's memory via frida, so it can only be
+# built (and only runs) on Windows — this is the one part of the
+# project the Linux CI job can't cover.
+#
+# Every run uploads the exe as a build artifact (kept 90 days). Pushing
+# a tag like `extractor-v1` additionally publishes it as a GitHub
+# Release, which is the link players get — the binary is deliberately
+# NOT committed to the repo (48 MB, and a fresh copy per rebuild).
+
+name: Build extractor
+
+on:
+  push:
+    branches: [main]
+    # No `paths` filter here on purpose: a paths filter applies to tag
+    # pushes too, and a release tag usually lands on a commit that
+    # didn't touch tools/ — which would silently skip the release build.
+    tags:
+      - "extractor-v*"
+  pull_request:
+    paths:
+      - "tools/race_extractor/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to attach the exe to a release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: tools/race_extractor
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller frida
+
+      - name: Build
+        run: python -m PyInstaller build_exe.spec --noconfirm
+
+      # A PyInstaller build can "succeed" while producing an exe that
+      # dies on import. Running it with no game present exercises the
+      # whole frozen import graph — frida, the bundled bridge JS and
+      # scenario_decode — and exits cleanly on "game not running".
+      - name: Smoke test
+        run: |
+          $exe = "dist/uma-race-extract.exe"
+          if (-not (Test-Path $exe)) { throw "exe was not produced" }
+          $out = & $exe --wait 1 --no-upload 2>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch "is not running") {
+            throw "unexpected output from frozen exe"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uma-race-extract
+          path: tools/race_extractor/dist/uma-race-extract.exe
+          retention-days: 90
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/extractor-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tools/race_extractor/dist/uma-race-extract.exe

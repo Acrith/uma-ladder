@@ -19,11 +19,9 @@ from flask import Flask
 
 from uma_ladder.extensions import db
 from uma_ladder.models import (
-    OfficialRaceStatus,
     Role,
     Season,
     SeasonStatus,
-    User,
 )
 from uma_ladder.services import achievements as achievements_service
 from uma_ladder.services import official as official_service
