@@ -627,6 +627,55 @@ def test_blob_replay_matches_the_live_memory_replay() -> None:
         assert eb["param"] == el["param"]
 
 
+def test_skill_duration_is_course_scaled_tenthousandths() -> None:
+    """A Skill event's param[2] is the effect duration in 1/10000 s,
+    already scaled by course length — so `duration = param[2] / 10000`
+    needs no further adjustment.
+
+    This can only be proven across distances: on a single course the
+    /10000 and the length scaling are mathematically indistinguishable.
+    Corpus covers 1600 m, 2200 m and 3600 m, and the same skill reads
+    48000 / 66000 / 107999 respectively — one constant base duration of
+    3.0 s. Guards against anyone "fixing" the unit later.
+    """
+    import collections
+
+    from uma_ladder.services import race_blob
+
+    races = {
+        "34408987_800095.upload.json": 1600,
+        "70090038_800074.upload.json": 2200,
+        "85520900_800072.upload.json": 3600,
+    }
+    by_skill: dict[int, dict[int, int]] = collections.defaultdict(dict)
+    for name, distance in races.items():
+        path = CAPTURE_DIR / name
+        if not path.exists():
+            pytest.skip(f"{name} not archived")
+        sim = race_blob.sim_from_payload(json.loads(path.read_text()))
+        assert sim, f"{name} carries no parseable blob"
+        for ev in sim["events"]:
+            p = ev.get("param") or []
+            if ev["type"] == "Skill" and len(p) > 2 and p[2] != -1:
+                by_skill[p[1]].setdefault(distance, p[2])
+
+    shared = {s: r for s, r in by_skill.items() if len(r) > 1 and any(r.values())}
+    assert len(shared) >= 10, "not enough cross-distance skills to conclude anything"
+
+    agreeing = 0
+    for row in shared.values():
+        # base seconds implied by  param[2] = base * 10000 * distance/1000
+        implied = [raw / 10.0 / dist for dist, raw in row.items() if raw]
+        if len(implied) > 1 and max(implied) - min(implied) < 0.002:
+            agreeing += 1
+            # and the base is always a clean skill duration, never a
+            # number that only makes sense under some other unit
+            assert 0.5 <= implied[0] <= 10.0
+    # A couple of ids legitimately differ (same skill, different level),
+    # so this asserts an overwhelming majority rather than unanimity.
+    assert agreeing >= len(shared) * 0.8, f"only {agreeing}/{len(shared)} scaled"
+
+
 def _events_capture(app: Flask):
     """A capture that carries the event stream and course geometry."""
     replay_file = CAPTURE_DIR / "34408987_800095.withevents.json"

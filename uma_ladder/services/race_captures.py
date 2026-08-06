@@ -1076,8 +1076,11 @@ def _time_scale(sim: dict, frames: list, distance: float | None) -> float:
 
 
 # param[2] of a Skill event is the effect duration in ten-thousandths of
-# a second, already scaled for course length by the game. -1 marks a
-# skill that was equipped but never fired.
+# a second, already scaled for course length by the game — verified
+# across 1600/2200/3600 m captures, where one skill reads
+# 48000/66000/107999 for a single 3.0 s base. Do not "correct" for
+# distance here; the game has already done it. -1 marks a skill that was
+# equipped but never fired.
 _SKILL_DURATION_UNIT = 10_000.0
 _EVENT_NEVER_FIRED = -1
 

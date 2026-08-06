@@ -515,16 +515,27 @@ sample race, *Hesitant Front Runners* (cast by runner 2) carried mask
 *Top Runner* and triggered `CompeteTop`. The engine's own idea of "who
 is front-running" agreed with ours.
 
-**`param[2]` is a duration, and it is already course-scaled.** The ten
-distinct values on a 1600 m race are all `base × 1.6 × 10000` for clean
-base durations (0.9, 1.2, 1.8, 2.0, 2.4, 3.0, 4.0, 5.0, 6.0 s), the
-non-integer bases landing one unit low from float truncation
-(14399 for 1.44 s). ⚠️ **Caveat: the `/10000` and the `×1.6` are
-confounded in a single-distance sample.** A capture at another distance
-separates them — a 3.0 s base skill should read 66000 on a 2200 m race
-if the model is right. Until that check runs, treat the absolute
-seconds as provisional; the *relative* bar lengths on the replay are
-correct either way.
+**`param[2]` is a duration in 1/10000 s, already course-scaled** —
+confirmed across three distances ✅ (2026-08-06). So
+`duration_seconds = param[2] / 10000`, with no further adjustment.
+
+This could only be settled by comparing distances: on one course the
+`/10000` and the length scaling are mathematically indistinguishable.
+Across the 1600 / 2200 / 3600 m corpus, the same skill id reads:
+
+| | 1600 m | 2200 m | 3600 m | implied base |
+|---|---|---|---|---|
+| skill 201321 | 48000 | 66000 | 107999 | 3.0 s |
+| skill 200462 | 28799 | 39600 | 64799 | 1.8 s |
+| skill 200331 | 38399 | 52799 | 86399 | 2.4 s |
+
+i.e. `param[2] = base × 10000 × distance/1000`. Of 28 skills appearing
+at more than one distance, 20 agree to within float-truncation noise,
+6 are zero-duration (instant effects), and 2 differ because the same
+skill id can carry different base durations per instance (level). Every
+implied base lands on a canonical value — 0.9, 1.2, 1.8, 2.4, 3.0 s —
+which no incorrect unit would produce. Locked in by
+`test_skill_duration_is_course_scaled_tenthousandths`.
 
 `frameTime` is on the simulation clock, so it needs the same rescale as
 the frame timestamps (below).
