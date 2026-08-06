@@ -443,3 +443,27 @@ def cmd_issue_api_token(username: str, name: str) -> None:
     click.echo("")
     click.echo("Shown once only. This token is for umaladder.moe —")
     click.echo("it is NOT valid on training.umaladder.moe.")
+
+
+@uma_cli.command("reapply-capture")
+@click.argument("capture_id", type=int)
+@click.argument("actor_username")
+def cmd_reapply_capture(capture_id: int, actor_username: str) -> None:
+    """Re-push a confirmed capture's stats, aptitudes and skills.
+
+    Confirming is one-shot, so a race saved while the enrichment path
+    had a gap stays incomplete forever otherwise. This re-reads the
+    stored payload and writes the details again; placements and points
+    are untouched.
+    """
+    from .services import race_captures as captures_service
+    from .services.auth import find_user_by_username
+
+    actor = find_user_by_username(actor_username)
+    if actor is None:
+        raise click.ClickException(f"no such user: {actor_username}")
+    try:
+        n = captures_service.reapply_details(capture_id, actor_user_id=actor.id)
+    except captures_service.CaptureError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"re-applied details to {n} result(s) from capture {capture_id}")

@@ -447,6 +447,128 @@ def test_scenario_decoder_reads_skill_activations() -> None:
         assert skill_id in equipped[runner]
 
 
+def test_confirm_writes_raw_stats(app: Flask, make_user) -> None:
+    """The capture carries every runner's five stats. They were being
+    parsed, shown in the review UI, and then silently dropped on the
+    way to the ladder — the race page rendered aptitudes and skills but
+    no stats at all."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import OfficialRaceResult, PresetSource, RacePreset
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="statorg", password="password123", role="organizer")
+    winner = make_user(username="aisha alsadhazi", password="password123")
+
+    with app.app_context():
+        season = seasons_service.create_season(
+            name="stat season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Stat Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        payload = _payload()
+        capture = captures_service.ingest(payload, submitted_by_user_id=org["id"]).capture
+        gate = next(
+            m.gate for m in captures_service.match_runners(capture)
+            if m.trainer_name == "Aisha AlSadhazi"
+        )
+        captures_service.confirm(
+            capture.id, race_id=race.id,
+            user_by_gate={gate: winner["id"]}, actor_user_id=org["id"],
+        )
+        result = db.session.scalars(
+            db.select(OfficialRaceResult).where(
+                OfficialRaceResult.official_race_id == race.id
+            )
+        ).unique().one()
+        source = next(
+            r for r in payload["runners"] if r["trainer_name"] == "Aisha AlSadhazi"
+        )["stats"]
+        assert result.speed == source["speed"]
+        assert result.stamina == source["stamina"]
+        assert result.power == source["power"]
+        assert result.guts == source["guts"]
+        # The capture calls it "wit"; the ladder column is "wisdom".
+        assert result.wisdom == source["wit"]
+
+
+def test_reapply_details_repairs_an_already_confirmed_capture(app: Flask, make_user) -> None:
+    """Confirming is one-shot, so a race saved while enrichment had a
+    gap would stay broken forever. Re-applying must restore it without
+    disturbing the placement."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import OfficialRaceResult, PresetSource, RacePreset
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="fixorg", password="password123", role="organizer")
+    winner = make_user(username="aisha alsadhazi", password="password123")
+
+    with app.app_context():
+        season = seasons_service.create_season(
+            name="fix season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Fix Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        capture = captures_service.ingest(
+            _payload(), submitted_by_user_id=org["id"]
+        ).capture
+        gate = next(
+            m.gate for m in captures_service.match_runners(capture)
+            if m.trainer_name == "Aisha AlSadhazi"
+        )
+        captures_service.confirm(
+            capture.id, race_id=race.id,
+            user_by_gate={gate: winner["id"]}, actor_user_id=org["id"],
+        )
+        result = db.session.scalars(
+            db.select(OfficialRaceResult).where(
+                OfficialRaceResult.official_race_id == race.id
+            )
+        ).unique().one()
+        placement_before = result.placement
+        # Simulate a result saved by the older, stat-dropping path.
+        result.speed = result.stamina = result.power = None
+        result.guts = result.wisdom = None
+        db.session.commit()
+
+        updated = captures_service.reapply_details(
+            capture.id, actor_user_id=org["id"]
+        )
+        assert updated == 1
+        db.session.refresh(result)
+        assert result.speed and result.wisdom
+        assert result.placement == placement_before
+
+
 def test_confirm_records_which_skills_fired(app: Flask, make_user) -> None:
     from datetime import UTC, datetime, timedelta
 

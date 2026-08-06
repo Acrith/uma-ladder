@@ -610,24 +610,8 @@ def confirm(
     }
     for result in saved:
         runner = runner_by_user.get(result.user_id)
-        if not runner:
-            continue
-        names = _skill_names(runner.get("skills") or [])
-        apts = _aptitude_block(runner.get("aptitudes"))
-        if not names and not apts:
-            continue
-        try:
-            official_service.submit_result_details(
-                result.id,
-                official_service.ResultDetailsUpdate(
-                    skill_names=names, aptitudes=apts
-                ),
-                by_user_id=actor_user_id,
-            )
-            _stamp_activations(result.id, runner.get("skills") or [])
-        except Exception:  # noqa: BLE001
-            # Enrichment is a bonus; never lose a confirmed result to it.
-            db.session.rollback()
+        if runner:
+            _enrich_result(result, runner, actor_user_id)
 
     capture.status = RaceCaptureStatus.CONFIRMED
     capture.official_race_id = race_id
@@ -635,6 +619,99 @@ def confirm(
     capture.confirmed_at = datetime.now(UTC)
     db.session.commit()
     return capture
+
+
+def _enrich_result(result, runner: dict, actor_user_id: int) -> bool:
+    """Push one runner's build onto its saved result.
+
+    A capture carries far more than a placement — the five raw stats,
+    all ten aptitude grades and the full skill list — so all of it goes
+    through the same enrichment path the stat-screen OCR uses, and the
+    race page renders it exactly as it always has.
+
+    Returns whether anything was written. Failures are swallowed on
+    purpose: enrichment is a bonus and must never cost a confirmed
+    result.
+    """
+    from . import official as official_service
+
+    names = _skill_names(runner.get("skills") or [])
+    apts = _aptitude_block(runner.get("aptitudes"))
+    stats = runner.get("stats") or {}
+    update = official_service.ResultDetailsUpdate(
+        # Without these the race page shows aptitudes and skills but no
+        # stats at all — they were being captured and then dropped here.
+        speed=_as_int(stats.get("speed")),
+        stamina=_as_int(stats.get("stamina")),
+        power=_as_int(stats.get("power")),
+        guts=_as_int(stats.get("guts")),
+        wisdom=_as_int(stats.get("wit") if "wit" in stats else stats.get("wisdom")),
+        skill_names=names,
+        aptitudes=apts,
+    )
+    if not any(
+        (names, apts, update.speed, update.stamina, update.power,
+         update.guts, update.wisdom)
+    ):
+        return False
+    try:
+        official_service.submit_result_details(
+            result.id, update, by_user_id=actor_user_id
+        )
+        _stamp_activations(result.id, runner.get("skills") or [])
+        return True
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        return False
+
+
+def reapply_details(capture_id: int, *, actor_user_id: int) -> int:
+    """Re-run enrichment for a capture that is already confirmed.
+
+    Confirming is one-shot, so a capture saved before a gap in the
+    enrichment path (stats, for one) would otherwise stay permanently
+    incomplete on the ladder with no way back short of deleting the
+    race. Returns how many results were updated.
+    """
+    from ..models import OfficialRaceResult
+
+    capture = db.session.get(RaceCapture, capture_id)
+    if capture is None:
+        raise CaptureError("capture not found")
+    if capture.official_race_id is None:
+        raise CaptureError("this capture is not attached to a race")
+
+    payload = capture.payload_json or {}
+    rows = _runner_rows(payload)
+    results = db.session.scalars(
+        select(OfficialRaceResult).where(
+            OfficialRaceResult.official_race_id == capture.official_race_id
+        )
+    ).unique().all()
+
+    # Match on the identity the confirm step already resolved: each
+    # result's user, against the gate that user was assigned.
+    by_user = {}
+    for res in results:
+        match = next(
+            (
+                r
+                for r in rows
+                if (r.get("trainer_name") or "").strip().lower()
+                == (res.user.username or "").strip().lower()
+                or (r.get("trainer_name") or "").strip().lower()
+                == ((res.user.display_name or "").strip().lower())
+            ),
+            None,
+        )
+        if match:
+            by_user[res] = match
+
+    return sum(
+        1
+        for res, runner in by_user.items()
+        if _enrich_result(res, runner, actor_user_id)
+    )
 
 
 def _stamp_activations(result_id: int, skill_entries: list) -> None:
