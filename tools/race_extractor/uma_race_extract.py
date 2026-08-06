@@ -256,8 +256,20 @@ def load_config() -> dict:
     if not CONFIG_PATH.exists():
         return {}
     try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        # utf-8-sig, not utf-8: Windows editors and PowerShell's
+        # Set-Content -Encoding UTF8 prepend a BOM, which json.loads
+        # rejects. Silently treating that as "no config" cost a real
+        # user a capture — the file looked perfect to them.
+        raw = CONFIG_PATH.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        print(f"[!] cannot read {CONFIG_PATH.name}: {exc}")
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        print(f"[!] {CONFIG_PATH.name} is not valid JSON ({exc}).")
+        print("    Uploads are off until it is fixed. Expected shape:")
+        print('    { "api_url": "https://umaladder.moe", "token": "..." }')
         return {}
 
 
@@ -455,6 +467,11 @@ def upload(payload: dict, cfg: dict) -> bool:
     api_url = (cfg.get("api_url") or DEFAULT_API_URL).rstrip("/")
     token = cfg.get("token")
     if not token:
+        # Say so. Declining the prompt is a legitimate choice, but a
+        # config that *looks* configured and silently doesn't upload is
+        # indistinguishable from a broken site.
+        print(f"[.] not uploading: no token in {CONFIG_PATH.name}")
+        print(f"    Add one from your account page to send captures to {api_url}.")
         return False
     req = urlrequest.Request(
         f"{api_url}/api/race-captures",
