@@ -166,8 +166,80 @@ setTimeout(() => {
             }
             sim.frames.push(row);
           }
+
+          // Typed event stream: skill activations (with duration and who
+          // they hit), lead contests, and last-spurt releases.
+          try {
+            const el = sd.field('_simEvDataList').value;
+            const esz = el.field('_size').value;
+            const eit = el.field('_items').value;
+            sim.events = [];
+            for (let i = 0; i < esz; i++) {
+              try {
+                const ev = eit.get(i);
+                const p = [];
+                try {
+                  const pa = ev.field('param').value;
+                  for (let j = 0; j < pa.length; j++) p.push(pa.get(j));
+                } catch (e) {}
+                sim.events.push({t: ev.field('frameTime').value,
+                                 type: String(ev.field('type').value),
+                                 param: p});
+              } catch (e) {}
+            }
+          } catch (e) {}
         }
       } catch (e) { sim = null; }
+
+      // Course geometry for this track. Lives on RaceManager, not on the
+      // sim data, so it is captured independently — one can be present
+      // without the other.
+      let course = null;
+      try {
+        const rm = Il2Cpp.gc.choose(img.class('Gallop.RaceManager'))[0];
+        if (rm) {
+          const readList = (fieldName, names) => {
+            const outArr = [];
+            try {
+              const lst = rm.field(fieldName).value;
+              const n = lst.field('_size').value;
+              const it = lst.field('_items').value;
+              for (let i = 0; i < n; i++) {
+                try {
+                  const o = it.get(i); const r = {};
+                  names.forEach(k => {
+                    try {
+                      const v = o.field(k[0]).value;
+                      r[k[1]] = (typeof v === 'number' || typeof v === 'boolean')
+                                ? v : String(v);
+                    } catch (e) { r[k[1]] = null; }
+                  });
+                  outArr.push(r);
+                } catch (e) {}
+              }
+            } catch (e) {}
+            return outArr;
+          };
+          course = {
+            straights: readList('_straightList',
+              [['<StartDistance>k__BackingField','start'],
+               ['<EndDistance>k__BackingField','end'],
+               ['frontType','front_type']]),
+            corners: readList('_cornerList',
+              [['<StartDistance>k__BackingField','start'],
+               ['<EndDistance>k__BackingField','end'],
+               ['cornerNumber','number'],
+               ['<IsFinalCorner>k__BackingField','is_final']]),
+            slopes: readList('_slopeList',
+              [['<StartDistance>k__BackingField','start'],
+               ['<EndDistance>k__BackingField','end'],
+               ['SlopeType','slope_type']]),
+          };
+          if (!course.straights.length && !course.corners.length
+              && !course.slopes.length) course = null;
+        }
+      } catch (e) { course = null; }
+      if (sim && course) sim.course = course;
 
       send({type: 'capture', room: room, runners: runners, sim: sim,
             scenario_key: key, scenario_len: scen_len}, raw);
@@ -462,7 +534,18 @@ def main() -> int:
     else:
         print(" (finishing order unavailable)")
     if full.get("sim"):
-        print(f"[+] replay captured too: {len(full['sim']['frames'])} frames")
+        sim = full["sim"]
+        extra = []
+        if sim.get("events"):
+            fired = sum(1 for e in sim["events"]
+                        if e.get("type") == "Skill" and (e.get("param") or [0, 0, -1])[2] != -1)
+            extra.append(f"{len(sim['events'])} events ({fired} skills fired)")
+        if sim.get("course"):
+            c = sim["course"]
+            extra.append(f"{len(c.get('corners') or [])} corners, "
+                         f"{len(c.get('slopes') or [])} slopes")
+        tail = ", " + ", ".join(extra) if extra else ""
+        print(f"[+] replay captured too: {len(sim['frames'])} frames{tail}")
     print(f"[+] saved {CAPTURE_DIR / (stem + '.json')}")
 
     if not args.no_upload:

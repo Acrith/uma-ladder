@@ -1,0 +1,2481 @@
+{
+  "eventTypeEnum": {
+    "Score": {
+      "handle": "0x20b355219f0",
+      "type": {
+        "handle": "0x7ffc9698a9a8"
+      }
+    },
+    "ChallengeMatchPoint": {
+      "handle": "0x20b33a39e10",
+      "type": {
+        "handle": "0x7ffc9698a9a8"
+      }
+    },
+    "NOUSE_2": {
+      "handle": "0x20b34bfad50",
+      "type": {
+        "handle": "0x7ffc9698a9a8"
+      }
+    },
+    "Skill": {
+      "handle": "0x20b34b9c7e0",
+      "type": {
+        "handle": "0x7ffc9698a9a8"
+      }
+    },
+    "CompeteTop": {
+      "handle": "0x20b34bfa900",
+      "type": {
+        "handle": "0x7ffc9698a9a8"
+      }
+    },
+    "CompeteFight": {
+      "handle": "0x20b33a3e110",
+      "type": {
+        "handle": "0x7ffc9698a9a8"
+      }
+    },
+    "ReleaseConservePower": {
+      "handle": "0x20b34bbfbe0",
+      "type": {
+        "handle": "0x7ffc9698a9a8"
+      }
+    }
+  },
+  "eventTypeEnumClass": "Gallop.SimulateEventType",
+  "simDataFields": [
+    {
+      "name": "<Header>k__BackingField",
+      "type": "Gallop.RaceSimulateDataHeader",
+      "sample": "<Gallop.RaceSimulateDataHeader>"
+    },
+    {
+      "name": "_frameDataList",
+      "type": "System.Collections.Generic.List<Gallop.RaceSimulateFrameData>",
+      "sample": "<System.Collections.Generic.List<Gallop.RaceSimulateFrameData>>"
+    },
+    {
+      "name": "_horseResultDataArray",
+      "type": "Gallop.RaceSimulateHorseResultData[]",
+      "sample": "<arr len 11>"
+    },
+    {
+      "name": "_simEvDataList",
+      "type": "System.Collections.Generic.List<Gallop.RaceSimulateEventData>",
+      "sample": "<System.Collections.Generic.List<Gallop.RaceSimulateEventData>>"
+    },
+    {
+      "name": "_horseNum",
+      "type": "System.Int32",
+      "sample": 11
+    },
+    {
+      "name": "_distanceDiffMax",
+      "type": "System.Single",
+      "sample": 32.4158935546875
+    },
+    {
+      "name": "_lastFrameIdx",
+      "type": "System.Int32",
+      "sample": 96
+    },
+    {
+      "name": "_lastDistanceIndex",
+      "type": "System.Int32",
+      "sample": 96
+    },
+    {
+      "name": "_lastLaneIndex",
+      "type": "System.Int32",
+      "sample": 96
+    },
+    {
+      "name": "_lastCalcFrameTime",
+      "type": "System.Single",
+      "sample": 75.31173706054688
+    }
+  ],
+  "horseNum": 11,
+  "eventCount": 168,
+  "eventClass": "Gallop.RaceSimulateEventData",
+  "eventFieldTypes": [
+    {
+      "name": "frameTime",
+      "type": "System.Single"
+    },
+    {
+      "name": "type",
+      "type": "Gallop.SimulateEventType"
+    },
+    {
+      "name": "param",
+      "type": "System.Int32[]"
+    }
+  ],
+  "events": [
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        0,
+        200011,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        0,
+        200152,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        0,
+        200431,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        0,
+        200531,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        0,
+        201522,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        1,
+        200131,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        1,
+        200152,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        2,
+        200152,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        2,
+        200432,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        4,
+        200132,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        4,
+        200152,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        4,
+        200431,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        4,
+        201522,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        4,
+        201601,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        5,
+        200131,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        5,
+        200181,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        5,
+        200431,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        5,
+        200531,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        7,
+        200152,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        7,
+        200182,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        7,
+        200431,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        7,
+        200532,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        7,
+        201522,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        7,
+        201601,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        8,
+        200011,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        8,
+        200132,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        8,
+        201552,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        8,
+        202161,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        9,
+        200132,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        9,
+        200181,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        9,
+        202161,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 0,
+      "type": "Skill",
+      "param": [
+        10,
+        201641,
+        -1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frameTime": 1.1322001218795776,
+      "type": "Skill",
+      "param": [
+        4,
+        201262,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 5.0615997314453125,
+      "type": "Skill",
+      "param": [
+        4,
+        201271,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 5.0615997314453125,
+      "type": "Skill",
+      "param": [
+        5,
+        201271,
+        48000,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 5.0615997314453125,
+      "type": "Skill",
+      "param": [
+        7,
+        201271,
+        48000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 7.792193412780762,
+      "type": "CompeteTop",
+      "param": [
+        7
+      ]
+    },
+    {
+      "frameTime": 7.792193412780762,
+      "type": "CompeteTop",
+      "param": [
+        4
+      ]
+    },
+    {
+      "frameTime": 7.792193412780762,
+      "type": "CompeteTop",
+      "param": [
+        5
+      ]
+    },
+    {
+      "frameTime": 8.524791717529297,
+      "type": "Skill",
+      "param": [
+        0,
+        200452,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 8.657991409301758,
+      "type": "Skill",
+      "param": [
+        6,
+        201072,
+        38399,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 8.791191101074219,
+      "type": "Skill",
+      "param": [
+        4,
+        210052,
+        64000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 9.323989868164062,
+      "type": "Skill",
+      "param": [
+        0,
+        200681,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 10.855786323547363,
+      "type": "Skill",
+      "param": [
+        4,
+        200682,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 11.85478401184082,
+      "type": "Skill",
+      "param": [
+        0,
+        201242,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 12.187783241271973,
+      "type": "Skill",
+      "param": [
+        10,
+        210052,
+        64000,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 13.652979850769043,
+      "type": "Skill",
+      "param": [
+        1,
+        201591,
+        48000,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 13.786179542541504,
+      "type": "Skill",
+      "param": [
+        8,
+        200692,
+        48000,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 15.784174919128418,
+      "type": "Skill",
+      "param": [
+        2,
+        200572,
+        0,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 16.117176055908203,
+      "type": "Skill",
+      "param": [
+        9,
+        201311,
+        48000,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 16.516780853271484,
+      "type": "Skill",
+      "param": [
+        5,
+        200542,
+        48000,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 16.58338165283203,
+      "type": "Skill",
+      "param": [
+        5,
+        201241,
+        48000,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 17.715595245361328,
+      "type": "Skill",
+      "param": [
+        4,
+        201662,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 17.715595245361328,
+      "type": "Skill",
+      "param": [
+        7,
+        201651,
+        48000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 18.181800842285156,
+      "type": "Skill",
+      "param": [
+        10,
+        201031,
+        48000,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 18.98101043701172,
+      "type": "Skill",
+      "param": [
+        2,
+        201662,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 19.18081283569336,
+      "type": "Skill",
+      "param": [
+        3,
+        201072,
+        38399,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 19.380615234375,
+      "type": "Skill",
+      "param": [
+        1,
+        200462,
+        28799,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 19.380615234375,
+      "type": "Skill",
+      "param": [
+        1,
+        200482,
+        0,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 19.78022003173828,
+      "type": "Skill",
+      "param": [
+        9,
+        202371,
+        38399,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 19.846820831298828,
+      "type": "Skill",
+      "param": [
+        9,
+        200362,
+        48000,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 23.376663208007812,
+      "type": "Skill",
+      "param": [
+        2,
+        201312,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 23.376663208007812,
+      "type": "Skill",
+      "param": [
+        2,
+        201611,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 23.64306640625,
+      "type": "Skill",
+      "param": [
+        0,
+        200362,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 24.442276000976562,
+      "type": "Skill",
+      "param": [
+        2,
+        200462,
+        28799,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 24.50887680053711,
+      "type": "Skill",
+      "param": [
+        5,
+        201651,
+        48000,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 25.441287994384766,
+      "type": "Skill",
+      "param": [
+        10,
+        201451,
+        48000,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 25.840892791748047,
+      "type": "Skill",
+      "param": [
+        5,
+        201282,
+        0,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 27.838916778564453,
+      "type": "Skill",
+      "param": [
+        2,
+        201362,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 28.638126373291016,
+      "type": "Skill",
+      "param": [
+        10,
+        202021,
+        64000,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 28.97113037109375,
+      "type": "Skill",
+      "param": [
+        6,
+        201412,
+        38399,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 30.23654556274414,
+      "type": "Skill",
+      "param": [
+        0,
+        200542,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 30.502948760986328,
+      "type": "Skill",
+      "param": [
+        10,
+        210011,
+        28799,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 30.769351959228516,
+      "type": "Skill",
+      "param": [
+        10,
+        200461,
+        28799,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 30.90255355834961,
+      "type": "Skill",
+      "param": [
+        5,
+        201052,
+        38399,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 31.035755157470703,
+      "type": "Skill",
+      "param": [
+        2,
+        201651,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 31.035755157470703,
+      "type": "Skill",
+      "param": [
+        3,
+        201662,
+        48000,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 31.10235595703125,
+      "type": "Skill",
+      "param": [
+        2,
+        200362,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 31.701763153076172,
+      "type": "Skill",
+      "param": [
+        1,
+        200362,
+        48000,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 31.901565551757812,
+      "type": "Skill",
+      "param": [
+        10,
+        200362,
+        48000,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 32.034767150878906,
+      "type": "Skill",
+      "param": [
+        6,
+        202152,
+        38399,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 32.700775146484375,
+      "type": "Skill",
+      "param": [
+        2,
+        202372,
+        38399,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 32.83397674560547,
+      "type": "Skill",
+      "param": [
+        6,
+        200592,
+        38399,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 33.966190338134766,
+      "type": "Skill",
+      "param": [
+        7,
+        200362,
+        48000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 35.76441192626953,
+      "type": "Skill",
+      "param": [
+        5,
+        910261,
+        48000,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 36.03081512451172,
+      "type": "Skill",
+      "param": [
+        7,
+        110261,
+        80000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 36.097415924072266,
+      "type": "Skill",
+      "param": [
+        0,
+        910261,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 36.16401672363281,
+      "type": "Skill",
+      "param": [
+        0,
+        201611,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 36.23061752319336,
+      "type": "Skill",
+      "param": [
+        6,
+        201651,
+        48000,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 36.63022232055664,
+      "type": "Skill",
+      "param": [
+        3,
+        201052,
+        38399,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 37.22962951660156,
+      "type": "Skill",
+      "param": [
+        2,
+        201322,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 37.829036712646484,
+      "type": "Skill",
+      "param": [
+        7,
+        200541,
+        48000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 39.760459899902344,
+      "type": "Skill",
+      "param": [
+        5,
+        100021,
+        80000,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 40.22666549682617,
+      "type": "Skill",
+      "param": [
+        2,
+        202472,
+        38399,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 40.29326629638672,
+      "type": "Skill",
+      "param": [
+        2,
+        200331,
+        38399,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 40.29326629638672,
+      "type": "Skill",
+      "param": [
+        9,
+        201321,
+        48000,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 40.69287109375,
+      "type": "Skill",
+      "param": [
+        7,
+        201252,
+        48000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 40.75947189331055,
+      "type": "Skill",
+      "param": [
+        9,
+        202472,
+        38399,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 40.826072692871094,
+      "type": "Skill",
+      "param": [
+        1,
+        201041,
+        48000,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 41.09247589111328,
+      "type": "Skill",
+      "param": [
+        3,
+        200332,
+        38399,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 41.09247589111328,
+      "type": "Skill",
+      "param": [
+        8,
+        201461,
+        48000,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 42.690895080566406,
+      "type": "Skill",
+      "param": [
+        9,
+        200352,
+        0,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 43.09049987792969,
+      "type": "Skill",
+      "param": [
+        9,
+        200331,
+        38399,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 43.556705474853516,
+      "type": "Skill",
+      "param": [
+        9,
+        200572,
+        0,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 44.68891906738281,
+      "type": "Skill",
+      "param": [
+        2,
+        200342,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 44.75551986694336,
+      "type": "Skill",
+      "param": [
+        3,
+        201342,
+        48000,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 45.15512466430664,
+      "type": "Skill",
+      "param": [
+        8,
+        200352,
+        0,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 45.288326263427734,
+      "type": "Skill",
+      "param": [
+        1,
+        201322,
+        48000,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 45.55472946166992,
+      "type": "Skill",
+      "param": [
+        7,
+        201042,
+        48000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 46.48714065551758,
+      "type": "Skill",
+      "param": [
+        8,
+        202021,
+        64000,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 46.553741455078125,
+      "type": "Skill",
+      "param": [
+        8,
+        201611,
+        48000,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 47.48615264892578,
+      "type": "Skill",
+      "param": [
+        1,
+        200331,
+        38399,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 47.619354248046875,
+      "type": "Skill",
+      "param": [
+        0,
+        200331,
+        38399,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 48.2187614440918,
+      "type": "Skill",
+      "param": [
+        4,
+        201072,
+        38399,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 48.81816864013672,
+      "type": "Skill",
+      "param": [
+        4,
+        200332,
+        38399,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 48.81816864013672,
+      "type": "Skill",
+      "param": [
+        4,
+        201611,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 48.884769439697266,
+      "type": "Skill",
+      "param": [
+        4,
+        201042,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 49.68397903442383,
+      "type": "Skill",
+      "param": [
+        3,
+        210071,
+        19199,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 50.416587829589844,
+      "type": "Skill",
+      "param": [
+        4,
+        100091,
+        80000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 51.81520462036133,
+      "type": "Skill",
+      "param": [
+        7,
+        200331,
+        38399,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 52.3480110168457,
+      "type": "Skill",
+      "param": [
+        5,
+        210071,
+        19199,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 52.88081741333008,
+      "type": "Skill",
+      "param": [
+        5,
+        900201,
+        38399,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 53.147220611572266,
+      "type": "Skill",
+      "param": [
+        3,
+        200581,
+        28799,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 53.147220611572266,
+      "type": "Skill",
+      "param": [
+        10,
+        200331,
+        38399,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 53.21382141113281,
+      "type": "ReleaseConservePower",
+      "param": [
+        9
+      ]
+    },
+    {
+      "frameTime": 53.28042221069336,
+      "type": "ReleaseConservePower",
+      "param": [
+        0
+      ]
+    },
+    {
+      "frameTime": 53.347023010253906,
+      "type": "ReleaseConservePower",
+      "param": [
+        2
+      ]
+    },
+    {
+      "frameTime": 53.41362380981445,
+      "type": "ReleaseConservePower",
+      "param": [
+        1
+      ]
+    },
+    {
+      "frameTime": 53.74662780761719,
+      "type": "ReleaseConservePower",
+      "param": [
+        8
+      ]
+    },
+    {
+      "frameTime": 54.07963180541992,
+      "type": "Skill",
+      "param": [
+        9,
+        201902,
+        28799,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 54.27943420410156,
+      "type": "Skill",
+      "param": [
+        3,
+        200502,
+        48000,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 54.54583740234375,
+      "type": "Skill",
+      "param": [
+        9,
+        200582,
+        28799,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 54.94544219970703,
+      "type": "Skill",
+      "param": [
+        2,
+        200851,
+        48000,
+        0,
+        177,
+        0
+      ]
+    },
+    {
+      "frameTime": 55.41164779663086,
+      "type": "Skill",
+      "param": [
+        0,
+        201041,
+        48000,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "frameTime": 55.54484939575195,
+      "type": "Skill",
+      "param": [
+        9,
+        210072,
+        19199,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 56.543861389160156,
+      "type": "Skill",
+      "param": [
+        3,
+        201902,
+        28799,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 57.14326858520508,
+      "type": "Skill",
+      "param": [
+        6,
+        200342,
+        48000,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 57.34307098388672,
+      "type": "Skill",
+      "param": [
+        4,
+        201252,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 59.00809097290039,
+      "type": "Skill",
+      "param": [
+        6,
+        200601,
+        28799,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 59.141292572021484,
+      "type": "Skill",
+      "param": [
+        3,
+        910151,
+        48000,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 59.341094970703125,
+      "type": "Skill",
+      "param": [
+        5,
+        200551,
+        48000,
+        0,
+        32,
+        0
+      ]
+    },
+    {
+      "frameTime": 59.540897369384766,
+      "type": "Skill",
+      "param": [
+        1,
+        200582,
+        28799,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 60.73971176147461,
+      "type": "Skill",
+      "param": [
+        6,
+        202402,
+        32000,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 60.8729133605957,
+      "type": "Skill",
+      "param": [
+        10,
+        200342,
+        48000,
+        0,
+        1024,
+        0
+      ]
+    },
+    {
+      "frameTime": 61.33911895751953,
+      "type": "Skill",
+      "param": [
+        8,
+        200702,
+        48000,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 61.93852615356445,
+      "type": "Skill",
+      "param": [
+        4,
+        200362,
+        48000,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 62.005126953125,
+      "type": "Skill",
+      "param": [
+        6,
+        210032,
+        19199,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 62.338130950927734,
+      "type": "Skill",
+      "param": [
+        9,
+        210032,
+        19199,
+        0,
+        512,
+        0
+      ]
+    },
+    {
+      "frameTime": 62.737735748291016,
+      "type": "Skill",
+      "param": [
+        8,
+        200642,
+        14399,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 63.603546142578125,
+      "type": "Skill",
+      "param": [
+        4,
+        210072,
+        19199,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "frameTime": 63.73674774169922,
+      "type": "CompeteFight",
+      "param": [
+        4
+      ]
+    },
+    {
+      "frameTime": 63.73674774169922,
+      "type": "CompeteFight",
+      "param": [
+        5
+      ]
+    },
+    {
+      "frameTime": 63.86994934082031,
+      "type": "Skill",
+      "param": [
+        8,
+        100441,
+        96000,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 63.93655014038086,
+      "type": "Skill",
+      "param": [
+        3,
+        201311,
+        48000,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 64.06974792480469,
+      "type": "Skill",
+      "param": [
+        7,
+        201242,
+        48000,
+        0,
+        128,
+        0
+      ]
+    },
+    {
+      "frameTime": 64.20294189453125,
+      "type": "Skill",
+      "param": [
+        8,
+        200362,
+        48000,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 64.26953887939453,
+      "type": "Skill",
+      "param": [
+        8,
+        201511,
+        48000,
+        0,
+        647,
+        0
+      ]
+    },
+    {
+      "frameTime": 64.33613586425781,
+      "type": "Skill",
+      "param": [
+        1,
+        201312,
+        48000,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 64.53592681884766,
+      "type": "CompeteFight",
+      "param": [
+        0
+      ]
+    },
+    {
+      "frameTime": 64.53592681884766,
+      "type": "CompeteFight",
+      "param": [
+        1
+      ]
+    },
+    {
+      "frameTime": 64.53592681884766,
+      "type": "CompeteFight",
+      "param": [
+        2
+      ]
+    },
+    {
+      "frameTime": 66.60043334960938,
+      "type": "Skill",
+      "param": [
+        8,
+        200512,
+        38399,
+        0,
+        256,
+        0
+      ]
+    },
+    {
+      "frameTime": 66.73362731933594,
+      "type": "Skill",
+      "param": [
+        6,
+        200512,
+        38399,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 68.19876098632812,
+      "type": "Skill",
+      "param": [
+        6,
+        210101,
+        48000,
+        0,
+        64,
+        0
+      ]
+    },
+    {
+      "frameTime": 71.1290283203125,
+      "type": "Skill",
+      "param": [
+        3,
+        200362,
+        48000,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "frameTime": 71.8615951538086,
+      "type": "Skill",
+      "param": [
+        2,
+        201662,
+        48000,
+        0,
+        4,
+        0
+      ]
+    },
+    {
+      "frameTime": 72.06138610839844,
+      "type": "Skill",
+      "param": [
+        1,
+        910031,
+        48000,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "frameTime": 72.46096801757812,
+      "type": "Skill",
+      "param": [
+        1,
+        201031,
+        48000,
+        0,
+        2,
+        0
+      ]
+    }
+  ],
+  "courseCandidates": [
+    {
+      "klass": "Gallop.RaceSimulateHorseResultData",
+      "live": 11,
+      "fields": [
+        {
+          "name": "FinishOrder",
+          "type": "System.Int32"
+        },
+        {
+          "name": "FinishTime",
+          "type": "System.Single"
+        },
+        {
+          "name": "FinishTimeRaw",
+          "type": "System.Single"
+        },
+        {
+          "name": "FinishDiffTime",
+          "type": "System.Single"
+        },
+        {
+          "name": "StartDelayTime",
+          "type": "System.Single"
+        },
+        {
+          "name": "GutsOrder",
+          "type": "System.Byte"
+        },
+        {
+          "name": "WizOrder",
+          "type": "System.Byte"
+        },
+        {
+          "name": "LastSpurtStartDistance",
+          "type": "System.Single"
+        },
+        {
+          "name": "RunningStyle",
+          "type": "System.Byte"
+        },
+        {
+          "name": "Defeat",
+          "type": "System.Int32"
+        }
+      ],
+      "sample": {
+        "FinishOrder": 8,
+        "FinishTime": 91.61225128173828,
+        "FinishTimeRaw": 75.50664520263672,
+        "FinishDiffTime": 0.14957427978515625,
+        "StartDelayTime": 0.023468555882573128,
+        "GutsOrder": 10,
+        "WizOrder": 4,
+        "LastSpurtStartDistance": 1069.2362060546875,
+        "RunningStyle": 1,
+        "Defeat": 10
+      }
+    }
+  ],
+  "courseClassNames": [
+    "<>f__AnonymousType3<<Grade>j__TPar,<Turn>j__TPar,<ProgramId>j__TPar,<CourseSet>j__TPar>",
+    "<>f__AnonymousType6<<Grade>j__TPar,<ProgramId>j__TPar,<CourseSet>j__TPar>",
+    "CourseParamType",
+    "CourseParam",
+    "CourseParamDistanceComparer",
+    "CourseParamTable",
+    "KeyframeCamera.CameraKey_CourseView",
+    "Gallop.MasterRaceCourseSet.RaceCourseSet",
+    "Gallop.MasterRaceCourseSet.IRaceCourseInfo",
+    "Gallop.MasterRaceCourseSet",
+    "Gallop.MasterRaceCourseSetStatus.RaceCourseSetStatus",
+    "Gallop.MasterRaceCourseSetStatus",
+    "Gallop.DialogPracticeRaceChangeRaceCourse.<>c",
+    "Gallop.DialogPracticeRaceChangeRaceCourse.<>c__DisplayClass6_0",
+    "Gallop.DialogPracticeRaceChangeRaceCourse",
+    "Gallop.ExhibitionRaceDefine.CourseAround",
+    "Gallop.ExhibitionRaceDefine.CourseDistanceType",
+    "Gallop.ExhibitionRaceRaceCourseSetting.CreateType",
+    "Gallop.ExhibitionRaceRaceCourseSetting.<>c__DisplayClass43_0",
+    "Gallop.ExhibitionRaceRaceCourseSetting",
+    "Gallop.ExhibitionRaceRaceCourseSettingController",
+    "Gallop.CourseAudioParam",
+    "Gallop.CourseBloomParam",
+    "Gallop.CourseCamera",
+    "Gallop.CourseCameraCollectionParam",
+    "Gallop.CourseCameraFovParam",
+    "Gallop.CourseCameraControlType",
+    "Gallop.CourseCameraTargetType",
+    "Gallop.CourseInterpolationType",
+    "Gallop.CourseBaseParam.InterpolationParamSimple",
+    "Gallop.CourseBaseParam.InterpolationParam",
+    "Gallop.CourseBaseParam",
+    "Gallop.CourseBaseParamInterp",
+    "Gallop.CourseCameraParam",
+    "Gallop.CourseFlipParam",
+    "Gallop.CourseCameraDOF.Param",
+    "Gallop.CourseCameraDOF",
+    "Gallop.CourseCameraColorCorrection.Param",
+    "Gallop.CourseCameraColorCorrection",
+    "Gallop.CourseCameraSunShaft.Param",
+    "Gallop.CourseCameraSunShaft",
+    "Gallop.CourseCameraPostFilm.OverlayParam",
+    "Gallop.CourseCameraPostFilm.Param",
+    "Gallop.CourseCameraPostFilm",
+    "Gallop.CourseCameraRadialBlur.Param",
+    "Gallop.CourseCameraRadialBlur",
+    "Gallop.CourseCameraLensDistortion.Param",
+    "Gallop.CourseCameraLensDistortion",
+    "Gallop.CourseCameraFluctuation.Param",
+    "Gallop.CourseCameraFluctuation",
+    "Gallop.CourseCameraChromaticAberration.Param",
+    "Gallop.CourseCameraChromaticAberration",
+    "Gallop.CourseCameraMultiCamera.Param",
+    "Gallop.CourseCameraMultiCamera",
+    "Gallop.CourseImageEffectParam.ScreenOverlayParam",
+    "Gallop.CourseImageEffectParam.ScreenOverlayIndex",
+    "Gallop.CourseImageEffectParam",
+    "Gallop.CourseCameraRollParam",
+    "Gallop.CourseCameraShadowDistanceParam",
+    "Gallop.CourseCameraShakeParam.ActionMode",
+    "Gallop.CourseCameraShakeParam",
+    "Gallop.CourseCameraSwitchParam.InterpolationType",
+    "Gallop.CourseCameraSwitchParam.SplitScreenType",
+    "Gallop.CourseCameraSwitchParam.TransparentParam",
+    "Gallop.CourseCameraSwitchParam",
+    "Gallop.CourseCameraTable",
+    "Gallop.CourseCameraTargetInfoParam",
+    "Gallop.CourseCameraTargetOffsetParam",
+    "Gallop.CourseCameraTypeMultiParam",
+    "Gallop.CourseCameraTypeParam",
+    "Gallop.CourseCharacterAfterGrowParam",
+    "Gallop.CourseCharacterAuraParam",
+    "Gallop.CourseCharacterColorParam",
+    "Gallop.CourseCharacterEyeCameraFovParam",
+    "Gallop.CourseCharacterEyeCameraPositionParam",
+    "Gallop.CourseCharacterEyeCameraRotationParam",
+    "Gallop.CourseCharacterFacialParamBase",
+    "Gallop.CourseCharacterFacialParamEar",
+    "Gallop.CourseCharacterFacialParamEffect",
+    "Gallop.CourseCharacterFacialParamEye",
+    "Gallop.CourseCharacterFacialParamEyebrow",
+    "Gallop.CourseCharacterFacialParamEyeTrack.EyeTargetType",
+    "Gallop.CourseCharacterFacialParamEyeTrack",
+    "Gallop.CourseCharacterFacialMouthParam",
+    "Gallop.CourseCharacterMotionParam.CancelTransform",
+    "Gallop.CourseCharacterMotionParam",
+    "Gallop.CourseCharacterNodeParam.Node",
+    "Gallop.CourseCharacterNodeParam.NameNodeParam",
+    "Gallop.CourseCharacterNodeParam",
+    "Gallop.CourseCharacterPartsParam",
+    "Gallop.CourseCharacterTransformParam.PositionType",
+    "Gallop.CourseCharacterTransformParam.ShadowRunningType",
+    "Gallop.CourseCharacterTransformParam",
+    "Gallop.CourseChoiceParam",
+    "Gallop.CourseChromaticAberrationParam",
+    "Gallop.CourseCollectionParam",
+    "Gallop.CourseColorGradingParam",
+    "Gallop.CourseCutNoParam",
+    "Gallop.CourseDOFParam",
+    "Gallop.CourseEpisodeEventParam.EventType",
+    "Gallop.CourseEpisodeEventParam.EventParamBase",
+    "Gallop.CourseEpisodeEventParam.FootSmokeEventParam",
+    "Gallop.CourseEpisodeEventParam.HalonEventParam",
+    "Gallop.CourseEpisodeEventParam.FootSmokeHalonEventParam",
+    "Gallop.CourseEpisodeEventParam.GateEventParam",
+    "Gallop.CourseEpisodeEventParam",
+    "Gallop.CourseExposureParam",
+    "Gallop.CourseFlucturationParam",
+    "Gallop.CourseGateActionType",
+    "Gallop.CourseGateParam",
+    "Gallop.CourseGlobalFogParam",
+    "Gallop.CourseLensDistortionParam",
+    "Gallop.CourseLightParam",
+    "Gallop.CourseMultiCameraParam",
+    "Gallop.CoursePostFilmParam.ScreenOverlayParam",
+    "Gallop.CoursePostFilmParam.ScreenOverlayIndex",
+    "Gallop.CoursePostFilmParam",
+    "Gallop.CoursePrefabParam.CharaAttachTransform",
+    "Gallop.CoursePrefabParam.ShaderColorProperty",
+    "Gallop.CoursePrefabParam.BlendMode",
+    "Gallop.CoursePrefabParam.AnimationType",
+    "Gallop.CoursePrefabParam.ParticleParam.SimulationSpace",
+    "Gallop.CoursePrefabParam.ParticleParam",
+    "Gallop.CoursePrefabParam.IParameter",
+    "Gallop.CoursePrefabParam.GrassParameter",
+    "Gallop.CoursePrefabParam",
+    "Gallop.CourseRacecourseParam",
+    "Gallop.CourseRaceProgressParam.ProgressType",
+    "Gallop.CourseRaceProgressParam",
+    "Gallop.CourseRadialBlurParam",
+    "Gallop.CourseResultBoardParam",
+    "Gallop.CourseSkyParam",
+    "Gallop.CourseStillParam",
+    "Gallop.CourseTiltShiftParam",
+    "Gallop.CourseTimescaleParam",
+    "Gallop.CourseToneCurveParam",
+    "Gallop.CourseWeatherEffectController.WeatherParticleInfo",
+    "Gallop.CourseWeatherEffectController.ParticleRenderInfo",
+    "Gallop.CourseWeatherEffectController.GizmosMatrixScope",
+    "Gallop.CourseWeatherEffectController.Context",
+    "Gallop.CourseWeatherEffectController.EffectCacheTransform",
+    "Gallop.CourseWeatherEffectController.ParticleRenderInfoPool",
+    "Gallop.CourseWeatherEffectController.EffectPool",
+    "Gallop.CourseWeatherEffectController.ParticleInfoManageData",
+    "Gallop.CourseWeatherEffectController.<>c",
+    "Gallop.CourseWeatherEffectController.<>c__DisplayClass58_0",
+    "Gallop.CourseWeatherEffectController.<>c__DisplayClass58_1",
+    "Gallop.CourseWeatherEffectController",
+    "Gallop.CourseWordParam",
+    "Gallop.EpisodeCourseEventEditorTable.LockLayerParam",
+    "Gallop.EpisodeCourseEventEditorTable.CourseLockParam",
+    "Gallop.EpisodeCourseEventEditorTable",
+    "Gallop.EpisodeCourseEventTable.OtherCharaParam",
+    "Gallop.EpisodeCourseEventTable.RuntimeCharaParam",
+    "Gallop.EpisodeCourseEventTable.RuntimeSetting",
+    "Gallop.EpisodeCourseEventTable.CourseRaceProgressGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCameraTypeMultiGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCameraFovGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCameraRollGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCameraShakeGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCameraColorCollectionGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCameraTargetInfoGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCameraTargetOffsetGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterTransformGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterMotionGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterNodeGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterFacialEyeGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterFacialEyebrowGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterFacialEarGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterFacialMouthGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterAfterGrowGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterPartsGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterAuraGroup",
+    "Gallop.EpisodeCourseEventTable.IParamArrayGetter",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterFacialEffectGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterFacialEyeTrackGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterColorGroup",
+    "Gallop.EpisodeCourseEventTable.CourseCharacterEyeCameraGroup",
+    "Gallop.EpisodeCourseEventTable.CoursePrefabGroup",
+    "Gallop.EpisodeCourseEventTable.CourseAudioGroup",
+    "Gallop.EpisodeCourseEventTable.CourseWordGroup",
+    "Gallop.EpisodeCourseEventTable",
+    "Gallop.RaceCourseCameraEvent.CameraParamsByRaceInstanceId",
+    "Gallop.RaceCourseCameraEvent.<>c",
+    "Gallop.RaceCourseCameraEvent.<>c__DisplayClass62_0",
+    "Gallop.RaceCourseCameraEvent",
+    "Gallop.ICourseAttribute",
+    "Gallop.CourseStraight",
+    "Gallop.CourseCorner",
+    "Gallop.CourseSlope",
+    "Gallop.CourseAudience.<>c__DisplayClass9_0",
+    "Gallop.CourseAudience",
+    "Gallop.CourseBaseObject.Context",
+    "Gallop.CourseBaseObject.<>c",
+    "Gallop.CourseBaseObject",
+    "Gallop.CourseBaseObjectNull",
+    "Gallop.CourseBg.Context",
+    "Gallop.CourseBg.<_InitializeObject>d__58",
+    "Gallop.CourseBg",
+    "Gallop.CourseBgNull",
+    "Gallop.CourseBillboardBounds.ObjectType",
+    "Gallop.CourseBillboardBounds",
+    "Gallop.CourseBillboardController.RotationType",
+    "Gallop.CourseBillboardController.BillboardInfo",
+    "Gallop.CourseBillboardController",
+    "Gallop.CourseCameraController.RaceHorseInfo",
+    "Gallop.CourseCameraController.CameraType",
+    "Gallop.CourseCameraController.Context",
+    "Gallop.CourseCameraController.<>c",
+    "Gallop.CourseCameraController",
+    "Gallop.CourseCar",
+    "Gallop.CourseEnvParam",
+    "Gallop.CourseEventManager.CourseEvent",
+    "Gallop.CourseEventManager",
+    "Gallop.CourseEventParam.<>c",
+    "Gallop.CourseEventParam.<>c__DisplayClass39_0",
+    "Gallop.CourseEventParam.<>c__DisplayClass40_0",
+    "Gallop.CourseEventParam.<>c__DisplayClass41_0",
+    "Gallop.CourseEventParam",
+    "Gallop.CourseFlag",
+    "Gallop.CourseGoalGate",
+    "Gallop.CourseHierarchyBillboardController",
+    "Gallop.CourseLane",
+    "Gallop.CourseLaneAnim.Key",
+    "Gallop.CourseLaneAnim",
+    "Gallop.CourseLightProbe",
+    "Gallop.CourseManager",
+    "Gallop.CourseManagerReplay.<Start>d__11",
+    "Gallop.CourseManagerReplay",
+    "Gallop.CoursePostFilmSetGroup.TimeData",
+    "Gallop.CoursePostFilmSetGroup.PostFilmParam",
+    "Gallop.CoursePostFilmSetGroup.BloomParam",
+    "Gallop.CoursePostFilmSetGroup.DiffusionParam",
+    "Gallop.CoursePostFilmSetGroup.DirectionalLightParam",
+    "Gallop.CoursePostFilmSetGroup.CharacterParam",
+    "Gallop.CoursePostFilmSetGroup.PostFilmParamSet",
+    "Gallop.CoursePostFilmSetGroup",
+    "Gallop.CourseSkydome",
+    "Gallop.CourseStartGate",
+    "Gallop.CourseStartGateNull",
+    "Gallop.CourseTree",
+    "Gallop.CourseWeatherData.WeatherParam",
+    "Gallop.CourseWeatherData",
+    "Gallop.ICourseBaseObject",
+    "Gallop.ICourseBg",
+    "Gallop.ICourseManager",
+    "Gallop.ICourseStartGate",
+    "Gallop.EventCourseParam",
+    "Gallop.CourseSetStatusAdjuster.TargetStatusType",
+    "Gallop.CourseSetStatusAdjuster.<>c",
+    "Gallop.CourseSetStatusAdjuster",
+    "Gallop.HorseSlopeCalculator",
+    "Gallop.JikkyoTrigger.StraightData",
+    "Gallop.IRaceCourseDownloadView",
+    "Gallop.RaceLoaderCourseBaseObject.<OnLoadEnd>d__13",
+    "Gallop.RaceLoaderCourseBaseObject",
+    "Gallop.RaceLoaderCourseEventParam.<OnLoad>d__8",
+    "Gallop.RaceLoaderCourseEventParam.<OnLoadEnd>d__7",
+    "Gallop.RaceLoaderCourseEventParam",
+    "Gallop.RaceLoaderCourseLightProbe.<OnLoadEnd>d__6",
+    "Gallop.RaceLoaderCourseLightProbe",
+    "Gallop.RaceLoaderCourseStartGate.<OnLoadEnd>d__16",
+    "Gallop.RaceLoaderCourseStartGate",
+    "Gallop.RaceLoaderCourseGoalGate.<OnLoadEnd>d__9",
+    "Gallop.RaceLoaderCourseGoalGate",
+    "Gallop.RaceLoaderCourseGoalGateFlower.<OnLoadEnd>d__8",
+    "Gallop.RaceLoaderCourseGoalGateFlower",
+    "Gallop.RaceLoaderCourseTree.<OnLoadEnd>d__6",
+    "Gallop.RaceLoaderCourseTree",
+    "Gallop.RaceLoaderCourseAudience.<OnLoadEnd>d__16",
+    "Gallop.RaceLoaderCourseAudience",
+    "Gallop.RaceLoaderCourseCar.<OnLoadEnd>d__7",
+    "Gallop.RaceLoaderCourseCar",
+    "Gallop.RaceLoaderCourseFlag.<OnLoadEnd>d__6",
+    "Gallop.RaceLoaderCourseFlag",
+    "Gallop.RaceLoaderCourseEnvParam.<>c__DisplayClass11_0",
+    "Gallop.RaceLoaderCourseEnvParam.<>c__DisplayClass15_0",
+    "Gallop.RaceLoaderCourseEnvParam.<OnLoad>d__11",
+    "Gallop.RaceLoaderCourseEnvParam.<OnLoadEnd>d__13",
+    "Gallop.RaceLoaderCourseEnvParam",
+    "Gallop.RaceLoaderCourseSkydome.<OnLoadEnd>d__6",
+    "Gallop.RaceLoaderCourseSkydome",
+    "Gallop.RaceLoaderCourseTexture.<>c__DisplayClass23_0",
+    "Gallop.RaceLoaderCourseTexture.<>c__DisplayClass23_1",
+    "Gallop.RaceLoaderCourseTexture.<OnLoadEnd>d__14",
+    "Gallop.RaceLoaderCourseTexture",
+    "Gallop.RaceLoaderCourseLane.<>c__DisplayClass14_0",
+    "Gallop.RaceLoaderCourseLane.<OnLoad>d__14",
+    "Gallop.RaceLoaderCourseLane.<OnLoadEnd>d__12",
+    "Gallop.RaceLoaderCourseLane",
+    "Gallop.RaceLoaderCourseMonitorTexture.<OnLoadEnd>d__6",
+    "Gallop.RaceLoaderCourseMonitorTexture",
+    "Gallop.RaceLoaderCourseCameraShadowDistanceParam.<OnLoadEnd>d__6",
+    "Gallop.RaceLoaderCourseCameraShadowDistanceParam",
+    "Gallop.RaceLoaderEffect.CourseEffectType",
+    "Gallop.RaceLoaderManager.CourseContext",
+    "Gallop.RaceLoaderManager.<LoadCourse>d__203",
+    "Gallop.RaceLoaderManager.<LoadCourse>d__204",
+    "Gallop.RaceEventCrowdController.TriggerTopFinalCornerBefore",
+    "Gallop.SkillAbilityValueMultiplyFinalCornerEndOrder",
+    "Gallop.SkillAbilityValueMultiplyOrderUpCountCornerPhaseEndAfter",
+    "Gallop.SkillTriggerCourseCornerCount",
+    "Gallop.SkillTriggerCourseRotation",
+    "Gallop.SkillTriggerStraightRandom",
+    "Gallop.SkillTriggerWhileInStraightRandom",
+    "Gallop.SkillTriggerLastStraightRandom",
+    "Gallop.SkillTriggerLastStraightOneTime",
+    "Gallop.SkillTriggerStraightFrontType",
+    "Gallop.SkillTriggerSlope",
+    "Gallop.SkillTriggerSlopeRandom",
+    "Gallop.SkillTriggerUpSlopeRandom",
+    "Gallop.SkillTriggerDownSlopeRandom",
+    "Gallop.SkillTriggerCorner",
+    "Gallop.SkillTriggerCornerRandom",
+    "Gallop.SkillTriggerAllCornerRandom.<>c",
+    "Gallop.SkillTriggerAllCornerRandom.<>c__DisplayClass2_0",
+    "Gallop.SkillTriggerAllCornerRandom",
+    "Gallop.SkillTriggerFinalCorner",
+    "Gallop.SkillTriggerFinalCornerRandom",
+    "Gallop.SkillTriggerFinalCornerLaterHalf",
+    "Gallop.SkillTriggerCourseBasisDistance",
+    "Gallop.SkillTriggerCourseDistanceType",
+    "Gallop.SkillTriggerCourseDistance",
+    "Gallop.SkillTriggerChangeOrderUpCorner",
+    "Gallop.SkillTriggerChangeOrderUpFinalCornerAfter",
+    "Gallop.SkillTriggerChangeOrderDownCorner",
+    "Gallop.SkillTriggerChangeOrderDownFinalCornerAfter",
+    "Gallop.SkillTriggerOrderRateFinalCornerEnd",
+    "Gallop.SkillTriggerOrderFinalCornerEnd",
+    "Gallop.RaceDefine.CourseDistanceType",
+    "Gallop.RaceDefine.StraightFrontType",
+    "Gallop.RaceDefine.CourseAround",
+    "Gallop.RaceDefine.CoursePathType",
+    "Gallop.RaceDefine.SlopeType",
+    "Gallop.IRaceCourseAttributeAccessor",
+    "Gallop.RaceCourseAttributeAccessorNull",
+    "Gallop.RaceParamDefine.CourseSetAdjustParam.CoefAndThreshold",
+    "Gallop.RaceParamDefine.CourseSetAdjustParam",
+    "Gallop.RaceParamDefine.SlopeParam",
+    "Gallop.PartsSingleModeCourseImage",
+    "Gallop.SingleModeDefine.RaceRecommendedCourse",
+    "Gallop.StaticVariableDefine.Race.CourseCamera",
+    "Gallop.StaticVariableDefine.Race.CourseCameraSwitchParam",
+    "Gallop.StaticVariableDefine.Race.CourseCutNoParam",
+    "Gallop.StaticVariableDefine.Race.CourseLane",
+    "Gallop.StaticVariableDefine.Race.CourseBillboardController",
+    "Gallop.StaticVariableDefine.Race.CourseEnvParam",
+    "Gallop.StaticVariableDefine.Race.CourseAudience",
+    "Gallop.StaticVariableDefine.Race.RaceLoaderCourseAudience",
+    "Gallop.Live.Cutt.LiveTimelineDefine.CornerMouthType"
+  ]
+}

@@ -517,10 +517,14 @@ def test_confirm_records_which_skills_fired(app: Flask, make_user) -> None:
 
 
 def test_replay_series_is_absent_without_telemetry(app: Flask) -> None:
-    """Telemetry only exists when a replay was open; the page must
-    simply omit the chart rather than error."""
+    """With no live telemetry AND no scenario blob there is nothing to
+    build a replay from; the page must simply omit the chart rather
+    than error. (A payload that does carry the blob now gets a replay
+    parsed out of it — that path has its own tests.)"""
+    payload = _payload()
+    payload.pop("scenario", None)
     with app.app_context():
-        capture = captures_service.ingest(_payload(), submitted_by_user_id=None).capture
+        capture = captures_service.ingest(payload, submitted_by_user_id=None).capture
         assert captures_service.replay_series(capture) is None
 
 
@@ -559,6 +563,161 @@ def test_replay_series_builds_traces(app: Flask) -> None:
         # Runners come back in finishing order for a readable legend.
         finishes = [r["finish"] for r in series["runners"] if r["finish"]]
         assert finishes == sorted(finishes)
+
+
+def test_replay_series_falls_back_to_the_scenario_blob(app: Flask) -> None:
+    """A capture taken from the result screen has no live telemetry —
+    but its scenario blob contains the whole replay. The page must get
+    frames, events and a correctly scaled clock from the blob alone."""
+    replay_file = CAPTURE_DIR / "34408987_800095.upload.json"
+    if not replay_file.exists():
+        pytest.skip("no blob-bearing capture archived")
+    payload = json.loads(replay_file.read_text())
+    assert not payload.get("sim"), "fixture unexpectedly carries live telemetry"
+    payload["source"] = "memory_scan"
+    with app.app_context():
+        capture = captures_service.ingest(payload, submitted_by_user_id=None).capture
+        series = captures_service.replay_series(capture)
+        assert series is not None
+        assert series["frame_count"] > 50
+        # The two-clock rescale needs the blob's result records.
+        assert series["time_scale"] > 1.0
+        # And the event stream decodes from the blob's packed records.
+        assert series["events"] and series["events"]["skills"]
+        # No course geometry in the blob — that stays live-only.
+        assert series["course"] is None
+
+
+def test_blob_replay_matches_the_live_memory_replay() -> None:
+    """The blob parse and the live RaceSimulateData read describe the
+    same race — frame for frame, result for result, event for event.
+    This is the guarantee that lets the blob replace the live read as
+    the replay source. Lane/speed carry the blob's u16 quantization,
+    so those compare at quantization precision; everything else is
+    float32 in both sources and must match exactly."""
+    blob_file = CAPTURE_DIR / "34408987_800095.upload.json"
+    live_file = CAPTURE_DIR / "34408987_800095.withevents.json"
+    if not (blob_file.exists() and live_file.exists()):
+        pytest.skip("need both blob-only and live-telemetry captures")
+    from uma_ladder.services import race_blob
+
+    from_blob = race_blob.sim_from_payload(json.loads(blob_file.read_text()))
+    from_live = json.loads(live_file.read_text())["sim"]
+    assert from_blob is not None
+
+    assert len(from_blob["frames"]) == len(from_live["frames"])
+    for fb, fl in zip(from_blob["frames"], from_live["frames"], strict=True):
+        assert fb["t"] == fl["t"]
+        for hb, hl in zip(fb["h"], fl["h"], strict=True):
+            assert hb["Distance"] == hl["Distance"]
+            assert abs(hb["LanePosition"] - hl["LanePosition"]) < 1e-4
+            assert abs(hb["Speed"] - hl["Speed"]) < 1e-2
+            assert abs(hb["Hp"] - hl["Hp"]) <= 1.0
+            assert hb["BlockFrontHorseIndex"] == hl["BlockFrontHorseIndex"]
+
+    for rb, rl in zip(from_blob["horses"], from_live["horses"], strict=True):
+        for field in ("FinishOrder", "FinishTime", "StartDelayTime",
+                      "LastSpurtStartDistance", "RunningStyle"):
+            assert rb[field] == rl[field], field
+
+    assert len(from_blob["events"]) == len(from_live["events"])
+    for eb, el in zip(from_blob["events"], from_live["events"], strict=True):
+        assert eb["t"] == el["t"]
+        assert eb["type"] == el["type"]
+        assert eb["param"] == el["param"]
+
+
+def _events_capture(app: Flask):
+    """A capture that carries the event stream and course geometry."""
+    replay_file = CAPTURE_DIR / "34408987_800095.withevents.json"
+    if not replay_file.exists():
+        pytest.skip("no event-bearing capture archived")
+    payload = json.loads(replay_file.read_text())
+    payload["source"] = "memory_scan"
+    return captures_service.ingest(payload, submitted_by_user_id=None).capture
+
+
+def test_replay_reads_course_geometry(app: Flask) -> None:
+    """Corners and slopes come from the game's own course tables, so
+    the track strip is the real shape of the venue rather than a
+    generic bar."""
+    with app.app_context():
+        series = captures_service.replay_series(_events_capture(app))
+        course = series["course"]
+        assert course["corners"], "no corners decoded"
+        # Segments are ordered and lie inside the course.
+        for key in ("straights", "corners", "slopes"):
+            for seg in course[key]:
+                assert 0 <= seg["start"] < seg["end"] <= series["race_distance"] + 1
+        # Exactly one corner is the final one — that's what the UI
+        # highlights, and two would mean we mis-read the flag.
+        assert sum(1 for c in course["corners"] if c["is_final"]) == 1
+        # The finish line is the course length, not how far runners ran
+        # past it before pulling up.
+        assert series["race_distance"] < series["max_distance"]
+
+
+def test_replay_clock_matches_the_recorded_finish_times(app: Flask) -> None:
+    """The simulation's clock runs slower than the clock the game
+    quotes finishing times on. Unless we rescale, the replay would end
+    at 76s for a race the results table calls 90s."""
+    with app.app_context():
+        capture = _events_capture(app)
+        series = captures_service.replay_series(capture)
+        assert series["time_scale"] > 1.0
+        winner = min(
+            (r for r in capture.payload_json["runners"] if r.get("finish_time_seconds")),
+            key=lambda r: r["finish_position"],
+        )
+        # Playback runs to the last sample, which is a beat past the
+        # line — but it must be the winner's time, not 20% short of it.
+        assert series["duration"] >= winner["finish_time_seconds"]
+        assert series["duration"] < winner["finish_time_seconds"] + 3
+
+
+def test_replay_decodes_skill_activations(app: Flask) -> None:
+    """Every fired skill, when it fired, how long it lasted, and — via
+    the affected-runner bitmask — whether it was a self-buff or thrown
+    at rivals."""
+    with app.app_context():
+        capture = _events_capture(app)
+        series = captures_service.replay_series(capture)
+        skills = series["events"]["skills"]
+        assert skills, "no activations decoded"
+        # Chronological, inside the race, and every one has a duration.
+        assert skills == sorted(skills, key=lambda s: s["t"])
+        for s in skills:
+            assert 0 <= s["t"] <= series["duration"] + 1
+            assert s["duration"] >= 0
+            assert 0 <= s["runner"] < series["runner_count"]
+            # Placed on the chart as well as the clock.
+            assert 0 <= s["x"] <= series["max_distance"] + 1
+            # A caster is never listed among its own targets, or a
+            # plain self-buff would render as a debuff.
+            assert s["runner"] not in s["targets"]
+        # Skills that never fired are dropped, so the count is below the
+        # number equipped across the field.
+        equipped = sum(
+            len(r.get("skills") or []) for r in capture.payload_json["runners"]
+        )
+        assert 0 < len(skills) < equipped
+        # At least one debuff landed on someone else — that decode is
+        # the part a plain "did it fire" flag can't express.
+        assert any(s["targets"] for s in skills)
+
+
+def test_replay_feed_is_chronological_commentary(app: Flask) -> None:
+    with app.app_context():
+        series = captures_service.replay_series(_events_capture(app))
+        feed = series["events"]["feed"]
+        assert feed
+        assert [e["t"] for e in feed] == sorted(e["t"] for e in feed)
+        for e in feed:
+            assert e["who"] and e["text"]
+            assert e["kind"] in ("skill", "debuff", "moment")
+        # Race moments are translated, never surfaced as engine enum
+        # names like "ReleaseConservePower".
+        assert not any(e["text"][0].isupper() and "Power" in e["text"] for e in feed)
 
 
 def test_sectionals_read_in_finishing_order(app: Flask) -> None:

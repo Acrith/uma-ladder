@@ -4,6 +4,49 @@ User-visible changes, newest first. Internal hardening (refactors,
 test additions, dependency bumps) is not listed here — see the git
 log for the full history.
 
+## 2026-08-06
+
+- **Every capture now carries a replay.** The race replay no longer
+  needs a replay open in the game at capture time — the full
+  frame-by-frame race is parsed straight out of the saved result, so
+  a capture taken from the plain results screen gets one too, and
+  races uploaded before this existed gain theirs retroactively.
+
+- **The course reads like a course.** Above the timeline sits a
+  proper course profile — elevation, uphills and downhills, back
+  straight, corners, final corner and home straight, and the four
+  race legs through last spurt, every boundary marked in metres. The
+  field view gained subtle running-lane guides, and the header now
+  narrates where the leaders are ("middle leg · back straight,
+  uphill").
+
+## 2026-08-05
+
+- **Race results can be captured from the game instead of typed in.**
+  A small desktop recorder reads a finished Room Match and uploads it:
+  every runner's uma, exact stats, all ten aptitude grades and their
+  full skill list, plus the finishing order, times and margins. It
+  arrives as a pending capture for review at `/captures` — nothing
+  reaches the ladder until a human confirms it, same as screenshots
+  always were. Uploading the same race twice is recognised, so it
+  doesn't matter who in the room runs it.
+
+- **Races have a replay.** When the recorder ran with a replay open,
+  the race page plays it back: a bird's-eye view of the field moving
+  at real race speed, a timeline of running position across the
+  course, and per-200 m sectionals scored against the field. Pick a
+  runner to follow them and see their stamina and speed.
+
+- **The replay shows what each skill did.** Every activation is on the
+  timeline with how long it lasted, skills thrown at rivals are marked
+  as such, and an "as it happened" commentary track lists the race in
+  order and lights up as it plays. Skills that couldn't work on the
+  track are struck through; ones that never fired are greyed out.
+
+- **The track is the real track.** Corners, straights and hills come
+  from the game's own course data for the venue that ran, along with
+  each runner's actual last-spurt point.
+
 ## 2026-08-01
 
 - **Organizers can step back a race stage.** Pasting a room code

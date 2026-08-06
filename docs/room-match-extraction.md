@@ -365,7 +365,7 @@ Gallop.RaceSimulateFrameData
 Gallop.RaceSimulateEventData
   .frameTime   float
   .type        SimulateEventType
-  .param       int[5]
+  .param       int[]            — variable length; see "The event stream"
 
 Gallop.RaceSimulateHorseResultData
   .FinishOrder .FinishTime .FinishTimeRaw .FinishDiffTime
@@ -397,10 +397,12 @@ simply never needed to decode the bytes: the game does it for us.
 Sample dump checked in at
 `room-match-scout/captures/85520900_800072.frames.json`.
 
-Unexplained so far: frame spacing is uneven — 1/15 s at the start
-(0.067, 0.133, 0.200 ...) but ~1.07 s mid-race. Either genuine
-variable-rate keyframing or an artefact of reading a replay
-mid-playback. Confirm before building anything on the timestamps.
+Frame spacing is uneven — 1/15 s at the start (0.067, 0.133,
+0.200 ...) but ~1.07 s mid-race. This is genuine variable-rate
+keyframing, not an artefact: it reproduces across captures and across
+re-reads of the same replay. Anything that plays the data back has to
+interpolate between samples rather than step them, or runners teleport
+~20 m per tick mid-race (see PR-X9).
 
 **The byte decoder was independently confirmed by this.** Run against
 the same race, the two agree on every finishing position, every finish
@@ -413,14 +415,168 @@ game's own parse gives.
 | | saved-result byte decode | live `RaceSimulateData` |
 |---|---|---|
 | available | any time after the race, no replay needed | only while a replay is loaded |
-| gives | placings, times, gaps, running style | all of that **plus** spurt distance, start delay, per-frame replay, typed events |
+| gives | **everything** — frames, results, typed events (see "blob layout is public" below; server parses it via `uma_ladder/services/race_blob.py`) | the same data, plus **course geometry** from `RaceManager` |
 | risk | none beyond the read itself | needs the user to open a replay |
 
-The extractor should do **both**: always take the saved-result decode
-(it works unattended), and additionally grab `RaceSimulateData` when a
-replay happens to be live. That makes the rich data opportunistic
-rather than a requirement, and it retires the whole "crack the
-telemetry encoding" workstream.
+~~The extractor should do both...~~ **Superseded 2026-08-06:** the
+blob turned out to carry the complete replay, and the site now parses
+it server-side for any capture (retroactively included). The live
+read's remaining unique value is course geometry and cross-validation.
+
+### The blob layout is public — hakuraku already ships it ✅ (2026-08-06)
+
+[hakuraku.moe](https://hakuraku.moe) (MIT, [github.com/ayaliz/hakuraku](https://github.com/ayaliz/hakuraku),
+actively developed) is a community race-analysis site fed by
+packet-captured race data. Its `src/data/RaceDataParser.ts` documents
+the **complete scenario-blob layout**, which we verified byte-for-byte
+against our own InyanyaCup #1 blob AND cross-checked against the live
+`RaceSimulateData` capture of the same race — every value agrees:
+
+```
+header:       int32 maxLength, int32 version              (4 + maxLength bytes)
+race struct:  f32 distanceDiffMax, i32 horseNum,
+              i32 horseFrameSize (12), i32 horseResultSize (31)
+padding:      i32 size + size bytes            (×3, between each section)
+frame block:  i32 frameCount, i32 frameSize, then frameCount frames:
+                f32 time, then per horse (12 bytes):
+                f32 distance, u16 lane (×1/10000), u16 speed (×1/100),
+                u16 hp, i8 temptationMode, i8 blockFrontHorseIndex
+result block: horseNum × 31 bytes:
+                i32 finishOrder, f32 finishTime, f32 finishDiffTime,
+                f32 startDelayTime, u8 gutsOrder, u8 wizOrder,
+                f32 lastSpurtStartDistance, u8 runningStyle,
+                i32 defeat, f32 finishTimeRaw
+event block:  i32 eventCount, then per event:
+                i16 eventSize, f32 frameTime, i8 type, i8 paramCount,
+                paramCount × i32
+```
+
+Consequences:
+
+- **The saved result carries the FULL replay.** Frames, results and
+  events all live in the blob — the "replay must be open" constraint
+  on telemetry was never real. Parsing frames from the blob gives
+  every capture a replay. (Course geometry is the one thing still
+  live-only — it sits on `RaceManager`, not in the blob.)
+- **Why our earlier byte-level sweeps failed**: we swept for float32
+  speed arrays, but lane/speed/hp are quantized u16; and we divided
+  the telemetry span evenly without the 4-byte frame time, so no
+  stride matched. Both hypotheses were falsified for the right data
+  in the wrong encoding.
+- Our hand-cracked 31-byte result record matches their layout
+  offset-for-offset, and their event record is exactly the shape we
+  decoded from live memory.
+- Their JP fallback parser shows the JP client uses 39-byte core
+  results and more event types (`STAMINA_LIMIT_BREAK_BUFF`,
+  `COMPETE_BEFORE_SPURT`, `STAMINA_KEEP`, `SECURE_LEAD`, Zenkai
+  Spurt) — Global will likely gain these; unknown event types must
+  stay non-fatal.
+- Their derived diagnostics are a roadmap for our race page: start
+  delay classification, last-spurt delay ("potential spurt issue"),
+  HP death point ("Died −10m"), duel time, downhill-mode procs,
+  pace up/down time, wit-lottery analysis, position-keep heuristics.
+  All computable from data we already store.
+
+### The event stream — decoded ✅ (2026-08-05)
+
+`_simEvDataList` is what the frame data can't express: *why* the race
+changed shape. Scouted live from an 11-runner replay (`scout_events.py`,
+raw dump at `room-match-scout/events.json`).
+
+`Gallop.SimulateEventType` has seven members, of which four occur:
+
+| member | seen | meaning |
+|---|---|---|
+| `Skill` | 155 | a skill slot resolving — fired *or not* |
+| `CompeteFight` | 5 | runners fighting for position |
+| `ReleaseConservePower` | 5 | held-back stamina released |
+| `CompeteTop` | 3 | contesting the lead |
+| `Score`, `ChallengeMatchPoint`, `NOUSE_2` | 0 | other modes |
+
+`param` is variable-length: 1 int for the non-skill events (the runner
+index), 6 for `Skill`:
+
+```
+param[0]  caster runner index      0..N-1
+param[1]  skill id                 == UmaSkill.gametora_id
+param[2]  duration, 1/10000 s      -1 => equipped but never fired
+param[3]  always 0 in every sample
+param[4]  affected-runner bitmask  1 << i per runner affected; 0 if never fired
+param[5]  always 0 in every sample
+```
+
+Two decodes worth calling out:
+
+**`param[4]` is a bitmask, and it identifies debuffs.** Most values are
+a single bit equal to `1 << param[0]` — a self-buff. Multi-bit values
+are skills thrown at other runners. This is self-validating: in the
+sample race, *Hesitant Front Runners* (cast by runner 2) carried mask
+`177` = runners 0, 4, 5, 7 — exactly the four runners who had fired
+*Top Runner* and triggered `CompeteTop`. The engine's own idea of "who
+is front-running" agreed with ours.
+
+**`param[2]` is a duration, and it is already course-scaled.** The ten
+distinct values on a 1600 m race are all `base × 1.6 × 10000` for clean
+base durations (0.9, 1.2, 1.8, 2.0, 2.4, 3.0, 4.0, 5.0, 6.0 s), the
+non-integer bases landing one unit low from float truncation
+(14399 for 1.44 s). ⚠️ **Caveat: the `/10000` and the `×1.6` are
+confounded in a single-distance sample.** A capture at another distance
+separates them — a 3.0 s base skill should read 66000 on a 2200 m race
+if the model is right. Until that check runs, treat the absolute
+seconds as provisional; the *relative* bar lengths on the replay are
+correct either way.
+
+`frameTime` is on the simulation clock, so it needs the same rescale as
+the frame timestamps (below).
+
+### Course geometry — decoded ✅ (2026-08-05)
+
+The client holds the shape of the loaded course on `Gallop.RaceManager`
+(`scout_course.py`, dump at `room-match-scout/course.json`):
+
+```
+Gallop.RaceManager
+  ._straightList   List<CourseStraight>   StartDistance, EndDistance, Range, frontType
+  ._cornerList     List<CourseCorner>     StartDistance, EndDistance, cornerNumber, IsFinalCorner
+  ._slopeList      List<CourseSlope>      StartDistance, EndDistance, SlopeType (Up/Down)
+```
+
+Kyoto 1600 m reads as: straight 200–720 (uphill 520–695), corner 3
+720–995, **final corner 995–1272**, home straight 1272–1600 (downhill
+820–970). The lists are authoritative (`_size` matches), and the
+opening 0–200 m is deliberately unlisted — it's the start chute.
+
+This matters because it means **no GameTora course import is needed**:
+each capture carries its own geometry, correct for whatever venue ran.
+It lives only while a race or replay is loaded, so the extractor reads
+it in the same pass as the sim data — but independently, since either
+can be present without the other.
+
+### Two clocks: simulation time vs quoted race time ⚠️
+
+Frame and event timestamps are **not** the times the game reports as
+finishing times. On the sample race, frames run 0 → 75.86 s while the
+winner's `FinishTime` is 90.533 s.
+
+The relationship is a constant. Interpolating each runner's frame time
+at the finish line and dividing gives 1.21330–1.21371 across all
+eleven — a spread of 0.0004, i.e. interpolation error alone.
+
+Do not hard-code it. `_time_scale()` in `services/race_captures.py`
+measures it per capture from `FinishTime` ÷ interpolated crossing time
+and takes the median, so a race with a different factor (or a capture
+with one bad trace) still lines up. Without this the replay clock ends
+at 76 s for a race the results table calls 90 s.
+
+Related: the telemetry runs *past* the line — runners pull up — so the
+last sampled distance (1631 m here) is not the course length. Use the
+geometry's maximum end distance for anything that bins or scales by
+distance, or sectionals credit metres that were never raced.
+
+**`LastSpurtStartDistance` corroborates the 2/3 phase edge.** Every
+runner's game-supplied spurt point on the 1600 m course landed at
+~1069 m = 0.668 of the course, against the community simulators'
+2/3 convention. The 1/6 opening edge remains unverified convention.
 
 ### Cross-race validation (2 captures, 2026-08-04)
 

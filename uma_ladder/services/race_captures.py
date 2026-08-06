@@ -109,6 +109,19 @@ def _as_int(value: Any) -> int | None:
     return None
 
 
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def validate(payload: Any) -> dict:
     """Reject payloads we cannot key or attribute. Everything else is
     accepted and preserved — being permissive here is deliberate."""
@@ -698,7 +711,21 @@ def replay_series(capture: RaceCapture) -> dict | None:
     sim = payload.get("sim") or {}
     frames = sim.get("frames") or []
     if not frames:
-        return None
+        # No live telemetry captured — but the scenario blob every
+        # capture carries contains the full replay (frames, results,
+        # events). Parsing it here means result-screen captures get a
+        # replay, and older uploads gain one retroactively.
+        from . import race_blob
+
+        blob_sim = race_blob.sim_from_payload(payload)
+        if not blob_sim:
+            return None
+        # Course geometry only exists in live captures; carry it over
+        # if a frameless sim happened to record it.
+        if sim.get("course"):
+            blob_sim["course"] = sim["course"]
+        sim = blob_sim
+        frames = sim["frames"]
 
     names_by_index: dict[int, str] = {}
     for idx, r in enumerate(_runner_rows(payload)):
@@ -766,6 +793,25 @@ def replay_series(capture: RaceCapture) -> dict | None:
 
     if max_dist <= 0:
         return None
+
+    # Two corrections that everything downstream depends on:
+    #   * the finish line is where the course says it is, not where the
+    #     last telemetry sample happens to fall (runners overrun it);
+    #   * the replay clock is the clock the results table quotes, so a
+    #     race that "took 90.5s" plays for 90.5s.
+    course = _course_segments(sim)
+    race_distance = _course_distance(sim) or _preset_distance(capture) or max_dist
+    if course:
+        course["profile"] = _elevation_profile(course["slopes"], race_distance)
+    scale = _time_scale(sim, frames, race_distance)
+    if scale != 1.0:
+        t_axis = [round(t * scale, 3) for t in t_axis]
+
+    events = _replay_events(sim, scale, n)
+    if events:
+        _place_events(events, t_axis, x_axis, runners)
+        events["feed"] = _event_feed(events, runners)
+
     max_gap = max(
         (p[1] for r in runners for p in r["gap"]), default=0.0
     )
@@ -787,8 +833,12 @@ def replay_series(capture: RaceCapture) -> dict | None:
         "t_axis": t_axis,
         "duration": t_axis[-1] if t_axis else 0.0,
         "runner_count": n,
-        "phases": _phase_bands(max_dist),
-        "sectionals": _sectionals(runners, max_dist),
+        "phases": _phase_bands(race_distance),
+        "course": course,
+        "events": events,
+        "race_distance": round(race_distance, 1),
+        "time_scale": round(scale, 5),
+        "sectionals": _sectionals(runners, race_distance),
         "max_distance": max_dist,
         "max_gap": max_gap or 1.0,
         "max_hp": max_hp or 1.0,
@@ -802,11 +852,18 @@ def replay_series(capture: RaceCapture) -> dict | None:
     }
 
 
-# Opening / middle / final split at 1/6 and 2/3 of the course. This is
-# the convention the community race simulators use; it is NOT read from
-# game data, so treat the band edges as indicative. The spurt marker
-# beside them *is* game-supplied and exact.
-_PHASE_EDGES = ((0.0, 1 / 6, "Opening"), (1 / 6, 2 / 3, "Middle"), (2 / 3, 1.0, "Final"))
+# The game's four race phases, split at 1/6, 2/3 and 5/6 of the course
+# — the same bands umalator and the other community simulators draw, so
+# players read them on sight. The 2/3 edge is corroborated by game
+# data (every runner's game-supplied LastSpurtStartDistance on a
+# 1600 m course landed at ~1069 m = 0.668); 1/6 and 5/6 are the
+# engine's phase convention.
+_PHASE_EDGES = (
+    (0.0, 1 / 6, "Opening leg"),
+    (1 / 6, 2 / 3, "Middle leg"),
+    (2 / 3, 5 / 6, "Final leg"),
+    (5 / 6, 1.0, "Last spurt"),
+)
 SECTIONAL_M = 200
 
 
@@ -874,6 +931,323 @@ def _sectionals(runners: list[dict], max_distance: float) -> dict | None:
         "means": [round(m, 2) if m else None for m in means],
         "spread": round(spread, 3) or 1.0,
     }
+
+
+# ─── course geometry, event stream, and the two clocks ───────────────
+
+def _course_segments(sim: dict) -> dict | None:
+    """The track itself: straights, corners and hills, in metres.
+
+    Captured per race from the game's own course tables, so it needs no
+    external course database and is correct for whatever venue ran.
+    """
+    course = sim.get("course") or {}
+    out: dict = {"straights": [], "corners": [], "slopes": []}
+    for seg in course.get("straights") or []:
+        out["straights"].append(
+            {
+                "start": _as_float(seg.get("start")),
+                "end": _as_float(seg.get("end")),
+                # Front = the finishing straight, AcrossFront = the back
+                # stretch — real racing names, straight from the game.
+                "front_type": seg.get("front_type"),
+            }
+        )
+    for seg in course.get("corners") or []:
+        out["corners"].append(
+            {
+                "start": _as_float(seg.get("start")),
+                "end": _as_float(seg.get("end")),
+                "number": _as_int(seg.get("number")),
+                "is_final": bool(seg.get("is_final")),
+            }
+        )
+    for seg in course.get("slopes") or []:
+        kind = str(seg.get("slope_type") or "").lower()
+        out["slopes"].append(
+            {
+                "start": _as_float(seg.get("start")),
+                "end": _as_float(seg.get("end")),
+                "kind": "up" if kind == "up" else "down" if kind == "down" else kind,
+            }
+        )
+    if not any(out.values()):
+        return None
+    return out
+
+
+def _elevation_profile(slopes: list[dict], distance: float) -> list | None:
+    """A schematic side-view of the course, as (metre, height 0..1).
+
+    Integrated from the slope segments assuming constant grade — the
+    game gives positions but not steepness, so the silhouette's shape
+    (where the hills are) is real while its heights are indicative.
+    """
+    if not slopes or not distance:
+        return None
+    points: list[tuple[float, float]] = [(0.0, 0.0)]
+    height = 0.0
+    cursor = 0.0
+    for seg in sorted(slopes, key=lambda s: s["start"] or 0):
+        start, end = seg["start"] or 0.0, seg["end"] or 0.0
+        if end <= start:
+            continue
+        if start > cursor:
+            points.append((start, height))
+        height += (end - start) * (1 if seg["kind"] == "up" else -1)
+        points.append((end, height))
+        cursor = end
+    if cursor < distance:
+        points.append((distance, height))
+    lo = min(h for _, h in points)
+    hi = max(h for _, h in points)
+    if hi - lo < 1e-6:
+        return None
+    return [[round(d, 1), round((h - lo) / (hi - lo), 3)] for d, h in points]
+
+
+def _preset_distance(capture: RaceCapture) -> float | None:
+    """The race's official distance, once the capture is attached.
+
+    Blob-parsed replays have no course geometry, and the telemetry
+    overruns the line — but a confirmed capture's race preset states
+    the distance outright, which keeps the two-clock rescale exact.
+    """
+    try:
+        race = capture.official_race
+        distance = getattr(getattr(race, "preset", None), "distance_meters", None)
+        return float(distance) if distance else None
+    except Exception:  # noqa: BLE001 — detached instance, missing preset
+        return None
+
+
+def _course_distance(sim: dict) -> float | None:
+    """Where the finish line actually is.
+
+    The telemetry runs past it — runners decelerate after the line — so
+    binning or scaling against the last sampled distance would stretch
+    the whole race by however far the field overran.
+    """
+    course = sim.get("course") or {}
+    ends = [
+        _as_float(seg.get("end"))
+        for key in ("straights", "corners")
+        for seg in course.get(key) or []
+    ]
+    ends = [e for e in ends if e]
+    return max(ends) if ends else None
+
+
+def _time_scale(sim: dict, frames: list, distance: float | None) -> float:
+    """Frame time -> race time.
+
+    The simulation's clock and the clock the game reports finishing
+    times on are not the same; they differ by a fixed factor per race.
+    Rather than hard-code it, measure it: interpolate when each runner
+    crossed the line in frame time and compare against the finish time
+    the game recorded. Median, so one bad trace can't skew it.
+    """
+    horses = sim.get("horses") or []
+    if not distance or not frames or not horses:
+        return 1.0
+    ratios: list[float] = []
+    for idx, horse in enumerate(horses):
+        finish = _as_float(horse.get("FinishTime"))
+        if not finish:
+            continue
+        prev: tuple[float, float] | None = None
+        for frame in frames:
+            row = frame.get("h") or []
+            if idx >= len(row):
+                break
+            t = _as_float(frame.get("t")) or 0.0
+            d = _as_float(row[idx].get("Distance")) or 0.0
+            if prev and prev[1] < distance <= d and d > prev[1]:
+                a = (distance - prev[1]) / (d - prev[1])
+                crossed = prev[0] + a * (t - prev[0])
+                if crossed > 0:
+                    ratios.append(finish / crossed)
+                break
+            prev = (t, d)
+    if not ratios:
+        return 1.0
+    ratios.sort()
+    return ratios[len(ratios) // 2]
+
+
+# param[2] of a Skill event is the effect duration in ten-thousandths of
+# a second, already scaled for course length by the game. -1 marks a
+# skill that was equipped but never fired.
+_SKILL_DURATION_UNIT = 10_000.0
+_EVENT_NEVER_FIRED = -1
+
+
+def _catalog_names_by_game_id(skill_ids: set[int]) -> dict[int, str]:
+    """Catalog names for the game's skill ids, where we have them."""
+    if not skill_ids:
+        return {}
+    from ..models import UmaSkill
+
+    try:
+        rows = db.session.scalars(
+            select(UmaSkill).where(UmaSkill.gametora_id.in_(skill_ids))
+        ).all()
+    except Exception:  # noqa: BLE001
+        return {}
+    return {r.gametora_id: r.name_en for r in rows if r.gametora_id}
+
+
+def _replay_events(sim: dict, scale: float, runner_count: int) -> dict | None:
+    """The race's typed event stream, on the same clock as the replay.
+
+    Skill events carry who cast it, what fired, how long it lasted and —
+    via a bitmask — everyone it landed on, which is what separates a
+    self-buff from a debuff thrown at the field.
+    """
+    events = sim.get("events") or []
+    if not events:
+        return None
+
+    skills: list[dict] = []
+    moments: list[dict] = []
+    for ev in events:
+        kind = str(ev.get("type") or "")
+        param = ev.get("param") or []
+        t = (_as_float(ev.get("t")) or 0.0) * scale
+        if kind == "Skill":
+            if len(param) < 3 or param[2] == _EVENT_NEVER_FIRED:
+                continue  # equipped but never activated
+            caster = _as_int(param[0])
+            if caster is None or not (0 <= caster < runner_count):
+                continue
+            mask = _as_int(param[4]) if len(param) > 4 else 0
+            targets = [
+                i for i in range(runner_count) if (mask or 0) & (1 << i)
+            ]
+            skills.append(
+                {
+                    "t": round(t, 3),
+                    "runner": caster,
+                    "skill_id": _as_int(param[1]),
+                    "duration": round(
+                        (_as_float(param[2]) or 0.0) / _SKILL_DURATION_UNIT * scale, 3
+                    ),
+                    # A skill that lands on someone other than its caster
+                    # is acting on them, not buffing self.
+                    "targets": [i for i in targets if i != caster],
+                }
+            )
+        elif kind in ("CompeteTop", "CompeteFight", "ReleaseConservePower"):
+            who = _as_int(param[0]) if param else None
+            if who is None or not (0 <= who < runner_count):
+                continue
+            moments.append({"t": round(t, 3), "kind": kind, "runner": who})
+
+    if not skills and not moments:
+        return None
+
+    names = _catalog_names_by_game_id(
+        {s["skill_id"] for s in skills if s["skill_id"]}
+    )
+    for s in skills:
+        s["name"] = names.get(s["skill_id"]) or f"skill {s['skill_id']}"
+    skills.sort(key=lambda s: s["t"])
+    moments.sort(key=lambda m: m["t"])
+    return {"skills": skills, "moments": moments}
+
+
+def _place_events(events: dict, t_axis: list, x_axis: list, runners: list) -> None:
+    """Give every event a place on the chart as well as a time.
+
+    The timeline is drawn against distance, so an event that only knows
+    *when* it happened has nowhere to sit. Interpolating the leader's
+    distance at that moment puts it on the same x-axis as the traces,
+    and the caster's rank puts it on their own line.
+    """
+    if not t_axis or not x_axis:
+        return
+    by_index = {r["index"]: r for r in runners}
+
+    def at(t: float) -> tuple[float, float]:
+        """(leader distance, blend position) at race time t."""
+        if t <= t_axis[0]:
+            return x_axis[0], 0.0
+        if t >= t_axis[-1]:
+            return x_axis[-1], float(len(t_axis) - 1)
+        lo, hi = 0, len(t_axis) - 1
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if t_axis[mid] <= t:
+                lo = mid
+            else:
+                hi = mid - 1
+        span = t_axis[lo + 1] - t_axis[lo] if lo + 1 < len(t_axis) else 0
+        a = (t - t_axis[lo]) / span if span else 0.0
+        x = x_axis[lo] + (x_axis[min(lo + 1, len(x_axis) - 1)] - x_axis[lo]) * a
+        return x, lo + a
+
+    for item in list(events.get("skills") or []) + list(events.get("moments") or []):
+        x, pos = at(item["t"])
+        item["x"] = round(x, 1)
+        who = by_index.get(item["runner"])
+        if who and who["rank"]:
+            item["rank"] = who["rank"][min(int(pos), len(who["rank"]) - 1)]
+        if "duration" in item:
+            item["x_end"] = round(at(item["t"] + item["duration"])[0], 1)
+
+
+# What the non-skill events mean, in racing language rather than the
+# engine's. Anything not listed is dropped rather than shown raw.
+_MOMENT_TEXT = {
+    "CompeteTop": "contests the lead",
+    "CompeteFight": "fights for position",
+    "ReleaseConservePower": "kicks for home",
+}
+
+
+def _event_feed(events: dict, runners: list) -> list[dict]:
+    """One chronological commentary track over the whole race.
+
+    Skills and race moments interleaved, so playback can read out what
+    is happening rather than leaving it to be inferred from the lines.
+    """
+    names = {r["index"]: r["name"] for r in runners}
+    colors = {r["index"]: r["color"] for r in runners}
+    feed: list[dict] = []
+    for s in events.get("skills") or []:
+        feed.append(
+            {
+                "t": s["t"],
+                "runner": s["runner"],
+                "who": names.get(s["runner"], "?"),
+                "color": colors.get(s["runner"], "#94a3b8"),
+                "text": s["name"],
+                "detail": (
+                    f"hits {len(s['targets'])} rival"
+                    f"{'s' if len(s['targets']) != 1 else ''}"
+                    if s["targets"]
+                    else f"{s['duration']:.1f}s"
+                ),
+                "kind": "debuff" if s["targets"] else "skill",
+            }
+        )
+    for m in events.get("moments") or []:
+        text = _MOMENT_TEXT.get(m["kind"])
+        if not text:
+            continue
+        feed.append(
+            {
+                "t": m["t"],
+                "runner": m["runner"],
+                "who": names.get(m["runner"], "?"),
+                "color": colors.get(m["runner"], "#94a3b8"),
+                "text": text,
+                "detail": "",
+                "kind": "moment",
+            }
+        )
+    feed.sort(key=lambda e: (e["t"], e["kind"] != "moment"))
+    return feed
 
 
 def replay_for_race(race_id: int) -> dict | None:

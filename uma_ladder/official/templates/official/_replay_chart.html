@@ -10,9 +10,15 @@
       battle instead of the leader's.
 
    2. The timeline — the whole race at once: running position, phase
-      bands, and each runner's real last-spurt point.
+      bands, and each runner's real last-spurt point. Following a
+      runner also marks every skill they fired, as a dot on their line
+      with a bar for how long it lasted.
 
-   3. Sectionals — average speed per 200 m against the field's mean
+   3. The commentary — every skill activation and race moment in
+      order, lit as the clock reaches it. The chart shows shape; this
+      says what actually happened.
+
+   4. Sectionals — average speed per 200 m against the field's mean
       for that same segment. This is how the race is actually read:
       front-runners burn hot early and cool late, closers the reverse,
       and the winning move shows up as a bright cell.
@@ -68,7 +74,8 @@
     <div class="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <p class="label-eyebrow">
-          Field · <span data-phase-label class="text-cyan-300">opening</span>
+          Field · <span data-phase-label class="text-cyan-300">opening</span><span
+            data-track-segment class="text-slate-400"></span>
         </p>
         <p class="text-[11px] text-slate-500">
           <span data-camera-label>whole field</span> ·
@@ -76,24 +83,79 @@
         </p>
       </div>
 
-      {# Course progress: where we are, and in which phase. Corners and
-         straights would need course geometry we don't have. #}
-      <div class="relative mt-2 h-1.5 overflow-hidden rounded-full bg-slate-900">
-        {% for band in replay.phases %}
-          <div class="absolute inset-y-0 {{ ['bg-slate-700/50','bg-slate-700/25','bg-cyan-500/25'][loop.index0] }}"
-               style="left: {{ (band.start / replay.max_distance * 100) | round(2) }}%;
-                      width: {{ ((band.end - band.start) / replay.max_distance * 100) | round(2) }}%;"></div>
-        {% endfor %}
-        {% set spurts = replay.runners | map(attribute='spurt') | select | list %}
-        {% if spurts %}
-          <div class="absolute inset-y-0 w-px bg-amber-400/80"
-               style="left: {{ ((spurts | sum) / (spurts | length) / replay.max_distance * 100) | round(2) }}%;"
-               title="last spurt"></div>
+      {# The track itself. Corner and slope positions come from the
+         game's own course tables, captured with the race, so this is
+         the real shape of the course rather than a generic bar. #}
+      {% set RD = replay.race_distance or replay.max_distance %}
+      <div class="relative mt-2">
+        {% if replay.course and replay.course.slopes %}
+          <div class="relative h-2">
+            {% for s in replay.course.slopes %}
+              <div class="absolute bottom-0 h-1.5 rounded-sm {{ 'bg-rose-500/40' if s.kind == 'up' else 'bg-emerald-500/40' }}"
+                   style="left: {{ (s.start / RD * 100) | round(2) }}%;
+                          width: {{ ((s.end - s.start) / RD * 100) | round(2) }}%;"
+                   title="{{ s.kind }}hill {{ s.start | round | int }}–{{ s.end | round | int }}m"></div>
+            {% endfor %}
+          </div>
         {% endif %}
-        <div data-progress class="absolute inset-y-0 w-0.5 bg-slate-100" style="left: 100%;"></div>
+
+        <div class="relative h-3 overflow-hidden rounded-full bg-slate-900">
+          {% if replay.course %}
+            {% for s in replay.course.straights %}
+              <div class="absolute inset-y-0 bg-slate-700/40"
+                   style="left: {{ (s.start / RD * 100) | round(2) }}%;
+                          width: {{ ((s.end - s.start) / RD * 100) | round(2) }}%;"
+                   title="straight {{ s.start | round | int }}–{{ s.end | round | int }}m"></div>
+            {% endfor %}
+            {% for c in replay.course.corners %}
+              <div class="absolute inset-y-0 flex items-center justify-center
+                          {{ 'bg-cyan-500/30' if c.is_final else 'bg-slate-600/40' }}"
+                   style="left: {{ (c.start / RD * 100) | round(2) }}%;
+                          width: {{ ((c.end - c.start) / RD * 100) | round(2) }}%;"
+                   title="{% if c.is_final %}final corner{% else %}corner {{ c.number }}{% endif %} {{ c.start | round | int }}–{{ c.end | round | int }}m">
+                <span class="font-mono text-[7px] leading-none {{ 'text-cyan-200' if c.is_final else 'text-slate-400' }}">
+                  C{{ c.number }}
+                </span>
+              </div>
+            {% endfor %}
+          {% else %}
+            {% for band in replay.phases %}
+              <div class="absolute inset-y-0 {{ ['bg-slate-700/50','bg-slate-700/25','bg-cyan-500/25','bg-fuchsia-500/25'][loop.index0] }}"
+                   style="left: {{ (band.start / RD * 100) | round(2) }}%;
+                          width: {{ ((band.end - band.start) / RD * 100) | round(2) }}%;"></div>
+            {% endfor %}
+          {% endif %}
+          {% set spurts = replay.runners | map(attribute='spurt') | select | list %}
+          {% if spurts %}
+            <div class="absolute inset-y-0 w-px bg-amber-400/90"
+                 style="left: {{ ((spurts | sum) / (spurts | length) / RD * 100) | round(2) }}%;"
+                 title="last spurt"></div>
+          {% endif %}
+          <div data-progress class="absolute inset-y-0 w-0.5 bg-slate-100" style="left: 100%;"></div>
+        </div>
       </div>
+      {% if replay.course %}
+        <p class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-600">
+          <span><span class="mr-1 inline-block h-1.5 w-3 rounded-sm bg-slate-700/60 align-middle"></span>straight</span>
+          <span><span class="mr-1 inline-block h-1.5 w-3 rounded-sm bg-slate-600/60 align-middle"></span>corner</span>
+          <span><span class="mr-1 inline-block h-1.5 w-3 rounded-sm bg-cyan-500/40 align-middle"></span>final corner</span>
+          <span><span class="mr-1 inline-block h-1.5 w-3 rounded-sm bg-rose-500/40 align-middle"></span>uphill</span>
+          <span><span class="mr-1 inline-block h-1.5 w-3 rounded-sm bg-emerald-500/40 align-middle"></span>downhill</span>
+          <span><span class="mr-1 inline-block h-1.5 w-px bg-amber-400/90 align-middle"></span>last spurt</span>
+        </p>
+      {% endif %}
 
       <div data-strip class="relative mt-2 h-32 overflow-hidden rounded border border-slate-800/60 bg-slate-950/60">
+        {# lane guides — the running lines. Lane 0 is the inner rail;
+           runners sit between the guides just as they hug or leave the
+           rail in game. Deliberately faint: orientation, not chrome. #}
+        <div class="absolute inset-x-0 border-t border-slate-700/70" style="top: 22%;">
+          <span class="absolute left-1 top-0 text-[8px] uppercase tracking-wider text-slate-600">rail</span>
+        </div>
+        {% for lane_top in [33.5, 45, 56.5, 68, 79.5] %}
+          <div class="absolute inset-x-0 border-t border-dashed border-slate-800/60"
+               style="top: {{ lane_top }}%;"></div>
+        {% endfor %}
         {% for i in range(5) %}
           <div data-strip-grid="{{ i }}" class="absolute inset-y-0 w-px bg-slate-800/70" style="left: 0"></div>
           <span data-strip-gridlabel="{{ i }}"
@@ -115,15 +177,147 @@
                     style="background: {{ r.color }}; --tw-ring-color: {{ r.color }};">{{ r.name[:1] | upper }}</span>
             {% endif %}
             <span data-strip-speed class="mt-0.5 font-mono text-[8px] leading-none text-slate-500"></span>
+            {# named as it fires, then fades — the "who just did what" a
+               chart can only show after the fact #}
+            <span data-strip-fired
+                  class="pointer-events-none mt-0.5 whitespace-nowrap rounded bg-cyan-500/20 px-1 text-[8px]
+                         leading-tight text-cyan-200 opacity-0 transition-opacity duration-200"></span>
           </div>
         {% endfor %}
       </div>
     </div>
 
     {# ── 2. the timeline ───────────────────────────────────────── #}
-    <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_13rem]">
+    {# Standings and commentary sit beside the chart rather than under
+       each other, so neither column runs taller than the timeline. #}
+    <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_12rem_13rem]">
       <div class="min-w-0">
         <div class="overflow-x-auto">
+          {# ── the course, umalator-style: elevation, hills, surface
+                segments and race legs as stacked bands, sharing the
+                timeline's x-scale so every metre lines up with the
+                chart below. All positions are game data; only the
+                silhouette's steepness is schematic. ── #}
+          {% if replay.course %}
+            {% set SCALE = (W - PAD_L - PAD_R) / replay.max_distance %}
+            {% set course = replay.course %}
+            <svg viewBox="0 0 {{ W }} 124" class="w-full min-w-[34rem]" role="img"
+                 aria-label="Course profile: elevation, corners, straights and race legs">
+
+              {# elevation silhouette #}
+              {% if course.profile %}
+                {% set ns = namespace(pts='') %}
+                {% for d, h in course.profile %}
+                  {% set ns.pts = ns.pts ~ ('%.1f'|format(PAD_L + d * SCALE)) ~ ',' ~ ('%.1f'|format(26 - h * 20)) ~ ' ' %}
+                {% endfor %}
+                {% set first_x = PAD_L + course.profile[0][0] * SCALE %}
+                {% set last_x = PAD_L + course.profile[-1][0] * SCALE %}
+                <polygon points="{{ ns.pts }}{{ '%.1f'|format(last_x) }},28 {{ '%.1f'|format(first_x) }},28"
+                         fill="currentColor" class="text-emerald-500/15">
+                  <title>elevation (schematic — hill positions are exact, steepness is not)</title>
+                </polygon>
+                <polyline points="{{ ns.pts }}" fill="none" stroke="currentColor"
+                          class="text-emerald-400/40" stroke-width="1" />
+              {% endif %}
+
+              {# hills #}
+              {% for s in course.slopes %}
+                {% set x0 = PAD_L + s.start * SCALE %}
+                {% set w0 = (s.end - s.start) * SCALE %}
+                <rect x="{{ x0 }}" y="38" width="{{ w0 }}" height="12" rx="2"
+                      fill="currentColor"
+                      class="{{ 'text-rose-500/30' if s.kind == 'up' else 'text-emerald-500/30' }}">
+                  <title>{{ s.kind }}hill {{ s.start | round | int }}–{{ s.end | round | int }}m</title>
+                </rect>
+                {% if w0 > 58 %}
+                  <text x="{{ x0 + w0 / 2 }}" y="47" text-anchor="middle"
+                        class="{{ 'fill-rose-300/80' if s.kind == 'up' else 'fill-emerald-300/80' }}"
+                        style="font-size: 9px;">{{ 'Uphill ↗' if s.kind == 'up' else 'Downhill ↘' }}</text>
+                {% endif %}
+                <text x="{{ x0 }}" y="35" text-anchor="middle" class="fill-slate-500"
+                      style="font-size: 7px;">{{ s.start | round | int }}m</text>
+                <text x="{{ x0 + w0 }}" y="35" text-anchor="middle" class="fill-slate-500"
+                      style="font-size: 7px;">{{ s.end | round | int }}m</text>
+              {% endfor %}
+
+              {# surface: straights and corners #}
+              {% for s in course.straights %}
+                {% set x0 = PAD_L + s.start * SCALE %}
+                {% set w0 = (s.end - s.start) * SCALE %}
+                {% set name = 'Home straight' if s.front_type == 'Front'
+                              else 'Back straight' if s.front_type == 'AcrossFront'
+                              else 'Straight' %}
+                <rect x="{{ x0 }}" y="60" width="{{ w0 }}" height="16" rx="2"
+                      fill="currentColor" class="text-slate-700/35">
+                  <title>{{ name | lower }} {{ s.start | round | int }}–{{ s.end | round | int }}m</title>
+                </rect>
+                {% if w0 > 80 %}
+                  <text x="{{ x0 + w0 / 2 }}" y="71" text-anchor="middle"
+                        class="fill-slate-400" style="font-size: 9px;">{{ name }} →</text>
+                {% endif %}
+                {% if s.start > 0 %}
+                  <text x="{{ x0 }}" y="57" text-anchor="middle" class="fill-slate-500"
+                        style="font-size: 7px;">{{ s.start | round | int }}m</text>
+                {% endif %}
+              {% endfor %}
+              {% for c in course.corners %}
+                {% set x0 = PAD_L + c.start * SCALE %}
+                {% set w0 = (c.end - c.start) * SCALE %}
+                <rect x="{{ x0 }}" y="60" width="{{ w0 }}" height="16" rx="2"
+                      fill="currentColor"
+                      class="{{ 'text-cyan-500/25' if c.is_final else 'text-slate-500/35' }}">
+                  <title>{% if c.is_final %}final corner{% else %}corner {{ c.number }}{% endif %} {{ c.start | round | int }}–{{ c.end | round | int }}m</title>
+                </rect>
+                {% if w0 > 70 %}
+                  <text x="{{ x0 + w0 / 2 }}" y="71" text-anchor="middle"
+                        class="{{ 'fill-cyan-200/90' if c.is_final else 'fill-slate-300/90' }}"
+                        style="font-size: 9px;">{% if c.is_final %}Final corner{% else %}Corner {{ c.number }}{% endif %}</text>
+                {% endif %}
+                <text x="{{ x0 }}" y="57" text-anchor="middle" class="fill-slate-500"
+                      style="font-size: 7px;">{{ c.start | round | int }}m</text>
+                {% if loop.last %}
+                  <text x="{{ x0 + w0 }}" y="57" text-anchor="middle" class="fill-slate-500"
+                        style="font-size: 7px;">{{ c.end | round | int }}m</text>
+                {% endif %}
+              {% endfor %}
+
+              {# race legs #}
+              {% set leg_fill = ['text-emerald-500/15', 'text-yellow-500/10', 'text-rose-500/15', 'text-fuchsia-500/20'] %}
+              {% set leg_text = ['fill-emerald-300/90', 'fill-yellow-200/80', 'fill-rose-300/90', 'fill-fuchsia-300/90'] %}
+              {% for band in replay.phases %}
+                {% set x0 = PAD_L + band.start * SCALE %}
+                {% set w0 = (band.end - band.start) * SCALE %}
+                <rect x="{{ x0 }}" y="86" width="{{ w0 }}" height="16" rx="2"
+                      fill="currentColor" class="{{ leg_fill[loop.index0] }}">
+                  <title>{{ band.label | lower }} {{ band.start | round | int }}–{{ band.end | round | int }}m</title>
+                </rect>
+                {% if w0 > 70 %}
+                  <text x="{{ x0 + w0 / 2 }}" y="97" text-anchor="middle"
+                        class="{{ leg_text[loop.index0] }}" style="font-size: 9px;">{{ band.label }}</text>
+                {% endif %}
+                {% if not loop.first %}
+                  <text x="{{ x0 }}" y="83" text-anchor="middle" class="fill-slate-500"
+                        style="font-size: 7px;">{{ band.start | round | int }}m</text>
+                {% endif %}
+              {% endfor %}
+
+              {# metre ruler #}
+              {% for m in range(0, (replay.race_distance | int) + 1, 200) %}
+                {% set x0 = PAD_L + m * SCALE %}
+                <line x1="{{ x0 }}" y1="106" x2="{{ x0 }}" y2="110"
+                      stroke="currentColor" class="text-slate-700" stroke-width="1" />
+                <text x="{{ x0 }}" y="120" text-anchor="middle" class="fill-slate-600"
+                      style="font-size: 8px;">{{ m }}</text>
+              {% endfor %}
+              <line x1="{{ PAD_L }}" y1="106" x2="{{ PAD_L + replay.race_distance * SCALE }}" y2="106"
+                    stroke="currentColor" class="text-slate-800" stroke-width="1" />
+
+              <line data-course-playhead x1="{{ W - PAD_R }}" y1="4"
+                    x2="{{ W - PAD_R }}" y2="110"
+                    stroke="currentColor" class="text-slate-400" stroke-width="1" stroke-dasharray="3 3" />
+            </svg>
+          {% endif %}
+
           <svg viewBox="0 0 {{ W }} {{ H }}" class="w-full min-w-[34rem]" role="img"
                aria-label="Running position over the course of the race">
             {# phase bands behind everything #}
@@ -132,7 +326,7 @@
               {% set bw = ((band.end - band.start) / replay.max_distance) * (W - PAD_L - PAD_R) %}
               <rect x="{{ bx }}" y="{{ PAD_T }}" width="{{ bw }}" height="{{ H - PAD_T - PAD_B }}"
                     fill="currentColor"
-                    class="{{ ['text-slate-700/15','text-slate-700/5','text-cyan-500/5'][loop.index0] }}" />
+                    class="{{ ['text-slate-700/15','text-slate-700/5','text-cyan-500/5','text-fuchsia-500/10'][loop.index0] }}" />
               <text x="{{ bx + bw / 2 }}" y="{{ PAD_T + 11 }}" text-anchor="middle"
                     class="fill-slate-600" style="font-size: 9px; letter-spacing: .08em;">
                 {{ band.label | upper }}
@@ -165,6 +359,16 @@
               </text>
             {% endfor %}
 
+            {# the line itself — traces run a little past it, because
+               runners do too #}
+            {% if replay.race_distance and replay.race_distance < replay.max_distance %}
+              {% set fx = PAD_L + (replay.race_distance / replay.max_distance) * (W - PAD_L - PAD_R) %}
+              <line x1="{{ fx }}" y1="{{ PAD_T }}" x2="{{ fx }}" y2="{{ H - PAD_B }}"
+                    stroke="currentColor" class="text-slate-500" stroke-width="1.2" />
+              <text x="{{ fx - 4 }}" y="{{ PAD_T + 11 }}" text-anchor="end"
+                    class="fill-slate-500" style="font-size: 9px;">finish</text>
+            {% endif %}
+
             {% for r in replay.runners | reverse %}
               <path d="{{ rank_path(r.rank) }}" fill="none" stroke="{{ r.color }}"
                     stroke-width="{{ 2.4 if r.finish == 1 else 1.6 }}"
@@ -174,6 +378,33 @@
                 <title>{{ r.name }}{% if r.finish %} — finished {{ r.finish }}{% endif %}</title>
               </path>
             {% endfor %}
+
+            {# Skills on the line that cast them. Shown only for the
+               runner you're following — 120-odd activations across the
+               whole field at once is noise, one runner's dozen is a
+               story. #}
+            {% if replay.events %}
+              {% for r in replay.runners %}
+                <g data-skill-group="{{ r.index }}" style="display:none">
+                  {% for s in replay.events.skills %}
+                    {% if s.runner == r.index and s.rank %}
+                      {% set px = PAD_L + (s.x / replay.max_distance) * (W - PAD_L - PAD_R) %}
+                      {% set pxe = PAD_L + ((s.x_end or s.x) / replay.max_distance) * (W - PAD_L - PAD_R) %}
+                      {% set py = PAD_T + ((s.rank - 1) / ((N - 1) if N > 1 else 1)) * (H - PAD_T - PAD_B) %}
+                      {% if pxe > px + 0.5 %}
+                        <rect x="{{ px }}" y="{{ py - 3 }}" width="{{ pxe - px }}" height="6" rx="3"
+                              fill="{{ '#f472b6' if s.targets else r.color }}" fill-opacity="0.28" />
+                      {% endif %}
+                      <circle cx="{{ px }}" cy="{{ py }}" r="3"
+                              fill="{{ '#f472b6' if s.targets else r.color }}"
+                              stroke="#020617" stroke-width="1">
+                        <title>{{ s.name }} — {{ '%.1f'|format(s.t) }}s, lasts {{ '%.1f'|format(s.duration) }}s{% if s.targets %} (hits {{ s.targets | length }} others){% endif %}</title>
+                      </circle>
+                    {% endif %}
+                  {% endfor %}
+                </g>
+              {% endfor %}
+            {% endif %}
 
             <line data-playhead x1="{{ W - PAD_R }}" y1="{{ PAD_T - 4 }}"
                   x2="{{ W - PAD_R }}" y2="{{ H - PAD_B }}"
@@ -191,8 +422,9 @@
       </div>
 
       <div class="min-w-0">
-        <p class="label-eyebrow">Position <span data-replay-at class="text-slate-400">at the finish</span></p>
-        <ol class="mt-2 space-y-0.5" data-replay-standings>
+        <p class="label-eyebrow">Position</p>
+        <p data-replay-at class="text-[11px] text-slate-500">at the finish</p>
+        <ol class="mt-1.5 space-y-0.5" data-replay-standings>
           {% for r in replay.runners %}
             <li data-standing="{{ r.index }}"
                 class="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs transition hover:bg-slate-800/60">
@@ -204,6 +436,41 @@
           {% endfor %}
         </ol>
         <p class="mt-2 text-[11px] text-slate-600">Pick a runner to follow them.</p>
+      </div>
+
+      {# Commentary. Every line is a real event from the race data —
+         this is what the timeline can't say out loud. #}
+      <div class="min-w-0">
+        {% if replay.events and replay.events.feed %}
+          <div>
+            <p class="label-eyebrow">As it happened</p>
+            {# `relative` matters: the auto-scroll measures each line's
+               offsetTop, which is only meaningful if this list is the
+               offset parent. #}
+            <ol data-replay-feed
+                class="relative mt-2 max-h-[19rem] space-y-px overflow-y-auto pr-1 text-[11px]">
+              {% for e in replay.events.feed %}
+                <li data-feed-item="{{ loop.index0 }}"
+                    data-feed-t="{{ '%.3f'|format(e.t) }}"
+                    data-feed-runner="{{ e.runner }}"
+                    class="flex items-baseline gap-1.5 rounded px-1 py-0.5 transition-colors">
+                  <span class="w-8 shrink-0 text-right font-mono text-[9px] text-slate-600">
+                    {{ '%.1f'|format(e.t) }}s
+                  </span>
+                  <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                        style="background: {{ e.color }}"></span>
+                  <span class="min-w-0 flex-1">
+                    <span class="truncate text-slate-400">{{ e.who }}</span>
+                    <span class="{% if e.kind == 'debuff' %}text-pink-300{% elif e.kind == 'moment' %}text-amber-300/90{% else %}text-slate-300{% endif %}">{{ e.text }}</span>
+                    {% if e.detail %}
+                      <span class="text-slate-600">{{ e.detail }}</span>
+                    {% endif %}
+                  </span>
+                </li>
+              {% endfor %}
+            </ol>
+          </div>
+        {% endif %}
       </div>
     </div>
 
@@ -225,12 +492,27 @@
             {% set bx = PAD_L + (band.start / replay.max_distance) * (W - PAD_L - PAD_R) %}
             {% set bw = ((band.end - band.start) / replay.max_distance) * (W - PAD_L - PAD_R) %}
             <rect x="{{ bx }}" y="8" width="{{ bw }}" height="122" fill="currentColor"
-                  class="{{ ['text-slate-700/15','text-slate-700/5','text-cyan-500/5'][loop.index0] }}" />
+                  class="{{ ['text-slate-700/15','text-slate-700/5','text-cyan-500/5','text-fuchsia-500/10'][loop.index0] }}" />
           {% endfor %}
           <text x="6" y="20" class="fill-emerald-400/70" style="font-size: 9px;">stamina</text>
           <text x="6" y="126" class="fill-cyan-400/70" style="font-size: 9px;">speed</text>
           {% for r in replay.runners %}
             <g data-focus-group="{{ r.index }}" style="display:none">
+              {# Each skill's live window, behind the curves — this is
+                 where duration earns its place: you can see the speed
+                 lift while the effect is up. #}
+              {% if replay.events %}
+                {% for s in replay.events.skills %}
+                  {% if s.runner == r.index and s.x_end and s.x_end > s.x %}
+                    {% set px = PAD_L + (s.x / replay.max_distance) * (W - PAD_L - PAD_R) %}
+                    {% set pxe = PAD_L + (s.x_end / replay.max_distance) * (W - PAD_L - PAD_R) %}
+                    <rect x="{{ px }}" y="8" width="{{ pxe - px }}" height="122"
+                          fill="{{ '#f472b6' if s.targets else '#22d3ee' }}" fill-opacity="0.12">
+                      <title>{{ s.name }} — {{ '%.1f'|format(s.duration) }}s</title>
+                    </rect>
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
               <path d="{{ series_path(r.hp, replay.max_hp, 110, 12) }}"
                     fill="none" stroke="#34d399" stroke-width="1.6" stroke-opacity="0.9" />
               <path d="{{ series_path(r.speed, replay.max_speed, 110, 12) }}"
@@ -314,6 +596,8 @@
        "t": replay.t_axis,
        "phases": replay.phases,
        "maxd": replay.max_distance,
+       "course": replay.course,
+       "feed": (replay.events.feed if replay.events else []),
      } | tojson }}
 </script>
 <script>
@@ -337,7 +621,7 @@
     var scrub = root.querySelector('[data-replay-scrub]');
     var posLabel = root.querySelector('[data-replay-pos]');
     var atLabel = root.querySelector('[data-replay-at]');
-    var heads = root.querySelectorAll('[data-playhead], [data-focus-playhead]');
+    var heads = root.querySelectorAll('[data-playhead], [data-focus-playhead], [data-course-playhead]');
     var list = root.querySelector('[data-replay-standings]');
     var items = Array.prototype.slice.call(list.querySelectorAll('[data-standing]'));
     var focusPanel = root.querySelector('[data-replay-focus]');
@@ -346,8 +630,17 @@
     var strip = root.querySelector('[data-strip]');
     var progress = root.querySelector('[data-progress]');
     var phaseLabel = root.querySelector('[data-phase-label]');
+    var segmentLabel = root.querySelector('[data-track-segment]');
     var playBtn = root.querySelector('[data-replay-play]');
-    var selected = null, raf = null, clock = LASTT, wall = 0;
+    var feedList = root.querySelector('[data-replay-feed]');
+    var feedItems = feedList
+      ? Array.prototype.slice.call(feedList.querySelectorAll('[data-feed-item]'))
+      : [];
+    var FEED = D.feed || [];
+    // How long a fired skill stays called out. Long enough to read at
+    // playback speed, short enough that two skills don't stack up.
+    var CALLOUT_S = 2.0;
+    var selected = null, raf = null, clock = LASTT, wall = 0, lastFeedShown = -1;
 
     function seek(rt) {
       // index of the last sample at or before rt
@@ -363,6 +656,46 @@
       return v0 + (v1 - v0) * a;
     }
     function timelineX(x) { return PAD_L + (x / (D.maxd || 1)) * (W - PAD_L - PAD_R); }
+
+    /* The commentary track. Everything already past is legible, what's
+       still to come is dimmed, and the last few seconds are lit — so
+       the list reads as a live feed while scrubbing stays coherent. */
+    function paintFeed(rt) {
+      if (!feedItems.length) return null;
+      var newest = -1, fresh = {};
+      for (var i = 0; i < FEED.length; i++) {
+        var e = FEED[i], li = feedItems[i];
+        if (!li) continue;
+        var age = rt - e.t;
+        if (age >= 0) {
+          newest = i;
+          li.style.opacity = '1';
+          var hot = age < CALLOUT_S;
+          li.classList.toggle('bg-slate-800/70', hot);
+          // One callout per runner, and a named skill beats a generic
+          // race moment — three "contests the lead" tags at once say
+          // less than the skills that caused it.
+          if (hot && (fresh[e.runner] === undefined
+                      || (fresh[e.runner].kind === 'moment' && e.kind !== 'moment'))) {
+            fresh[e.runner] = e;
+          }
+        } else {
+          li.style.opacity = '0.28';
+          li.classList.remove('bg-slate-800/70');
+        }
+      }
+      if (newest !== lastFeedShown) {
+        lastFeedShown = newest;
+        if (newest >= 0 && feedItems[newest]) {
+          var li2 = feedItems[newest];
+          // Keep the newest line in view without yanking the page.
+          feedList.scrollTop = Math.max(
+            0, li2.offsetTop - feedList.clientHeight + li2.offsetHeight + 4
+          );
+        }
+      }
+      return fresh;
+    }
 
     function render(rt) {
       rt = Math.max(0, Math.min(rt, LASTT));
@@ -394,6 +727,33 @@
         }
         phaseLabel.textContent = ph.label.toLowerCase();
       }
+      // where on the track the leaders are: corner, straight, hill
+      if (segmentLabel && D.course) {
+        var seg = '';
+        (D.course.corners || []).some(function (c) {
+          if (leader >= c.start && leader < c.end) {
+            seg = c.is_final ? 'final corner' : 'corner ' + c.number;
+            return true;
+          }
+          return false;
+        });
+        if (!seg) (D.course.straights || []).some(function (st) {
+          if (leader >= st.start && leader < st.end) {
+            seg = st.front_type === 'Front' ? 'home straight'
+                : st.front_type === 'AcrossFront' ? 'back straight' : 'straight';
+            return true;
+          }
+          return false;
+        });
+        (D.course.slopes || []).some(function (sl) {
+          if (leader >= sl.start && leader < sl.end) {
+            seg += (seg ? ', ' : '') + (sl.kind === 'up' ? 'uphill' : 'downhill');
+            return true;
+          }
+          return false;
+        });
+        segmentLabel.textContent = seg ? ' · ' + seg : '';
+      }
 
       // camera: whole field, or centred on whoever you're following
       var anchor = selected === null ? leader : ds[D.runners.indexOf(selected)];
@@ -410,6 +770,8 @@
         if (lbl) { lbl.style.left = pct(at) + '%'; lbl.textContent = Math.round(at) + 'm'; }
       }
 
+      var fresh = paintFeed(rt) || {};
+
       D.runners.forEach(function (idx, k) {
         var el = root.querySelector('[data-strip-runner="' + idx + '"]');
         if (!el) return;
@@ -421,6 +783,13 @@
         if (nm) nm.style.opacity = (selected === idx) ? 1 : '';
         var sp = el.querySelector('[data-strip-speed]');
         if (sp) sp.textContent = spds[k] ? spds[k].toFixed(1) : '';
+        var fired = el.querySelector('[data-strip-fired]');
+        if (fired) {
+          var hit = fresh[idx];
+          fired.textContent = hit ? hit.text : '';
+          fired.style.opacity = hit ? '1' : '0';
+          if (hit) el.style.zIndex = 25;
+        }
       });
 
       // standings ordered by interpolated distance, so they change
@@ -454,6 +823,20 @@
       });
       root.querySelectorAll('[data-focus-group]').forEach(function (g) {
         g.style.display = g.getAttribute('data-focus-group') === String(idx) ? '' : 'none';
+      });
+      root.querySelectorAll('[data-skill-group]').forEach(function (g) {
+        g.style.display = g.getAttribute('data-skill-group') === String(idx) ? '' : 'none';
+      });
+      // Following someone? Their events lead the commentary.
+      feedItems.forEach(function (li) {
+        li.classList.toggle(
+          'ring-1',
+          idx !== null && li.getAttribute('data-feed-runner') === String(idx)
+        );
+        li.classList.toggle(
+          'ring-slate-700',
+          idx !== null && li.getAttribute('data-feed-runner') === String(idx)
+        );
       });
       if (idx === null) focusPanel.classList.add('hidden');
       else {

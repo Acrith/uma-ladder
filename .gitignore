@@ -43,3 +43,9 @@ node_modules/
 # user-facing "what's new". PROJECT_STATE.md is the internal
 # inventory; both are maintained per PR.
 PROJECT_STATE.md
+
+# uma-race-extract local state. The config can hold an upload token,
+# and captures/ is whatever races the maintainer happened to record —
+# corpus samples worth keeping live in docs/room-match-scout/captures/.
+tools/race_extractor/captures/
+tools/race_extractor/uma-race-config.json
