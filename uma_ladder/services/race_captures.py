@@ -1118,13 +1118,29 @@ def _course_distance(sim: dict) -> float | None:
 def _time_scale(sim: dict, frames: list, distance: float | None) -> float:
     """Frame time -> race time.
 
-    The simulation's clock and the clock the game reports finishing
-    times on are not the same; they differ by a fixed factor per race.
-    Rather than hard-code it, measure it: interpolate when each runner
-    crossed the line in frame time and compare against the finish time
-    the game recorded. Median, so one bad trace can't skew it.
+    The simulation's clock and the clock the game quotes finishing
+    times on are not the same; they differ by a factor that is
+    effectively constant within a race (~1.21-1.23) but varies between
+    races, so it has to be measured rather than assumed.
+
+    The result records give it away directly: FinishTimeRaw is the
+    finish on the simulation clock, FinishTime the same finish as the
+    game reports it. Their ratio is the scale — exact, and independent
+    of knowing where the finish line is, which matters because a
+    blob-only capture has no course geometry to tell us.
     """
     horses = sim.get("horses") or []
+    direct = [
+        _as_float(h.get("FinishTime")) / _as_float(h.get("FinishTimeRaw"))
+        for h in horses
+        if _as_float(h.get("FinishTime")) and _as_float(h.get("FinishTimeRaw"))
+    ]
+    if direct:
+        direct.sort()
+        return direct[len(direct) // 2]
+
+    # Older captures predate FinishTimeRaw being carried through: fall
+    # back to interpolating each runner's crossing of the finish line.
     if not distance or not frames or not horses:
         return 1.0
     ratios: list[float] = []
