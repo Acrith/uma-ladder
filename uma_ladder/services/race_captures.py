@@ -689,29 +689,25 @@ def reapply_details(capture_id: int, *, actor_user_id: int) -> int:
         )
     ).unique().all()
 
-    # Match on the identity the confirm step already resolved: each
-    # result's user, against the gate that user was assigned.
-    by_user = {}
-    for res in results:
-        match = next(
-            (
-                r
-                for r in rows
-                if (r.get("trainer_name") or "").strip().lower()
-                == (res.user.username or "").strip().lower()
-                or (r.get("trainer_name") or "").strip().lower()
-                == ((res.user.display_name or "").strip().lower())
-            ),
-            None,
-        )
-        if match:
-            by_user[res] = match
+    # Re-resolve trainer name -> user the same way review does, rather
+    # than by gate: confirm() may have had gates corrected by hand, and
+    # the user is the identity actually recorded on the result.
+    by_username, by_display = _index_users()
+    runner_by_user_id: dict[int, dict] = {}
+    for row in rows:
+        key = (row.get("trainer_name") or "").strip().lower()
+        if not key:
+            continue
+        user = by_username.get(key) or by_display.get(key)
+        if user is not None:
+            runner_by_user_id.setdefault(user.id, row)
 
-    return sum(
-        1
-        for res, runner in by_user.items()
-        if _enrich_result(res, runner, actor_user_id)
-    )
+    updated = 0
+    for res in results:
+        runner = runner_by_user_id.get(res.user_id)
+        if runner and _enrich_result(res, runner, actor_user_id):
+            updated += 1
+    return updated
 
 
 def _stamp_activations(result_id: int, skill_entries: list) -> None:

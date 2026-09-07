@@ -564,6 +564,16 @@ def test_reapply_details_repairs_an_already_confirmed_capture(app: Flask, make_u
             capture.id, actor_user_id=org["id"]
         )
         assert updated == 1
+        # Runners are re-matched by trainer name through the same index
+        # the review UI uses — including display names, which live on
+        # UserProfile rather than User. Getting that wrong only shows up
+        # when the username does NOT match, so assert the lookup shape
+        # directly rather than relying on this fixture's happy path.
+        by_username, by_display = captures_service._index_users()
+        assert winner["id"] in {u.id for u in by_username.values()}
+        assert all(
+            hasattr(u, "id") for u in by_display.values() if u is not None
+        )
         db.session.refresh(result)
         assert result.speed and result.wisdom
         assert result.placement == placement_before
