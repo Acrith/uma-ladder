@@ -129,7 +129,10 @@
                 {% else %}
                   <span class="text-slate-300">{{ m.user_label or "—" }}</span>
                 {% endif %}
-                {% if m.match_confidence == 'display' %}
+                {% if m.match_confidence == 'alias' %}
+                  <span class="ml-1 text-[10px] text-cyan-300/80"
+                        title="This in-game name was matched to this account in an earlier review">remembered</span>
+                {% elif m.match_confidence == 'display' %}
                   <span class="ml-1 text-[10px] text-amber-300/80" title="Matched on display name, not username">matched by display name</span>
                 {% elif m.match_confidence == 'none' %}
                   <span class="ml-1 text-[10px] text-slate-600">no match</span>

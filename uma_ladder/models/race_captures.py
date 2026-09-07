@@ -108,3 +108,41 @@ class RaceCapture(db.Model):
             f"<RaceCapture id={self.id} source={self.source} "
             f"room={self.saved_room_id} status={self.status}>"
         )
+
+
+class TrainerAlias(db.Model):
+    """A remembered in-game trainer name → ladder account mapping.
+
+    Trainer names rarely equal usernames ("BeUwUlf12" vs
+    "steelbeuwulf12"), so every capture review used to re-ask the
+    organizer for the same correction, and any later re-run of the
+    enrichment could not reproduce it. Recording the decision once
+    turns review into confirmation rather than data entry.
+
+    Keyed on the lowercased trainer name because that is what the game
+    gives us. One name maps to one account; one account may accumulate
+    several names (renames, alt profiles), so `user_id` is not unique.
+    """
+
+    __tablename__ = "race_trainer_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trainer_name: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Who taught us this, and when — an alias is a human judgement, so
+    # it should be attributable when one turns out to be wrong.
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    user = relationship("User", foreign_keys=[user_id], lazy="joined")
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<TrainerAlias {self.trainer_name!r} -> user {self.user_id}>"

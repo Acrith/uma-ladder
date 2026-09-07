@@ -49,7 +49,7 @@ from .official_races import (
 )
 from .presets import RacePreset
 from .profiles import UserProfile
-from .race_captures import RaceCapture
+from .race_captures import RaceCapture, TrainerAlias
 from .reports import Report, ReportStatus
 from .seasons import Season
 from .skill_condition import SkillCondition
@@ -98,6 +98,7 @@ __all__ = [
     "OfficialRaceVisibility",
     "PresetSource",
     "RaceCapture",
+    "TrainerAlias",
     "RaceCaptureSource",
     "RaceCaptureStatus",
     "RacePreset",

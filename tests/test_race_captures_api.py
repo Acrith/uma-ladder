@@ -923,3 +923,105 @@ def test_sectionals_read_in_finishing_order(app: Flask) -> None:
         assert sec["labels"][-1] == "finish"
         # Every cell is scored against that segment's field mean.
         assert len(sec["means"]) == len(sec["labels"])
+
+
+def test_confirm_remembers_a_trainer_alias_and_reuses_it(app: Flask, make_user) -> None:
+    """In-game names rarely equal usernames ("BeUwUlf12" vs
+    "steelbeuwulf12"), so review used to re-ask for the same correction
+    every race — and a later re-run could not reproduce it. Confirming
+    should teach the mapping once."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import PresetSource, RacePreset
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="aliasorg", password="password123", role="organizer")
+    # Deliberately unlike the captured trainer name.
+    player = make_user(username="steelaisha99", password="password123")
+
+    with app.app_context():
+        season = seasons_service.create_season(
+            name="alias season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Alias Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        capture = captures_service.ingest(
+            _payload(), submitted_by_user_id=org["id"]
+        ).capture
+
+        # Before any review, nothing links the game name to this account.
+        pre = {m.trainer_name: m for m in captures_service.match_runners(capture)}
+        assert pre["Aisha AlSadhazi"].user_id is None
+        assert pre["Aisha AlSadhazi"].match_confidence == "none"
+
+        gate = pre["Aisha AlSadhazi"].gate
+        captures_service.confirm(
+            capture.id, race_id=race.id,
+            user_by_gate={gate: player["id"]}, actor_user_id=org["id"],
+        )
+
+        # The correction is now remembered, and a fresh capture of a
+        # later race pre-matches that player without being asked.
+        again = json.loads(json.dumps(_payload()))
+        again["room"]["saved_room_id"] = 777777
+        next_capture = captures_service.ingest(
+            again, submitted_by_user_id=org["id"]
+        ).capture
+        post = {m.trainer_name: m for m in captures_service.match_runners(next_capture)}
+        assert post["Aisha AlSadhazi"].user_id == player["id"]
+        assert post["Aisha AlSadhazi"].match_confidence == "alias"
+
+
+def test_alias_is_not_stored_when_the_username_already_matches(app: Flask, make_user) -> None:
+    """An alias that merely restates the username is noise, and would
+    quietly shadow a later username change."""
+    org = make_user(username="noiseorg", password="password123", role="organizer")
+    user = make_user(username="aisha alsadhazi", password="password123")
+    with app.app_context():
+        from uma_ladder.models import TrainerAlias
+
+        stored = captures_service.remember_trainer_alias(
+            "Aisha AlSadhazi", user["id"], actor_user_id=org["id"]
+        )
+        db.session.commit()
+        assert stored is False
+        assert db.session.scalar(
+            db.select(db.func.count()).select_from(TrainerAlias)
+        ) == 0
+
+
+def test_alias_ignores_a_disabled_account(app: Flask, make_user) -> None:
+    """A stale alias should stop matching rather than resurrect a
+    disabled account."""
+    org = make_user(username="disorg", password="password123", role="organizer")
+    gone = make_user(username="ghostplayer", password="password123")
+    with app.app_context():
+        from datetime import UTC, datetime
+
+        from uma_ladder.models import User
+
+        captures_service.remember_trainer_alias(
+            "BeUwUlf12", gone["id"], actor_user_id=org["id"]
+        )
+        db.session.commit()
+        user, confidence = captures_service.resolve_trainer("BeUwUlf12")
+        assert user is not None and confidence == "alias"
+
+        db.session.get(User, gone["id"]).disabled_at = datetime.now(UTC)
+        db.session.commit()
+        user, confidence = captures_service.resolve_trainer("BeUwUlf12")
+        assert user is None and confidence == "none"

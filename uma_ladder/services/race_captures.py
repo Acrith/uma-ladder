@@ -354,7 +354,7 @@ class RunnerMatch:
     strategy: str | None
     user_id: int | None          # suggested ladder account, None if unknown
     user_label: str | None
-    match_confidence: str        # "exact" | "display" | "none"
+    match_confidence: str        # "exact" | "alias" | "display" | "none"
     uma_character_id: int | None
     uma_name: str | None
     stats: dict
@@ -378,6 +378,84 @@ def _index_users() -> tuple[dict, dict]:
         if p.display_name:
             by_display.setdefault(p.display_name.strip().lower(), by_id.get(p.user_id))
     return by_username, by_display
+
+
+def _index_aliases() -> dict:
+    """Remembered trainer name → user, lowercased.
+
+    Only accounts that still exist and aren't disabled; a stale alias
+    should quietly stop matching rather than resurrect a dead account.
+    """
+    from ..models import TrainerAlias, User
+
+    rows = db.session.scalars(
+        select(TrainerAlias).join(User, TrainerAlias.user_id == User.id)
+        .where(User.disabled_at.is_(None))
+    ).all()
+    return {r.trainer_name: r.user for r in rows if r.user is not None}
+
+
+def resolve_trainer(name: str | None, indexes: tuple[dict, dict, dict] | None = None):
+    """Best guess at the ladder account behind an in-game trainer name.
+
+    One implementation, used by review, confirm and re-apply alike —
+    two of those previously matched slightly differently, which is how
+    a hand-made correction could be silently lost on a re-run.
+
+    Returns (user | None, confidence). A remembered alias outranks a
+    display-name guess: someone stated it explicitly.
+    """
+    key = (name or "").strip().lower()
+    if not key:
+        return None, "none"
+    by_username, by_display, by_alias = indexes or (
+        *_index_users(), _index_aliases(),
+    )
+    if key in by_username:
+        return by_username[key], "exact"
+    if key in by_alias:
+        return by_alias[key], "alias"
+    if key in by_display:
+        return by_display[key], "display"
+    return None, "none"
+
+
+def remember_trainer_alias(
+    trainer_name: str | None, user_id: int | None, *, actor_user_id: int | None = None
+) -> bool:
+    """Record that this in-game name belongs to this account.
+
+    Called when a reviewer's choice disagrees with what we'd have
+    guessed, so the next capture pre-matches instead of asking again.
+    Never overwrites an existing alias silently — a name pointing
+    somewhere new is a correction worth making deliberately.
+    """
+    from ..models import TrainerAlias, User
+
+    key = (trainer_name or "").strip().lower()
+    if not key or not user_id:
+        return False
+    user = db.session.get(User, user_id)
+    if user is None:
+        return False
+    # Already derivable without an alias? Don't store noise.
+    if user.username and user.username.lower() == key:
+        return False
+    existing = db.session.scalars(
+        select(TrainerAlias).where(TrainerAlias.trainer_name == key)
+    ).first()
+    if existing is not None:
+        if existing.user_id == user_id:
+            return False
+        existing.user_id = user_id
+        existing.created_by_user_id = actor_user_id
+        return True
+    db.session.add(
+        TrainerAlias(
+            trainer_name=key, user_id=user_id, created_by_user_id=actor_user_id
+        )
+    )
+    return True
 
 
 def _resolve_uma(card_id: int | None, chara_id: int | None) -> tuple[int | None, str | None]:
@@ -436,17 +514,12 @@ def _uma_image(card_id: int | None, chara_id: int | None) -> str | None:
 def match_runners(capture: RaceCapture) -> list[RunnerMatch]:
     """Resolve each captured runner against ladder accounts + the uma
     catalog. Suggestions only — the reviewer confirms or corrects."""
-    by_username, by_display = _index_users()
+    indexes = (*_index_users(), _index_aliases())
     payload = capture.payload_json or {}
     out: list[RunnerMatch] = []
     for r in _runner_rows(payload):
         name = (r.get("trainer_name") or "").strip()
-        key = name.lower()
-        user = by_username.get(key)
-        confidence = "exact" if user else "none"
-        if user is None and key in by_display:
-            user = by_display[key]
-            confidence = "display"
+        user, confidence = resolve_trainer(name, indexes)
         style = _as_int(r.get("running_style"))
         char_id, uma_name = _resolve_uma(
             _as_int(r.get("card_id")), _as_int(r.get("chara_id"))
@@ -613,6 +686,17 @@ def confirm(
         if runner:
             _enrich_result(result, runner, actor_user_id)
 
+    # Learn from the review. Where the organizer's choice isn't one we
+    # could have derived from the username, remember it — the next
+    # capture pre-matches that player instead of asking again, and a
+    # later re-run can reproduce this mapping exactly.
+    for gate, uid in user_by_gate.items():
+        runner = by_gate.get(gate)
+        if runner:
+            remember_trainer_alias(
+                runner.get("trainer_name"), uid, actor_user_id=actor_user_id
+            )
+
     capture.status = RaceCaptureStatus.CONFIRMED
     capture.official_race_id = race_id
     capture.confirmed_by_user_id = actor_user_id
@@ -692,13 +776,10 @@ def reapply_details(capture_id: int, *, actor_user_id: int) -> int:
     # Re-resolve trainer name -> user the same way review does, rather
     # than by gate: confirm() may have had gates corrected by hand, and
     # the user is the identity actually recorded on the result.
-    by_username, by_display = _index_users()
+    indexes = (*_index_users(), _index_aliases())
     runner_by_user_id: dict[int, dict] = {}
     for row in rows:
-        key = (row.get("trainer_name") or "").strip().lower()
-        if not key:
-            continue
-        user = by_username.get(key) or by_display.get(key)
+        user, _confidence = resolve_trainer(row.get("trainer_name"), indexes)
         if user is not None:
             runner_by_user_id.setdefault(user.id, row)
 
