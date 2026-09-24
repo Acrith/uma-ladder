@@ -55,6 +55,60 @@
     </form>
   {% endcall %}
 
+  {# Race recorder tokens. Admin-issued, not self-service: only the
+     people who run races need one. Plaintext is shown once, inline,
+     and never stored — only its digest is. #}
+  {% call card(class="mt-6 p-5") %}
+    <p class="label-eyebrow">Race recorder</p>
+    <h2 class="mt-1 text-base font-semibold text-slate-100">Upload tokens</h2>
+    <p class="mt-1 text-xs text-slate-500">
+      Lets <span class="text-slate-300">uma-race-extract</span> upload captured races
+      as @{{ user.username }}. Captures still need review before they reach the ladder.
+      Valid on umaladder.moe only, not training.umaladder.moe.
+    </p>
+
+    {% if new_api_token %}
+      <div class="mt-3 rounded border border-emerald-500/40 bg-emerald-500/5 p-3">
+        <p class="text-xs font-medium text-emerald-200">
+          Token created. It is shown only once. Send it to @{{ user.username }}
+          to paste into <span class="font-mono">uma-race-config.json</span>:
+        </p>
+        <p class="mt-2 break-all rounded border border-emerald-500/30 bg-slate-950/60 px-2 py-1.5 font-mono text-[11px] text-emerald-100">{{ new_api_token }}</p>
+        <p class="mt-2 break-all font-mono text-[10px] text-slate-500">{"api_url": "https://umaladder.moe", "token": "{{ new_api_token }}"}</p>
+      </div>
+    {% endif %}
+
+    {% if api_tokens %}
+      <ul class="mt-3 divide-y divide-slate-800/70 text-xs">
+        {% for t in api_tokens %}
+          <li class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+            <span class="min-w-0 flex-1 truncate {{ 'text-slate-500 line-through' if t.revoked_at else 'text-slate-200' }}">{{ t.name }}</span>
+            <span class="text-slate-500">created {{ t.created_at.strftime('%Y-%m-%d') }}</span>
+            <span class="text-slate-500">
+              {% if t.last_used_at %}last used {{ t.last_used_at.strftime('%Y-%m-%d') }}{% else %}never used{% endif %}
+            </span>
+            {% if t.revoked_at %}
+              <span class="text-rose-300/80">revoked</span>
+            {% else %}
+              <form method="post" action="{{ url_for('admin.revoke_api_token', user_id=user.id, token_id=t.id) }}"
+                    onsubmit="return confirm('Revoke this token? The recorder using it stops uploading.');">
+                {{ csrf_form.hidden_tag() }}
+                <button class="text-rose-400 hover:text-rose-300">Revoke</button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('admin.issue_api_token', user_id=user.id) }}"
+          class="mt-3 flex flex-wrap items-center gap-2">
+      {{ csrf_form.hidden_tag() }}
+      <input name="name" class="input-base w-56 py-1 text-xs" placeholder="label, e.g. desktop PC" maxlength="64" />
+      <button class="btn-primary">Issue token</button>
+    </form>
+  {% endcall %}
+
   {# PR-P2 — Achievements management. Admins can grant any
      catalogue entry manually + revoke individual ones. Both
      actions are audit-logged. Auto-granted achievements

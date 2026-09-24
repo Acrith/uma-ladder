@@ -109,19 +109,31 @@ def user_detail(user_id: int) -> object:
     user = db.session.get(User, user_id)
     if user is None:
         abort(404)
-    from ..services import achievements as achievements_service
+    return _render_user_detail(user)
 
-    catalogue = achievements_service.list_definitions()
-    user_grants = achievements_service.list_for_user(user_id)
-    granted_keys = {ua.achievement.key for ua in user_grants}
+
+def _render_user_detail(user: User, **extra) -> str:
+    """The user page with its full context.
+
+    Several POSTs re-render this page instead of redirecting because
+    they surface a one-time secret (reset URL, API token) that must not
+    travel through a Location header or browser history. They all go
+    through here so none of them renders a page missing half its cards.
+    """
+    from ..services import achievements as achievements_service
+    from ..services import api_tokens as tokens_service
+
+    user_grants = achievements_service.list_for_user(user.id)
     return render_template(
         "admin/user_detail.html",
         user=user,
         roles=[r.value for r in Role],
         csrf_form=CsrfOnlyForm(),
-        achievements_catalogue=catalogue,
+        achievements_catalogue=achievements_service.list_definitions(),
         user_achievements=user_grants,
-        granted_achievement_keys=granted_keys,
+        granted_achievement_keys={ua.achievement.key for ua in user_grants},
+        api_tokens=tokens_service.list_tokens_for_user(user),
+        **extra,
     )
 
 
@@ -146,13 +158,59 @@ def issue_password_reset(user_id: int) -> object:
     except admin_service.InsufficientRankError:
         flash("Only superadmins may issue resets for admin+ accounts.")
         return redirect(url_for("admin.user_detail", user_id=user_id))
-    return render_template(
-        "admin/user_detail.html",
-        user=target,
-        roles=[r.value for r in Role],
-        csrf_form=CsrfOnlyForm(),
-        reset_url=url,
+    return _render_user_detail(target, reset_url=url)
+
+
+@bp.post("/users/<int:user_id>/api-token")
+@min_role_required(Role.ADMIN)
+def issue_api_token(user_id: int) -> object:
+    """Mint a race-recorder token for this user.
+
+    Admin-issued rather than self-service on purpose: only the people
+    who actually run races need one, and an admin handing it over is
+    the natural point to explain the tool. Shown once, inline.
+    """
+    from ..services import api_tokens as tokens_service
+
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    label = (request.form.get("name") or "").strip()[:64] or "race extractor"
+    row, plaintext = tokens_service.issue_token(target, name=label)
+    admin_audit_service.log_action(
+        actor_user_id=current_user.id,
+        action="api_token_issue",
+        target_user_id=user_id,
+        details=f"token #{row.id} ({label})",
     )
+    return _render_user_detail(target, new_api_token=plaintext)
+
+
+@bp.post("/users/<int:user_id>/api-token/<int:token_id>/revoke")
+@min_role_required(Role.ADMIN)
+def revoke_api_token(user_id: int, token_id: int) -> object:
+    from ..services import api_tokens as tokens_service
+
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    if tokens_service.revoke_token(target, token_id):
+        admin_audit_service.log_action(
+            actor_user_id=current_user.id,
+            action="api_token_revoke",
+            target_user_id=user_id,
+            details=f"token #{token_id}",
+        )
+        flash("Token revoked. The recorder using it will stop uploading.")
+    else:
+        flash("No such token for this user.")
+    return redirect(url_for("admin.user_detail", user_id=user_id))
 
 
 @bp.post("/users/<int:user_id>/disable")

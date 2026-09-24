@@ -523,3 +523,59 @@ def test_admin_route_delete_username_check_case_insensitive(
     assert resp.status_code == 302
     with app.app_context():
         assert db.session.get(User, target["id"]) is None
+
+
+def test_admin_issues_and_revokes_a_race_recorder_token(
+    app: Flask, client: FlaskClient, make_user
+) -> None:
+    """Admin-issued upload tokens: plaintext shown exactly once on the
+    page, the token authenticates the recorder, revoking stops it, and
+    both actions are audited."""
+    from uma_ladder.models import AdminAuditLog, ApiToken
+
+    make_user(username="adm", role=Role.ADMIN, password="password123")
+    target = make_user(username="yuuta", role=Role.ORGANIZER)
+    _login(client, "adm")
+
+    resp = client.post(
+        f"/admin/users/{target['id']}/api-token", data={"name": "race PC"}
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    with app.app_context():
+        row = db.session.scalars(
+            db.select(ApiToken).where(ApiToken.user_id == target["id"])
+        ).one()
+        assert row.name == "race PC"
+    # The plaintext is on the page and works against the API.
+    import re
+
+    plaintext = re.search(r'"token": "([^"]+)"', html).group(1)
+    ping = client.get("/api/ping", headers={"Authorization": f"Bearer {plaintext}"})
+    assert ping.status_code == 200
+    assert ping.get_json()["user"] == "yuuta"
+
+    # A plain GET of the page never shows it again.
+    again = client.get(f"/admin/users/{target['id']}").get_data(as_text=True)
+    assert plaintext not in again
+    assert "race PC" in again
+
+    client.post(f"/admin/users/{target['id']}/api-token/{row.id}/revoke")
+    assert client.get(
+        "/api/ping", headers={"Authorization": f"Bearer {plaintext}"}
+    ).status_code == 401
+
+    with app.app_context():
+        actions = [
+            a.action for a in db.session.scalars(db.select(AdminAuditLog))
+        ]
+        assert "api_token_issue" in actions
+        assert "api_token_revoke" in actions
+
+
+def test_non_admin_cannot_issue_tokens(client: FlaskClient, make_user) -> None:
+    make_user(username="org", role=Role.ORGANIZER, password="password123")
+    target = make_user(username="victim", role=Role.USER)
+    _login(client, "org")
+    resp = client.post(f"/admin/users/{target['id']}/api-token")
+    assert resp.status_code in (302, 403)

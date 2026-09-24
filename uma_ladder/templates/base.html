@@ -118,7 +118,7 @@
              contextual menus on outside-click / Escape (PR-J17).
              Highlighted as 'active' when we're on any of the
              tool pages so the user knows where they are. #}
-          {% set tool_endpoints = ['presets.index', 'ocr.index', 'skills.index'] %}
+          {% set tool_endpoints = ['presets.index', 'ocr.index', 'skills.index', 'captures.index', 'captures.detail'] %}
           {% set tools_active = request.endpoint in tool_endpoints %}
           <details class="relative" data-autoclose-outside>
             <summary class="cursor-pointer list-none rounded-lg px-3 py-1.5 transition {% if tools_active %}bg-slate-800/80 text-cyan-300 shadow-glow-cyan{% else %}text-slate-300 hover:bg-slate-800/50 hover:text-slate-100{% endif %}">
@@ -127,6 +127,7 @@
             <div class="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-glow-cyan-strong">
               <a href="{{ url_for('presets.index') }}" class="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-cyan-200">Race Presets</a>
               {% if current_user.is_authenticated and current_user.has_at_least('organizer') %}
+                <a href="{{ url_for('captures.index') }}" class="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-cyan-200" title="Races uploaded by the desktop recorder, waiting for review">Captured races</a>
                 <a href="{{ url_for('ocr.index') }}" class="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-cyan-200">OCR</a>
                 <a href="{{ url_for('skills.index') }}" class="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-cyan-200" title="Skill catalogue — organiser reference for OCR correction">Skill list</a>
               {% endif %}
