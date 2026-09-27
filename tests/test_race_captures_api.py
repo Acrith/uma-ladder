@@ -1025,3 +1025,81 @@ def test_alias_ignores_a_disabled_account(app: Flask, make_user) -> None:
         db.session.commit()
         user, confidence = captures_service.resolve_trainer("BeUwUlf12")
         assert user is None and confidence == "none"
+
+
+def test_skill_verdicts_survive_runner_order_differing_from_gate_order(
+    app: Flask, make_user
+) -> None:
+    """The extractor paired the game's runner array (memory order) with
+    the scenario's runner index (gate order). When those orders differ,
+    its verdicts land on the wrong runner and nearly all are discarded —
+    a real race showed "1 of 18 skills activated" with 17 unknown. The
+    ladder must take verdicts from the blob, which is keyed by gate."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import OfficialRaceResult, PresetSource, RacePreset, UmaSkill
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import race_blob
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="ordorg", password="password123", role="organizer")
+    winner = make_user(username="aisha alsadhazi", password="password123")
+
+    payload = _payload()
+    # Memory order != gate order, and the extractor's verdicts are gone
+    # (what its misalignment effectively produced).
+    payload["runners"] = list(reversed(payload["runners"]))
+    for r in payload["runners"]:
+        for s in r.get("skills") or []:
+            s.pop("activated", None)
+
+    truth = {}
+    for ev in race_blob.sim_from_payload(payload)["events"]:
+        p = ev["param"]
+        if ev["type"] == "Skill":
+            truth.setdefault(p[0] + 1, {})[p[1]] = p[2] != -1
+
+    with app.app_context():
+        aisha = next(r for r in payload["runners"] if r["trainer_name"] == "Aisha AlSadhazi")
+        for entry in aisha["skills"]:
+            db.session.add(UmaSkill(gametora_id=entry["skill_id"],
+                                    name_en=f"Test Skill {entry['skill_id']}"))
+        season = seasons_service.create_season(
+            name="order season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Order Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        capture = captures_service.ingest(payload, submitted_by_user_id=org["id"]).capture
+        captures_service.confirm(
+            capture.id, race_id=race.id,
+            user_by_gate={aisha["gate"]: winner["id"]}, actor_user_id=org["id"],
+        )
+        result = db.session.scalars(
+            db.select(OfficialRaceResult).where(OfficialRaceResult.official_race_id == race.id)
+        ).unique().one()
+        expected = truth[aisha["gate"]]
+        judged = [s for s in result.skills if s.activated is not None]
+        assert len(judged) >= len(expected) - 1
+        by_gid = {s.id: s.gametora_id for s in db.session.scalars(db.select(UmaSkill))}
+        for s in judged:
+            assert s.activated == expected[by_gid[s.skill_id]]
+
+
+def test_reapply_button_requires_organizer(client: FlaskClient, make_user) -> None:
+    make_user(username="plainuser", password="password123")
+    client.post("/auth/login", data={"username": "plainuser", "password": "password123"})
+    resp = client.post("/captures/1/reapply")
+    assert resp.status_code in (302, 403)

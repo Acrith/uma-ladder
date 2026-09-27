@@ -398,14 +398,22 @@ def capture(pid: int) -> dict | None:
             # here rather than server-side so the site never needs the
             # binary format.
             plain = inflate_scenario(state["raw"], p["scenario_key"])
-            equipped = [
-                {s["skill_id"] for s in (r.get("skills") or [])}
-                for r in p["runners"]
+            # The scenario indexes runners by GATE (frame_order - 1); the
+            # runner array is in whatever order the game keeps in memory.
+            # Pairing them by list position silently dropped almost every
+            # verdict whenever those two orders differed.
+            gate_idx = [
+                (r.get("frame_order") or (i + 1)) - 1
+                for i, r in enumerate(p["runners"])
             ]
+            equipped = [set() for _ in range(max(gate_idx, default=-1) + 1)]
+            for gi, r in zip(gate_idx, p["runners"], strict=True):
+                if gi >= 0:
+                    equipped[gi] = {s["skill_id"] for s in (r.get("skills") or [])}
             acts = parse_skill_activations(plain, equipped)
-            for idx, runner in enumerate(full["runners"]):
+            for gi, runner in zip(gate_idx, full["runners"], strict=True):
                 for entry in runner.get("skills") or []:
-                    verdict = acts.get((idx, entry.get("skill_id")))
+                    verdict = acts.get((gi, entry.get("skill_id")))
                     if verdict is not None:
                         entry["activated"] = verdict
         except Exception as exc:  # noqa: BLE001

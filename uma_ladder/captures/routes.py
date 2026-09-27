@@ -164,3 +164,26 @@ def reject(capture_id: int) -> object:
     )
     flash("Capture rejected.")
     return redirect(url_for("captures.index"))
+
+
+@bp.post("/<int:capture_id>/reapply")
+@min_role_required(Role.ORGANIZER)
+def reapply(capture_id: int) -> object:
+    """Re-push stats, aptitudes, skills and skill verdicts from a
+    confirmed capture onto its race's results.
+
+    Confirming is one-shot, so a race saved while the enrichment path
+    had a gap would otherwise stay wrong. Placements and points are not
+    touched. Lives in the UI because the alternative is SSH into prod.
+    """
+    form = CsrfOnlyForm()
+    if not form.validate_on_submit():
+        abort(400)
+    try:
+        n = captures_service.reapply_details(capture_id, actor_user_id=current_user.id)
+    except captures_service.CaptureError as exc:
+        flash(str(exc))
+        return redirect(url_for("captures.detail", capture_id=capture_id))
+    flash(f"Re-applied capture details to {n} result(s).")
+    capture = db.session.get(RaceCapture, capture_id)
+    return redirect(url_for("official.detail", race_id=capture.official_race_id))

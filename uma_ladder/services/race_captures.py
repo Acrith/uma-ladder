@@ -681,10 +681,11 @@ def confirm(
         for gate, uid in user_by_gate.items()
         if by_gate.get(gate)
     }
+    activations = _blob_activations(payload)
     for result in saved:
         runner = runner_by_user.get(result.user_id)
         if runner:
-            _enrich_result(result, runner, actor_user_id)
+            _enrich_result(result, runner, actor_user_id, activations)
 
     # Learn from the review. Where the organizer's choice isn't one we
     # could have derived from the username, remember it — the next
@@ -705,7 +706,44 @@ def confirm(
     return capture
 
 
-def _enrich_result(result, runner: dict, actor_user_id: int) -> bool:
+def _blob_activations(payload: dict) -> dict[int, dict[int, bool]]:
+    """gate -> {skill_id: fired}, read from the scenario blob's events.
+
+    Authoritative, and independent of the extractor. The extractor's
+    own verdicts paired the game's runner array (memory order) with the
+    scenario's runner index (gate order); whenever those orders differ
+    almost every verdict landed on the wrong runner and was discarded.
+    Skill events carry param[0] = gate - 1, so there is nothing to pair.
+    """
+    from . import race_blob
+
+    sim = race_blob.sim_from_payload(payload)
+    out: dict[int, dict[int, bool]] = {}
+    for ev in (sim or {}).get("events") or []:
+        param = ev.get("param") or []
+        if ev.get("type") != "Skill" or len(param) < 3:
+            continue
+        out.setdefault(param[0] + 1, {})[param[1]] = param[2] != _EVENT_NEVER_FIRED
+    return out
+
+
+def _with_verdicts(runner: dict, activations: dict | None) -> list:
+    """The runner's skill entries, with blob verdicts taking precedence."""
+    entries = runner.get("skills") or []
+    fired = (activations or {}).get(_as_int(runner.get("gate")))
+    if not fired:
+        return entries
+    return [
+        {**e, "activated": fired[_as_int(e.get("skill_id"))]}
+        if _as_int(e.get("skill_id")) in fired
+        else e
+        for e in entries
+    ]
+
+
+def _enrich_result(
+    result, runner: dict, actor_user_id: int, activations: dict | None = None
+) -> bool:
     """Push one runner's build onto its saved result.
 
     A capture carries far more than a placement — the five raw stats,
@@ -742,7 +780,7 @@ def _enrich_result(result, runner: dict, actor_user_id: int) -> bool:
         official_service.submit_result_details(
             result.id, update, by_user_id=actor_user_id
         )
-        _stamp_activations(result.id, runner.get("skills") or [])
+        _stamp_activations(result.id, _with_verdicts(runner, activations))
         return True
     except Exception:  # noqa: BLE001
         db.session.rollback()
@@ -783,10 +821,11 @@ def reapply_details(capture_id: int, *, actor_user_id: int) -> int:
         if user is not None:
             runner_by_user_id.setdefault(user.id, row)
 
+    activations = _blob_activations(payload)
     updated = 0
     for res in results:
         runner = runner_by_user_id.get(res.user_id)
-        if runner and _enrich_result(res, runner, actor_user_id):
+        if runner and _enrich_result(res, runner, actor_user_id, activations):
             updated += 1
     return updated
 

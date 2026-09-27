@@ -43,6 +43,17 @@
         {%- if capture.confirmed_by %} by {{ capture.confirmed_by.username }}{% endif %}
         {%- if capture.confirmed_at %} on {{ capture.confirmed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}.
       </p>
+      {% if can_confirm %}
+        <form method="post" action="{{ url_for('captures.reapply', capture_id=capture.id) }}"
+              class="mt-3 flex flex-wrap items-center gap-3">
+          {{ csrf_form.hidden_tag() }}
+          <button class="btn-ghost px-2.5 py-1 text-xs">Re-apply details</button>
+          <span class="text-[11px] text-slate-500">
+            Rewrites stats, aptitudes, skills and which skills fired from this capture.
+            Placements and points are left alone.
+          </span>
+        </form>
+      {% endif %}
     {% endcall %}
   {% elif capture.status == 'rejected' %}
     {% call card(class="mt-5 p-4 border-rose-500/30") %}
