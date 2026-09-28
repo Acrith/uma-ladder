@@ -400,17 +400,26 @@
                            dimmed         = could have fired, didn't
                            full colour    = fired, or unknown (the
                              screenshot path never knows) #}
+                      {# Once a capture has judged this runner's skills, "no
+                         verdict" stops meaning unknown: it means a passive
+                         green skill, which buffs stats from the start and
+                         never fires. Without capture data it stays unknown. #}
+                      {% set _judged = (r.skills | selectattr('activated', 'sameas', true) | list | length)
+                                       + (r.skills | selectattr('activated', 'sameas', false) | list | length) %}
                       <p class="flex flex-wrap gap-1.5 text-xs">
                         {% for assoc in r.skills %}
                           {% set _doesnt_apply = assoc.skill_id in _inapp %}
                           {% set _idle = (not _doesnt_apply) and assoc.activated is sameas false %}
+                          {% set _passive = (not _doesnt_apply) and _judged and assoc.activated is none %}
                           <span class="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5
                                        {% if _doesnt_apply %}border-slate-800 bg-slate-900/30 text-slate-600
-                                       {% elif _idle %}border-slate-700 bg-slate-900/40 text-slate-400
+                                       {% elif _idle %}border-dashed border-slate-700 bg-transparent text-slate-500 opacity-60
+                                       {% elif _passive %}border-emerald-500/25 bg-emerald-500/5 text-emerald-200/80
                                        {% else %}border-cyan-500/30 bg-cyan-500/5 text-cyan-200{% endif %}"
                                 {% if _doesnt_apply %}title="Can't activate on this track — conditions rule it out"
-                                {% elif _idle %}title="Was eligible but never activated in this race"
-                                {% elif assoc.activated %}title="Activated during the race"{% endif %}>
+                                {% elif _idle %}title="Didn't fire in this race"
+                                {% elif _passive %}title="Passive — a stat buff applied from the start, never 'fires'"
+                                {% elif assoc.activated %}title="Fired during the race"{% endif %}>
                             {% if assoc.skill and assoc.skill.image_url %}
                               <img src="{{ assoc.skill.image_url }}"
                                    alt=""
@@ -426,12 +435,17 @@
                           </span>
                         {% endfor %}
                       </p>
-                      {% set _fired = r.skills | selectattr('activated') | list | length %}
-                      {% if _fired %}
+                      {% if _judged %}
+                        {% set _fired = r.skills | selectattr('activated', 'sameas', true) | list | length %}
+                        {% set _missed = r.skills | selectattr('activated', 'sameas', false)
+                                         | rejectattr('skill_id', 'in', _inapp) | list | length %}
+                        {% set _impossible = r.skills | selectattr('skill_id', 'in', _inapp) | list | length %}
+                        {% set _pass = r.skills|length - _fired - _missed - _impossible %}
                         <p class="text-[11px] text-slate-500">
-                          <span class="text-cyan-300/80">{{ _fired }}</span> of {{ r.skills|length }} skills activated
-                          · <span class="text-slate-600">struck through</span> = impossible here
-                          · <span class="text-slate-400">dimmed</span> = never fired
+                          <span class="text-cyan-300">{{ _fired }} fired</span>
+                          · <span class="text-slate-400">{{ _missed }} didn't fire</span> <span class="text-slate-600">(faded)</span>
+                          {% if _pass > 0 %}· <span class="text-emerald-300/80">{{ _pass }} passive</span>{% endif %}
+                          {% if _impossible %}· <span class="text-slate-600 line-through">{{ _impossible }} impossible here</span>{% endif %}
                         </p>
                       {% endif %}
                     {% endif %}

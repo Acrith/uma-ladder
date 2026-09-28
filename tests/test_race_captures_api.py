@@ -1103,3 +1103,82 @@ def test_reapply_button_requires_organizer(client: FlaskClient, make_user) -> No
     client.post("/auth/login", data={"username": "plainuser", "password": "password123"})
     resp = client.post("/captures/1/reapply")
     assert resp.status_code in (302, 403)
+
+
+def test_active_skill_without_an_event_is_marked_not_fired(app: Flask, make_user) -> None:
+    """The game logs a skill only once it reaches a trigger check, so a
+    skill whose conditions never came up leaves no event at all. With
+    the blob covering the runner, that silence is a verdict — "didn't
+    fire" — not "unknown". Only passive green skills (flat stat buffs,
+    which never fire) stay undetermined."""
+    from datetime import UTC, datetime, timedelta
+
+    from uma_ladder.models import (
+        OfficialRaceResult,
+        PresetSource,
+        RacePreset,
+        SkillCondition,
+        UmaSkill,
+    )
+    from uma_ladder.services import official as official_service
+    from uma_ladder.services import race_blob
+    from uma_ladder.services import seasons as seasons_service
+
+    org = make_user(username="silorg", password="password123", role="organizer")
+    payload = _payload()
+    events = race_blob.sim_from_payload(payload)["events"]
+
+    def _silent(runner):
+        evented = {
+            e["param"][1] for e in events
+            if e["type"] == "Skill" and e["param"][0] + 1 == runner["gate"]
+        }
+        return [s["skill_id"] for s in runner["skills"] if s["skill_id"] not in evented]
+
+    aisha = max(payload["runners"], key=lambda r: len(_silent(r)))
+    silent = _silent(aisha)
+    assert len(silent) >= 2, "fixture needs event-less skills to test this"
+    winner = make_user(username=aisha["trainer_name"].lower(), password="password123")
+
+    with app.app_context():
+        rows = {}
+        for entry in aisha["skills"]:
+            u = UmaSkill(gametora_id=entry["skill_id"], name_en=f"Test Skill {entry['skill_id']}")
+            db.session.add(u)
+            rows[entry["skill_id"]] = u
+        db.session.flush()
+        # Make one of the silent skills a passive green stat buff.
+        passive_gid = silent[0]
+        db.session.add(SkillCondition(skill_id=rows[passive_gid].id, buff_speed=40))
+        season = seasons_service.create_season(
+            name="silence season",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        preset = RacePreset(
+            name="T", venue="Tokyo", surface="Turf", distance_meters=1600,
+            distance_category="Mile", direction="Right", max_runners=12,
+            source=PresetSource.MANUAL, enabled=True,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        race = official_service.create_race(
+            official_service.CreateRaceRequest(
+                season_id=season.id, name="Silence Race",
+                organizer_user_id=org["id"], preset_id=preset.id,
+            )
+        )
+        capture = captures_service.ingest(payload, submitted_by_user_id=org["id"]).capture
+        captures_service.confirm(
+            capture.id, race_id=race.id,
+            user_by_gate={aisha["gate"]: winner["id"]}, actor_user_id=org["id"],
+        )
+        result = db.session.scalars(
+            db.select(OfficialRaceResult).where(OfficialRaceResult.official_race_id == race.id)
+        ).unique().one()
+        gid = {u.id: u.gametora_id for u in rows.values()}
+        verdict = {gid[s.skill_id]: s.activated for s in result.skills}
+        assert verdict[passive_gid] is None
+        for g in silent[1:]:
+            assert verdict[g] is False
+        assert not any(v is None for g, v in verdict.items() if g != passive_gid)

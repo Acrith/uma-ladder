@@ -780,7 +780,14 @@ def _enrich_result(
         official_service.submit_result_details(
             result.id, update, by_user_id=actor_user_id
         )
-        _stamp_activations(result.id, _with_verdicts(runner, activations))
+        _stamp_activations(
+            result.id,
+            _with_verdicts(runner, activations),
+            # With the blob's event stream for this runner, silence is
+            # itself a verdict: an active skill that never produced an
+            # event never fired. Without it, silence means "unknown".
+            complete=bool((activations or {}).get(_as_int(runner.get("gate")))),
+        )
         return True
     except Exception:  # noqa: BLE001
         db.session.rollback()
@@ -830,7 +837,9 @@ def reapply_details(capture_id: int, *, actor_user_id: int) -> int:
     return updated
 
 
-def _stamp_activations(result_id: int, skill_entries: list) -> None:
+def _stamp_activations(
+    result_id: int, skill_entries: list, *, complete: bool = False
+) -> None:
     """Record which of a result's skills actually fired.
 
     Only a memory capture knows this, so it is applied after the shared
@@ -845,7 +854,7 @@ def _stamp_activations(result_id: int, skill_entries: list) -> None:
         for e in skill_entries
         if e.get("activated") is not None
     }
-    if not verdicts:
+    if not verdicts and not complete:
         return
     rows = db.session.scalars(
         select(OfficialRaceResultSkill).where(
@@ -860,11 +869,35 @@ def _stamp_activations(result_id: int, skill_entries: list) -> None:
             )
         )
     }
+    passive = _passive_skill_ids([row.skill_id for row in rows if row.skill_id]) if complete else set()
     for row in rows:
         game_id = catalog_ids.get(row.skill_id)
         if game_id in verdicts:
             row.activated = bool(verdicts[game_id])
+        elif complete:
+            # The game only logs a skill once it reaches a trigger
+            # check; one whose conditions never came up leaves no
+            # trace. Passive green skills never log at all — they are
+            # stat buffs applied before the start — so those stay
+            # undetermined rather than being marked as misses.
+            row.activated = None if row.skill_id in passive else False
     db.session.commit()
+
+
+def _passive_skill_ids(skill_ids: list[int]) -> set[int]:
+    """Catalog ids of skills that are flat stat buffs (green skills)."""
+    from ..models import SkillCondition
+
+    if not skill_ids:
+        return set()
+    rows = db.session.scalars(
+        select(SkillCondition).where(SkillCondition.skill_id.in_(skill_ids))
+    ).all()
+    return {
+        r.skill_id
+        for r in rows
+        if any((r.buff_speed, r.buff_stamina, r.buff_power, r.buff_guts, r.buff_wisdom))
+    }
 
 
 def reject(capture_id: int, *, actor_user_id: int, reason: str | None = None) -> RaceCapture:
